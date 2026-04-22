@@ -69,7 +69,8 @@ parser.add_argument("--qwen_api_key", type=str, required=False)
 parser.add_argument("--qwen_model", type=str, required=False)
 args = parser.parse_args()
 
-# os.environ['OPENAI_API_KEY'] = args.openai_api_key
+if args.openai_api_key:
+    os.environ["OPENAI_API_KEY"] = args.openai_api_key
 _EMULATOR_SETUP = False
 
 # 确保output_dir存在

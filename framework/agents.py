@@ -341,7 +341,6 @@ class AndroidWorldAgent(BaseAgent):
 
         # TODO: Escaping double quotes works for Windows Only, use '\' as escape characters otherwise
         args = (
-            f"""--openai_api_key {self.config["OPENAI_API_KEY"]} """
             f"""--task "{full_task_description.replace('"', '""')}" """
             f'--lang "{task_language}" '
             f'--output_dir "{output_dir}" '
@@ -349,6 +348,9 @@ class AndroidWorldAgent(BaseAgent):
             f"--max_rounds {max_rounds} "
             f'--agent "{self.agent_name}" '
         )
+        openai_api_key = self.config.get("OPENAI_API_KEY")
+        if openai_api_key:
+            args = f"""--openai_api_key "{openai_api_key}" """ + args
         if device["serial"].startswith("emulator-"):
             args += f"""--device_console_port {device["console_port"]}  --device_grpc_port {device["grpc_port"]} """
         else:
