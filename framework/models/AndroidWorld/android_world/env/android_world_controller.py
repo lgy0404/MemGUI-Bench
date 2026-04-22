@@ -317,7 +317,7 @@ def get_controller(
             adb_controller=config_classes.AdbControllerConfig(adb_path=adb_path),
         ),
     )
-    # android_env_instance = loader.load(config, f"emulator-{console_port}")
-    android_env_instance = loader.load(config)
+    android_env_instance = loader.load(config, f"emulator-{console_port}")
+    # android_env_instance = loader.load(config)
     logging.info("Setting up AndroidWorldController.")
     return AndroidWorldController(android_env_instance)
