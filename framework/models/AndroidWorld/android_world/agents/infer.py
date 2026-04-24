@@ -481,6 +481,8 @@ class VivoGeminiWrapper(LlmWrapper, MultimodalLlmWrapper):
             image_paths=temp_image_paths,
             model=self.model,
             temperature=self.temperature,
+            base_url=self.base_url,
+            api_key=self.api_key,
         )
 
         # 提取内容和token使用信息
@@ -658,4 +660,3 @@ class VivoGeminiWrapper(LlmWrapper, MultimodalLlmWrapper):
                 converted.append(item)
         return converted
     
-

@@ -1,7 +1,11 @@
 # encoding: utf-8
 """
 LLM API调用的配置文件
-从config.yaml中读取模型配置，支持模式预设系统
+从config.yaml中读取模型配置，支持模式预设系统。
+
+This module must stay import-safe because benchmark_run.py imports agent modules
+before it parses command-line arguments. Some agents pass API credentials via
+CLI args, so we cannot hard-fail here during module import.
 """
 
 import os
@@ -13,30 +17,48 @@ _project_root = os.path.join(os.path.dirname(__file__), "../../../../../..")
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+_config = {}
 try:
     from config_loader import get_config
-    
-    # Use get_config() to get cached config with mode presets applied
-    _config = get_config(verbose=False)
-    
-    # Agent API configuration from config.yaml
-    AGENT_API_KEY = _config.get("QWEN_API_KEY")
-    AGENT_BASE_URL = _config.get("BASE_URL")
-    AGENT_MODEL = _config.get("QWEN_MODEL")
-    
-except Exception as e:
-    # Fallback to environment variables if config loading fails
-    print(f"Warning: Failed to load config.yaml, falling back to environment variables: {e}")
-    AGENT_API_KEY = os.environ.get("QWEN_API_KEY")
-    AGENT_BASE_URL = os.environ.get("BASE_URL", "https://openrouter.fans/v1")
-    AGENT_MODEL = os.environ.get("QWEN_MODEL", "qwen/qwen3-vl-8b-instruct")
 
-# Validate required configuration
-if not AGENT_API_KEY:
-    raise ValueError(
-        "QWEN_API_KEY not found in config.yaml or environment variables. "
-        "Please set it in config.yaml or as an environment variable."
+    # Use get_config() to get cached config with mode presets applied
+    _config = get_config(verbose=False) or {}
+except Exception as e:
+    # Keep import-time behavior non-fatal and let the real caller provide
+    # credentials via explicit arguments or environment variables later.
+    print(
+        "Warning: Failed to load config.yaml in AndroidWorld LLM config; "
+        f"falling back to environment variables: {e}"
     )
+
+
+def _pick_value(config_key, *env_keys, default=None):
+    """Prefer environment overrides, then config.yaml, then a default."""
+    for env_key in env_keys:
+        value = os.environ.get(env_key)
+        if value:
+            return value
+
+    value = _config.get(config_key)
+    if value:
+        return value
+
+    return default
+
+
+# Agent API configuration from config.yaml/environment.
+AGENT_API_KEY = _pick_value("QWEN_API_KEY", "QWEN_API_KEY")
+AGENT_BASE_URL = _pick_value(
+    "QWEN_BASE_URL",
+    "QWEN_BASE_URL",
+    "BASE_URL",
+    default="https://openrouter.fans/v1",
+)
+AGENT_MODEL = _pick_value(
+    "QWEN_MODEL",
+    "QWEN_MODEL",
+    default="qwen/qwen3-vl-8b-instruct",
+)
 
 # Default values for backward compatibility
 DEFAULT_MODEL = AGENT_MODEL or "qwen/qwen3-vl-8b-instruct"
@@ -122,4 +144,3 @@ def get_model_config(config_name="default"):
         配置字典
     """
     return MODEL_CONFIGS.get(config_name, MODEL_CONFIGS["default"])
-

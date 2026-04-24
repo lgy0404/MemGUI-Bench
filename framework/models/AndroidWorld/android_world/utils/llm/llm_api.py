@@ -29,17 +29,33 @@ _client_cache = {}
 
 def _get_client(base_url=None, api_key=None):
     """获取或创建指定配置的 OpenAI 客户端"""
-    url = base_url or DEFAULT_BASE_URL
-    key = api_key or DEFAULT_API_KEY
+    url = base_url or os.environ.get("QWEN_BASE_URL") or os.environ.get("BASE_URL") or DEFAULT_BASE_URL
+    key = (
+        api_key
+        or os.environ.get("QWEN_API_KEY")
+        or os.environ.get("M3A_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+        or DEFAULT_API_KEY
+    )
+
+    if not key:
+        raise ValueError(
+            "No API key available for AndroidWorld LLM client. "
+            "Pass api_key/base_url explicitly, or set the corresponding values "
+            "in config.yaml or environment variables."
+        )
+
     cache_key = f"{url}:{key}"
-    
+
     if cache_key not in _client_cache:
         _client_cache[cache_key] = OpenAI(base_url=url, api_key=key)
     return _client_cache[cache_key]
 
 
-# Default client (for backward compatibility)
-client = _get_client()
+# Default client placeholder kept only for backward compatibility.
+# We intentionally avoid eager client creation during import because some
+# execution paths provide credentials only after argparse runs.
+client = None
 
 
 def extract_token_usage(usage_info):
@@ -582,4 +598,3 @@ def inference_chat_gemini_multiturn(
             print(f"请求异常，{retry_delay}秒后进行第{retry_count}次重试...")
             time.sleep(retry_delay)
             continue
-
