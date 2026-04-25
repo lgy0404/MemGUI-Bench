@@ -133,6 +133,9 @@ OBSERVATION_KEY_UI_ELEMENTS = "ui_elements"
 class A11yMethod(enum.Enum):
     """Method to get a11y tree."""
 
+    # Do not collect UI tree information. Observations still contain pixels.
+    NONE = "none"
+
     # Custom gRPC wrapper that uses a11y forwarder app.
     A11Y_FORWARDER_APP = "a11y_forwarder_app"
 
@@ -169,6 +172,7 @@ class AndroidWorldController(base_wrapper.BaseWrapper):
         install_a11y_forwarding_app: bool = True,
     ):
         self._original_env = env
+        self._install_a11y_forwarding_app = install_a11y_forwarding_app
         if a11y_method == A11yMethod.A11Y_FORWARDER_APP:
             self._env = apply_a11y_forwarder_app_wrapper(
                 env, install_a11y_forwarding_app
@@ -204,6 +208,8 @@ class AndroidWorldController(base_wrapper.BaseWrapper):
             console_port=self.env._coordinator._simulator._config.emulator_launcher.emulator_console_port,
             adb_path=self.env._coordinator._simulator._config.adb_controller.adb_path,
             grpc_port=self.env._coordinator._simulator._config.emulator_launcher.grpc_port,
+            a11y_method=self._a11y_method,
+            install_a11y_forwarding_app=self._install_a11y_forwarding_app,
         ).env
         # pylint: enable=protected-access
         # pytype: enable=attribute-error
@@ -257,8 +263,10 @@ class AndroidWorldController(base_wrapper.BaseWrapper):
                     exc,
                 )
                 return self._get_ui_elements_from_uiautomator()
-        else:
+        elif self._a11y_method == A11yMethod.UIAUTOMATOR:
             return self._get_ui_elements_from_uiautomator()
+        else:
+            return []
 
     def _process_timestep(self, timestep: dm_env.TimeStep) -> dm_env.TimeStep:
         """Adds a11y tree info to the observation."""
@@ -276,9 +284,12 @@ class AndroidWorldController(base_wrapper.BaseWrapper):
                 )
                 forest = android_accessibility_forest_pb2.AndroidAccessibilityForest()
                 ui_elements = self._get_ui_elements_from_uiautomator()
-        else:
+        elif self._a11y_method == A11yMethod.UIAUTOMATOR:
             forest = None
             ui_elements = self._get_ui_elements_from_uiautomator()
+        else:
+            forest = None
+            ui_elements = []
         timestep.observation[OBSERVATION_KEY_FOREST] = forest
         timestep.observation[OBSERVATION_KEY_UI_ELEMENTS] = ui_elements
         return timestep
@@ -338,6 +349,8 @@ def get_controller(
     console_port: int = 5554,
     adb_path: str = DEFAULT_ADB_PATH,
     grpc_port: int = 8554,
+    a11y_method: A11yMethod = A11yMethod.A11Y_FORWARDER_APP,
+    install_a11y_forwarding_app: bool = True,
 ) -> AndroidWorldController:
     """Creates a controller by connecting to an existing Android environment."""
 
@@ -355,4 +368,8 @@ def get_controller(
     android_env_instance = loader.load(config, f"emulator-{console_port}")
     # android_env_instance = loader.load(config)
     logging.info("Setting up AndroidWorldController.")
-    return AndroidWorldController(android_env_instance)
+    return AndroidWorldController(
+        android_env_instance,
+        a11y_method=a11y_method,
+        install_a11y_forwarding_app=install_a11y_forwarding_app,
+    )

@@ -54,6 +54,11 @@ parser.add_argument("--adb_path", type=str, default="adb")
 parser.add_argument("--device_console_port", type=int, default=5554)
 parser.add_argument("--device_grpc_port", type=int, default=8554)
 parser.add_argument("--device_serial", type=str, default=None)
+parser.add_argument(
+    "--enable_ui_tree",
+    action="store_true",
+    help="Enable Android accessibility/UI tree collection. Disabled by default.",
+)
 # UI-TARS specific configuration parameters - no defaults, conditionally required
 parser.add_argument("--uitars_base_url", type=str, required=False)
 parser.add_argument("--uitars_api_key", type=str, required=False)
@@ -408,6 +413,7 @@ def main():
             freeze_datetime=False,
             adb_path=args.adb_path,
             grpc_port=args.device_grpc_port,
+            enable_ui_tree=args.enable_ui_tree,
         )
         # Benchmark: Remove api level check
         # env_launcher.verify_api_level(env)

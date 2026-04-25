@@ -356,6 +356,20 @@ class AndroidWorldAgent(BaseAgent):
         else:
             args += f"""--device_serial {device["serial"]} """
 
+        ui_tree_agents = {
+            "M3A",
+            "T3A",
+            "SeeAct",
+            "M3A_vivo_gemini",
+            "M3A_MultiTurn",
+            "T3A_vivo_gemini",
+        }
+        enable_ui_tree = self.config.get(
+            "ENABLE_UI_TREE", self.agent_name in ui_tree_agents
+        )
+        if enable_ui_tree:
+            args += "--enable_ui_tree "
+
         # Add UI-TARS specific configuration parameters - all required
         if self.agent_name in ["UITARS", "UITARS_1_5"]:
             if "UITARS_BASE_URL" not in self.config:
