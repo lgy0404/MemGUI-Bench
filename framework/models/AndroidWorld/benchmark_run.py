@@ -400,18 +400,25 @@ def process_action(response, grounded_action_key):
 def main():
     """主函数，执行基准测试"""
     start_time_initial = time.time()
-    env = env_launcher.load_and_setup_env(
-        console_port=args.device_console_port,
-        emulator_setup=_EMULATOR_SETUP,
-        freeze_datetime=False,
-        adb_path=args.adb_path,
-        grpc_port=args.device_grpc_port,
-    )
-    # Benchmark: Remove api level check
-    # env_launcher.verify_api_level(env)
+    env = None
     try:
+        env = env_launcher.load_and_setup_env(
+            console_port=args.device_console_port,
+            emulator_setup=_EMULATOR_SETUP,
+            freeze_datetime=False,
+            adb_path=args.adb_path,
+            grpc_port=args.device_grpc_port,
+        )
+        # Benchmark: Remove api level check
+        # env_launcher.verify_api_level(env)
         env.reset(go_home=False)
+    except Exception as e:
+        print_and_log_error(f"Error initializing environment: {str(e)}")
+        if env is not None:
+            env.close()
+        sys.exit(2)
 
+    try:
         # 设置代理
         agent, screenshot_key, grounded_action_key, log_keys, raw_response_key = (
             setup_agent(env)
@@ -426,6 +433,7 @@ def main():
         end_time_initial = time.time()
         elapsed_time_initial = end_time_initial - start_time_initial
         start_time_exec = time.time()
+        action_cnt = 0
         for action_cnt in range(1, args.max_rounds + 1):
             try:
                 response = agent.step(args.task)

@@ -88,14 +88,20 @@ def get_a11y_tree(
         time.sleep(1.0)
 
     forest: Optional[android_accessibility_forest_pb2.AndroidAccessibilityForest] = None
-    for _ in range(max_retries):
+    for attempt in range(1, max_retries + 1):
         try:
-            forest = env.accumulate_new_extras()["accessibility_tree"][
-                -1
-            ]  # pytype:disable=attribute-error
-            return forest
-        except KeyError:
-            logging.warning("Could not get a11y tree, retrying.")
+            extras = env.accumulate_new_extras()  # pytype:disable=attribute-error
+            trees = extras.get("accessibility_tree", [])
+            if trees:
+                forest = trees[-1]
+                return forest
+        except (KeyError, IndexError):
+            pass
+        logging.warning(
+            "Could not get a11y tree, retrying (%d/%d).",
+            attempt,
+            max_retries,
+        )
         time.sleep(sleep_duration)
 
     if forest is None:
@@ -211,39 +217,68 @@ class AndroidWorldController(base_wrapper.BaseWrapper):
         self,
     ) -> android_accessibility_forest_pb2.AndroidAccessibilityForest:
         """Returns the most recent a11y forest from the device."""
-        try:
-            return self._get_a11y_forest()
-        except RuntimeError:
-            print(
-                "Could not get a11y tree. Reconnecting to Android, reinitializing"
-                " AndroidEnv, and restarting a11y forwarding."
-            )
-            self.refresh_env()
-            return self._get_a11y_forest()
+        last_error: Optional[RuntimeError] = None
+        for attempt in range(2):
+            try:
+                return self._get_a11y_forest()
+            except RuntimeError as exc:
+                last_error = exc
+                if attempt == 1:
+                    break
+                print(
+                    "Could not get a11y tree. Reconnecting to Android, reinitializing"
+                    " AndroidEnv, and restarting a11y forwarding."
+                )
+                self.refresh_env()
+                time.sleep(1.0)
+
+        raise RuntimeError(
+            "Could not get a11y tree after reconnecting to Android."
+        ) from last_error
+
+    def _get_ui_elements_from_uiautomator(
+        self,
+    ) -> list[representation_utils.UIElement]:
+        return representation_utils.xml_dump_to_ui_elements(
+            adb_utils.uiautomator_dump(self._env)
+        )
 
     def get_ui_elements(self) -> list[representation_utils.UIElement]:
         """Returns the most recent UI elements from the device."""
         if self._a11y_method == A11yMethod.A11Y_FORWARDER_APP:
-            return representation_utils.forest_to_ui_elements(
-                self.get_a11y_forest(),
-                exclude_invisible_elements=True,
-            )
+            try:
+                return representation_utils.forest_to_ui_elements(
+                    self.get_a11y_forest(),
+                    exclude_invisible_elements=True,
+                )
+            except RuntimeError as exc:
+                logging.warning(
+                    "Falling back to uiautomator dump after a11y failure: %s",
+                    exc,
+                )
+                return self._get_ui_elements_from_uiautomator()
         else:
-            return representation_utils.xml_dump_to_ui_elements(
-                adb_utils.uiautomator_dump(self._env)
-            )
+            return self._get_ui_elements_from_uiautomator()
 
     def _process_timestep(self, timestep: dm_env.TimeStep) -> dm_env.TimeStep:
         """Adds a11y tree info to the observation."""
         if self._a11y_method == A11yMethod.A11Y_FORWARDER_APP:
-            forest = self.get_a11y_forest()
-            ui_elements = representation_utils.forest_to_ui_elements(
-                forest,
-                exclude_invisible_elements=True,
-            )
+            try:
+                forest = self.get_a11y_forest()
+                ui_elements = representation_utils.forest_to_ui_elements(
+                    forest,
+                    exclude_invisible_elements=True,
+                )
+            except RuntimeError as exc:
+                logging.warning(
+                    "Falling back to uiautomator dump after a11y failure: %s",
+                    exc,
+                )
+                forest = android_accessibility_forest_pb2.AndroidAccessibilityForest()
+                ui_elements = self._get_ui_elements_from_uiautomator()
         else:
             forest = None
-            ui_elements = self.get_ui_elements()
+            ui_elements = self._get_ui_elements_from_uiautomator()
         timestep.observation[OBSERVATION_KEY_FOREST] = forest
         timestep.observation[OBSERVATION_KEY_UI_ELEMENTS] = ui_elements
         return timestep
