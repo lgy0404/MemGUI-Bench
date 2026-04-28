@@ -13,6 +13,7 @@
     "ui-tars-1.5-7b",
     "ui-venus-7b",
     "qwen3-vl-8b-instruct",
-    "qwen3-vl-32b-instruct"
+    "qwen3-vl-32b-instruct",
+    "qwen3-vl-235b-a22b-thinking"
   ]
 }

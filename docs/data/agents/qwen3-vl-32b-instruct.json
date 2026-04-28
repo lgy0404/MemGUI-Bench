@@ -10,60 +10,60 @@
   "hasLongTermMemory": false,
   "crossApp": {
     "app1": {
-      "p1": 25.0,
-      "p3": 35.7,
-      "irr": 15.4
+      "p1": 46.4,
+      "p3": 64.3,
+      "irr": 40.0
     },
     "app2": {
-      "p1": 3.6,
-      "p3": 7.1,
-      "irr": 7.6
+      "p1": 10.7,
+      "p3": 19.6,
+      "irr": 14.2
     },
     "app3": {
-      "p1": 2.9,
-      "p3": 14.7,
-      "irr": 9.5
+      "p1": 17.6,
+      "p3": 32.4,
+      "irr": 34.1
     },
     "app4": {
       "p1": 10.0,
-      "p3": 20.0,
-      "irr": 32.3
+      "p3": 10.0,
+      "irr": 31.9
     }
   },
   "difficulty": {
     "easy": {
-      "p1": 18.8,
-      "p3": 27.1,
-      "irr": 11.25
+      "p1": 35.4,
+      "p3": 47.9,
+      "irr": 39.72
     },
     "medium": {
-      "p1": 4.8,
-      "p3": 16.7,
-      "irr": 15.66
+      "p1": 14.3,
+      "p3": 23.8,
+      "irr": 22.37
     },
     "hard": {
-      "p1": 0.0,
-      "p3": 2.6,
-      "irr": 6.68
+      "p1": 7.9,
+      "p3": 21.1,
+      "irr": 13.82
     }
   },
   "avg": {
-    "p1": 8.6,
-    "p3": 16.4
+    "p1": 20.3,
+    "p3": 32.0
   },
   "metrics": {
     "shortTerm": {
-      "irr": 11.3,
-      "mtpr": 0.09,
-      "stepRatio": 1.14,
-      "timePerStep": 7.8,
-      "costPerStep": 0.282
+      "irr": 25.0,
+      "mtpr": 0.31,
+      "stepRatio": 1.17,
+      "timePerStep": 10.5,
+      "costPerStep": 0.2423
     },
     "longTerm": {
-      "frr": 6.4,
-      "stepRatio": 0.99,
-      "timePerStep": 7.7,
-      "costPerStep": 0.345
+      "frr": 12.3,
+      "stepRatio": 1.32,
+      "timePerStep": 10.5,
+      "costPerStep": 0.2485
     }
   }
 }
