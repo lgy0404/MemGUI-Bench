@@ -8,6 +8,7 @@ from android_world.agents import (
     ui_tars_1_5,
     m3a_multiturn,
     qwen3_vl,
+    gui_owl,
 )
 from android_world.env import env_launcher
 from PIL import Image
@@ -47,6 +48,7 @@ parser.add_argument(
         "UITARS",
         "UITARS_1_5",
         "Qwen3VL",
+        "GUIOwl15",
     ],
     default="M3A_MultiTurn",
 )
@@ -72,6 +74,8 @@ parser.add_argument("--m3a_api_key", type=str, required=False)
 parser.add_argument("--qwen_base_url", type=str, required=False)
 parser.add_argument("--qwen_api_key", type=str, required=False)
 parser.add_argument("--qwen_model", type=str, required=False)
+# GUI-Owl-1.5 specific configuration parameters
+parser.add_argument("--guiowl_last_image", type=int, required=False, default=5)
 args = parser.parse_args()
 
 if args.openai_api_key:
@@ -130,6 +134,14 @@ def setup_agent(env):
             raise ValueError(f"--m3a_api_key is required for {args.agent} agent")
 
     if args.agent == "Qwen3VL":
+        if not args.qwen_base_url:
+            raise ValueError(f"--qwen_base_url is required for {args.agent} agent")
+        if not args.qwen_api_key:
+            raise ValueError(f"--qwen_api_key is required for {args.agent} agent")
+        if not args.qwen_model:
+            raise ValueError(f"--qwen_model is required for {args.agent} agent")
+
+    if args.agent == "GUIOwl15":
         if not args.qwen_base_url:
             raise ValueError(f"--qwen_base_url is required for {args.agent} agent")
         if not args.qwen_api_key:
@@ -237,6 +249,18 @@ def setup_agent(env):
         grounded_action_key = "parsed_action"
         log_keys = ["action_output", "raw_response"]
         raw_response_key = ["raw_response"]
+    elif args.agent == "GUIOwl15":
+        guiowl_config = {
+            "QWEN_BASE_URL": args.qwen_base_url,
+            "QWEN_API_KEY": args.qwen_api_key,
+            "QWEN_MODEL": args.qwen_model,
+            "GUIOWL_LAST_IMAGE": args.guiowl_last_image,
+        }
+        agent = gui_owl.GUIOwl15(env, config=guiowl_config)
+        screenshot_key = "screenshot"
+        grounded_action_key = "action"
+        log_keys = ["action_response"]
+        raw_response_key = []
     return agent, screenshot_key, grounded_action_key, log_keys, raw_response_key
 
 
@@ -504,6 +528,17 @@ def main():
                         enhanced_log_data = {}
                         prompt_tokens = 0
                         completion_tokens = 0
+                elif args.agent == "GUIOwl15":
+                    if hasattr(agent, "get_enhanced_log_data"):
+                        enhanced_log_data = agent.get_enhanced_log_data()
+                        prompt_tokens = enhanced_log_data.get("total_prompt_tokens", 0)
+                        completion_tokens = enhanced_log_data.get(
+                            "total_completion_tokens", 0
+                        )
+                    else:
+                        enhanced_log_data = {}
+                        prompt_tokens = 0
+                        completion_tokens = 0
                 else:
                     prompt_tokens = sum(
                         [
@@ -580,6 +615,7 @@ def main():
         "UITARS",
         "UITARS_1_5",
         "Qwen3VL",
+        "GUIOwl15",
     ] and hasattr(agent, "get_enhanced_log_data"):
         enhanced_log_data = agent.get_enhanced_log_data()
         if enhanced_log_data.get("detailed_model_logs"):

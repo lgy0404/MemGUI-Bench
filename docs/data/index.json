@@ -14,6 +14,8 @@
     "ui-venus-7b",
     "qwen3-vl-8b-instruct",
     "qwen3-vl-32b-instruct",
-    "qwen3-vl-235b-a22b-thinking"
+    "qwen3-vl-235b-a22b-thinking",
+    "gui-owl-1.5-8b-instruct",
+    "gui-owl-1.5-32b-instruct"
   ]
 }

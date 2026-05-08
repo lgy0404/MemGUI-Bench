@@ -52,6 +52,11 @@ MAX_EVAL_SUBPROCESS: 8   # Max parallel evaluation processes
 QWEN_API_KEY: "YOUR_API_KEY_HERE"  # Replace with your API Key
 QWEN_MODEL: "qwen/qwen3-vl-8b-instruct"  # Qwen3-VL-8B-Instruct openrouter
 
+# GUI-Owl-1.5 model configuration (uses same QWEN_* keys above)
+# Set AGENT_NAME to "GUIOwl15" and configure the model endpoint below:
+# QWEN_MODEL: "your-gui-owl-1.5-model"  # GUI-Owl-1.5 model name
+# GUIOWL_LAST_IMAGE: 5  # Number of recent screenshots to keep in context (default: 5)
+
 
 # ==============================================================================
 # ==============================================================================
@@ -97,6 +102,9 @@ SOURCE_AVD_NAME: "MemGUI-AVD-250704"
 # Agent list
 AGENTS:
   - NAME: "Qwen3VL"
+    REPO_PATH: "./framework/models/AndroidWorld"
+    ENV_NAME: "android_world"
+  - NAME: "GUIOwl15"
     REPO_PATH: "./framework/models/AndroidWorld"
     ENV_NAME: "android_world"
 

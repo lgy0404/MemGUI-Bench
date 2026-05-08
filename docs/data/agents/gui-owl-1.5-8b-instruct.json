@@ -1,0 +1,69 @@
+{
+  "name": "GUI-Owl-1.5-8B-Instruct",
+  "backbone": "-",
+  "type": "Agent-as-a-Model",
+  "institution": "Alibaba",
+  "date": "2026-02-15",
+  "paperLink": "https://arxiv.org/abs/2602.16855",
+  "codeLink": "https://github.com/X-PLUG/MobileAgent",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {
+      "p1": 39.3,
+      "p3": 50.0,
+      "irr": 22.7
+    },
+    "app2": {
+      "p1": 5.4,
+      "p3": 7.1,
+      "irr": 14.3
+    },
+    "app3": {
+      "p1": 2.9,
+      "p3": 5.9,
+      "irr": 15.6
+    },
+    "app4": {
+      "p1": 0.0,
+      "p3": 0.0,
+      "irr": 11.0
+    }
+  },
+  "difficulty": {
+    "easy": {
+      "p1": 22.9,
+      "p3": 31.2,
+      "irr": 15.72
+    },
+    "medium": {
+      "p1": 2.4,
+      "p3": 2.4,
+      "irr": 16.46
+    },
+    "hard": {
+      "p1": 7.9,
+      "p3": 10.5,
+      "irr": 14.24
+    }
+  },
+  "avg": {
+    "p1": 11.7,
+    "p3": 15.6
+  },
+  "metrics": {
+    "shortTerm": {
+      "irr": 15.5,
+      "mtpr": 0.1,
+      "stepRatio": 1.16,
+      "timePerStep": 13.5,
+      "costPerStep": 0.7273
+    },
+    "longTerm": {
+      "frr": 4.0,
+      "stepRatio": 1.23,
+      "timePerStep": 13.2,
+      "costPerStep": 0.8694
+    }
+  }
+}

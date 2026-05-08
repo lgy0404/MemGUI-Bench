@@ -431,6 +431,29 @@ class AndroidWorldAgent(BaseAgent):
             args += f"""--qwen_base_url "{self.config["QWEN_BASE_URL"]}" """
             args += f"""--qwen_api_key "{self.config["QWEN_API_KEY"]}" """
             args += f"""--qwen_model "{self.config["QWEN_MODEL"]}" """
+
+        # Add GUI-Owl-1.5 specific configuration parameters - reuses QWEN_* keys
+        if self.agent_name == "GUIOwl15":
+            if "QWEN_BASE_URL" not in self.config:
+                raise ValueError(
+                    f"QWEN_BASE_URL must be specified in config for {self.agent_name} agent"
+                )
+            if "QWEN_API_KEY" not in self.config:
+                raise ValueError(
+                    f"QWEN_API_KEY must be specified in config for {self.agent_name} agent"
+                )
+            if "QWEN_MODEL" not in self.config:
+                raise ValueError(
+                    f"QWEN_MODEL must be specified in config for {self.agent_name} agent"
+                )
+
+            args += f"""--qwen_base_url "{self.config["QWEN_BASE_URL"]}" """
+            args += f"""--qwen_api_key "{self.config["QWEN_API_KEY"]}" """
+            args += f"""--qwen_model "{self.config["QWEN_MODEL"]}" """
+
+            guiowl_last_image = self.config.get("GUIOWL_LAST_IMAGE", 5)
+            args += f"""--guiowl_last_image {guiowl_last_image} """
+
         return script, args
 
 
@@ -468,6 +491,10 @@ class UITARS_1_5(AndroidWorldAgent):
 
 class Qwen3VL(AndroidWorldAgent):
     agent_name = "Qwen3VL"
+
+
+class GUIOwl15(AndroidWorldAgent):
+    agent_name = "GUIOwl15"
 
 
 class AgentAsAModel(BaseAgent):
