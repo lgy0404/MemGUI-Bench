@@ -8,12 +8,6 @@ from typing import Any
 
 from loguru import logger
 
-from mobile_world.agents.registry import AGENT_CONFIGS
-from mobile_world.runtime.mcp_server import init_mcp_clients
-from mobile_world.tasks.aw_registry import AWTaskRegistry
-from mobile_world.tasks.memgui_registry import MemGUITaskRegistry
-from mobile_world.tasks.registry import TaskRegistry
-
 
 @dataclass
 class TaskInfo:
@@ -84,9 +78,15 @@ def get_task_registry(suite_family: str = "memgui_bench"):
         Task registry instance
     """
     if suite_family == "memgui_bench":
+        from mobile_world.tasks.memgui_registry import MemGUITaskRegistry
+
         return MemGUITaskRegistry()
     if suite_family == "android_world":
+        from mobile_world.tasks.aw_registry import AWTaskRegistry
+
         return AWTaskRegistry()
+    from mobile_world.tasks.registry import TaskRegistry
+
     return TaskRegistry()
 
 
@@ -208,6 +208,8 @@ def list_agents(name_filter: str | None = None) -> list[AgentInfo]:
     Returns:
         List of AgentInfo objects
     """
+    from mobile_world.agents.registry import AGENT_CONFIGS
+
     if name_filter:
         filter_lower = name_filter.lower()
         agent_types = [k for k in AGENT_CONFIGS.keys() if filter_lower in k.lower()]
@@ -240,6 +242,8 @@ def get_agent_info(agent_type: str) -> AgentInfo:
     Raises:
         KeyError: If agent type not found
     """
+    from mobile_world.agents.registry import AGENT_CONFIGS
+
     if agent_type not in AGENT_CONFIGS:
         raise KeyError(f"Agent type '{agent_type}' not found")
 
@@ -347,6 +351,8 @@ async def list_mcp_tools(name_filter: str | None = None) -> list[MCPToolInfo]:
     Returns:
         List of MCPToolInfo objects
     """
+    from mobile_world.runtime.mcp_server import init_mcp_clients
+
     all_tools = []
 
     mcp_client = init_mcp_clients()

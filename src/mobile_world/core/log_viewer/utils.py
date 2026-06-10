@@ -6,12 +6,23 @@ import time
 
 from loguru import logger
 
-from mobile_world.core.subcommands.info import get_task_registry
-from mobile_world.runtime.client import parse_result_file
+from mobile_world.core.api.info import get_task_registry
 
 # Global state for log root (could be enhanced with proper session management)
 _log_root_state: dict[str, str] = {}
 _task_registries: dict[str, object] = {}
+
+
+def parse_result_file(result_file: str) -> tuple[float | None, str | None]:
+    """Parse a MobileWorld result.txt file without importing the runtime client."""
+    with open(result_file) as f:
+        lines = f.readlines()
+    if lines and "score:" in lines[0]:
+        score = float(lines[0].split("score:", 1)[1].strip())
+    else:
+        score = None
+    reason = lines[1].strip() if len(lines) > 1 else None
+    return score, reason
 
 
 def get_log_root_state() -> dict[str, str]:

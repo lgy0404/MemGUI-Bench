@@ -3,7 +3,6 @@
 import argparse
 from pathlib import Path
 
-import pandas as pd
 from loguru import logger
 from rich.console import Console
 from rich.panel import Panel
@@ -134,6 +133,8 @@ def export_tasks_to_excel(
 
     if not tasks:
         raise ValueError("No tasks found to export")
+
+    import pandas as pd
 
     # Collect task data
     task_data = []

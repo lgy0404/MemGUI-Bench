@@ -8,13 +8,10 @@ from io import BytesIO
 import backoff
 import requests
 from loguru import logger
-from markdownify import markdownify
 from PIL import Image
 
-from mobile_world.runtime.mcp_server import init_mcp_clients
 from mobile_world.runtime.utils.models import MCP, NAVIGATE_HOME, JSONAction, Observation, Response
 from mobile_world.runtime.utils.trajectory_logger import SCORE_FILE_NAME
-from mobile_world.tasks.registry import TaskRegistry
 
 TASK_META_DATA_PATH = "./new_task_metadata.json"
 DEFAULT_MAX_STEP = 15
@@ -39,7 +36,6 @@ class AndroidEnvClient:
         self._task_metadata = {}
         self._current_task_type = None
         self._initialized = False
-        self._task_registry = TaskRegistry()
         self.tools = []
 
     def _ensure_initialized(self):
@@ -341,6 +337,8 @@ class AndroidMCPEnvClient(AndroidEnvClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # initialize the MCP client
+        from mobile_world.runtime.mcp_server import init_mcp_clients
+
         logger.debug("initializing the MCP client")
         mcp_client = init_mcp_clients()
         self.tools = []
@@ -375,6 +373,8 @@ class AndroidMCPEnvClient(AndroidEnvClient):
         """Truncate the tool call to 1000 characters."""
         if tool_call is not None:
             if "text" in tool_call and tool_call["text"].startswith("<!DOCTYPE html>"):
+                from markdownify import markdownify
+
                 tool_call["text"] = markdownify(tool_call["text"])
         return tool_call
 
