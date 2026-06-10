@@ -1,33 +1,39 @@
-"""Subcommands for the MobileWorld CLI."""
+"""Lazy subcommand exports for the MemGUI-Bench CLI."""
 
-from .device import configure_parser as configure_device_parser
-from .device import execute as execute_device
-from .env import configure_parser as configure_env_parser
-from .env import execute as execute_env
-from .eval import configure_parser as configure_eval_parser
-from .eval import execute as execute_eval
-from .info import configure_parser as configure_info_parser
-from .info import execute as execute_info
-from .logs import configure_parser as configure_logs_parser
-from .logs import execute as execute_logs
-from .server import configure_parser as configure_server_parser
-from .server import execute as execute_server
-from .test import configure_parser as configure_test_parser
-from .test import execute as execute_test
+from __future__ import annotations
 
-__all__ = [
-    "configure_server_parser",
-    "execute_server",
-    "configure_eval_parser",
-    "execute_eval",
-    "configure_test_parser",
-    "execute_test",
-    "configure_device_parser",
-    "execute_device",
-    "configure_logs_parser",
-    "execute_logs",
-    "configure_env_parser",
-    "execute_env",
-    "configure_info_parser",
-    "execute_info",
-]
+from importlib import import_module
+from typing import Any
+
+_EXPORTS = {
+    "configure_server_parser": ("mobile_world.core.subcommands.server", "configure_parser"),
+    "execute_server": ("mobile_world.core.subcommands.server", "execute"),
+    "configure_eval_parser": ("mobile_world.core.subcommands.eval", "configure_parser"),
+    "execute_eval": ("mobile_world.core.subcommands.eval", "execute"),
+    "configure_test_parser": ("mobile_world.core.subcommands.test", "configure_parser"),
+    "execute_test": ("mobile_world.core.subcommands.test", "execute"),
+    "configure_device_parser": ("mobile_world.core.subcommands.device", "configure_parser"),
+    "execute_device": ("mobile_world.core.subcommands.device", "execute"),
+    "configure_logs_parser": ("mobile_world.core.subcommands.logs", "configure_parser"),
+    "execute_logs": ("mobile_world.core.subcommands.logs", "execute"),
+    "configure_env_parser": ("mobile_world.core.subcommands.env", "configure_parser"),
+    "execute_env": ("mobile_world.core.subcommands.env", "execute"),
+    "configure_info_parser": ("mobile_world.core.subcommands.info", "configure_parser"),
+    "execute_info": ("mobile_world.core.subcommands.info", "execute"),
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    try:
+        module_name, attr_name = _EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(name) from exc
+    value = getattr(import_module(module_name), attr_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

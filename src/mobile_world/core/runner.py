@@ -251,6 +251,15 @@ def _init_env(
     return env
 
 
+def _get_local_suite_task_list(suite_family: str) -> list[str] | None:
+    """Return a local task list when a suite can be enumerated without a backend."""
+    if suite_family == "memgui_bench":
+        from mobile_world.tasks.memgui_registry import MemGUITaskRegistry
+
+        return MemGUITaskRegistry().list_tasks()
+    return None
+
+
 def run_agent_with_evaluation(
     agent_type: str,
     model_name: str,
@@ -319,8 +328,15 @@ def run_agent_with_evaluation(
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
 
+    if len(tasks) != 0:
+        task_list = tasks
+    else:
+        task_list = _get_local_suite_task_list(suite_family) if dry_run else None
+
     container_names = None
-    if aw_urls is None or len(aw_urls) == 0:
+    envs = None
+    needs_backend = task_list is None or not dry_run
+    if needs_backend and (aw_urls is None or len(aw_urls) == 0):
         logger.info("No backend URLs specified, auto-discovering from containers...")
         aw_urls, container_names = discover_backends(image_filter=env_image, prefix=env_name_prefix)
         logger.info("Container names: {}", container_names)
@@ -328,20 +344,24 @@ def run_agent_with_evaluation(
             logger.error("No backend URLs found. Please start containers or specify --aw-host")
             return [], []
 
-    logger.info("Using {} backend URL(s): {}", len(aw_urls), aw_urls)
+    if aw_urls:
+        logger.info("Using {} backend URL(s): {}", len(aw_urls), aw_urls)
+    elif dry_run:
+        logger.info("Dry run mode without backend URLs; no environment will be initialized")
 
-    envs = Parallel(
-        n_jobs=min(max_concurrency if max_concurrency is not None else len(aw_urls), len(aw_urls)),
-        backend="threading",
-    )(
-        delayed(_init_env)(env_url, device, step_wait_time, suite_family, enable_mcp, seed=seed)
-        for env_url in aw_urls
-    )
-
-    if len(tasks) != 0:
-        task_list = tasks
-    else:
-        task_list = envs[0].get_suite_task_list(enable_mcp=enable_mcp, enable_user_interaction=enable_user_interaction)
+    if task_list is None:
+        assert aw_urls is not None
+        envs = Parallel(
+            n_jobs=min(max_concurrency if max_concurrency is not None else len(aw_urls), len(aw_urls)),
+            backend="threading",
+        )(
+            delayed(_init_env)(env_url, device, step_wait_time, suite_family, enable_mcp, seed=seed)
+            for env_url in aw_urls
+        )
+        task_list = envs[0].get_suite_task_list(
+            enable_mcp=enable_mcp,
+            enable_user_interaction=enable_user_interaction,
+        )
 
     logger.info("Task list: {} ({} tasks)", task_list, len(task_list))
 
@@ -351,18 +371,32 @@ def run_agent_with_evaluation(
     task_list = [task for task in task_list if task not in finished_task_list]
     logger.info("Remaining tasks to execute: {} ({} tasks)", task_list, len(task_list))
 
-    num_envs = len(envs)
-    logger.info("Distributing {} tasks across {} environment(s)", len(task_list), num_envs)
-
-    env_queue = Queue[tuple[AndroidEnvClient, str | None]](maxsize=num_envs)
-    for i, env in enumerate(envs):
-        env_queue.put((env, container_names[i] if container_names else None))
-
-    logger.info("Starting parallel task execution with threading backend...")
-
     if shuffle_tasks:
         random.shuffle(task_list)
-    if not dry_run:
+
+    if dry_run:
+        logger.info("Dry run mode, skipping environment initialization and task execution")
+        task_results = []
+    else:
+        assert aw_urls is not None
+        if envs is None:
+            envs = Parallel(
+                n_jobs=min(max_concurrency if max_concurrency is not None else len(aw_urls), len(aw_urls)),
+                backend="threading",
+            )(
+                delayed(_init_env)(env_url, device, step_wait_time, suite_family, enable_mcp, seed=seed)
+                for env_url in aw_urls
+            )
+
+        num_envs = len(envs)
+        logger.info("Distributing {} tasks across {} environment(s)", len(task_list), num_envs)
+
+        env_queue = Queue[tuple[AndroidEnvClient, str | None]](maxsize=num_envs)
+        for i, env in enumerate(envs):
+            env_queue.put((env, container_names[i] if container_names else None))
+
+        logger.info("Starting parallel task execution with threading backend...")
+
         task_results = Parallel(
             n_jobs=min(max_concurrency if max_concurrency is not None else num_envs, num_envs),
             backend="threading",
@@ -382,9 +416,6 @@ def run_agent_with_evaluation(
             )
             for task_name in task_list
         )
-    else:
-        logger.info("Dry run mode, skipping task execution")
-        task_results = []
 
     task_list_with_no_results = [
         task_name for task_name, task_result in zip(task_list, task_results) if task_result is None
