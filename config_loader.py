@@ -1,12 +1,12 @@
 # encoding: utf-8
 """
 Configuration Loader Module
-Provides unified configuration loading with mode-based presets support.
+Provides compatibility configuration loading for MemGUI-Eval.
 
 This module handles:
-1. Loading config.yaml
+1. Loading config.yaml when present
 2. Applying user-facing .env overrides
-3. Applying fixed environment presets (ENVIRONMENT_MODE)
+3. Inheriting BASE_URL for MemGUI-Eval endpoints when specific endpoints are empty
 
 Usage:
     from config_loader import load_config
@@ -18,45 +18,10 @@ import yaml
 from dotenv import dotenv_values
 
 
-def apply_mode_presets(config, verbose=False):
-    """
-    Apply mode-based presets to configuration.
-
-    Mode precedence: .env overrides > mode presets > default values
-
-    Supported modes:
-    - ENVIRONMENT_MODE: "docker" (uses the preconfigured benchmark container)
-
-    Args:
-        config: Raw configuration dictionary loaded from YAML
-        verbose: Whether to print configuration info
-
-    Returns:
-        Processed configuration dictionary with presets applied
-    """
-    presets = config.get("_MODE_PRESETS", {})
-
-    # Get current mode selections
-    environment_mode = config.get("ENVIRONMENT_MODE", "docker")
-
-    if verbose:
-        print("📋 Loading configuration with modes:")
-        print(f"   • Environment: {environment_mode}")
-
-    # Define mapping from preset keys to config keys
-    preset_to_config = {
-        "_ADB_PATH": "ADB_PATH",
-        "_EMULATOR_PATH": "EMULATOR_PATH",
-        "_ANDROID_SDK_PATH": "ANDROID_SDK_PATH",
-        "_DEFAULT_KEYBOARD_PACKAGE": "DEFAULT_KEYBOARD_PACKAGE",
-        "_SYS_AVD_HOME": "SYS_AVD_HOME",
-        "_SOURCE_AVD_HOME": "SOURCE_AVD_HOME",
-    }
-
-    # Get BASE_URL from config (user-defined, no default to avoid leakage)
+def apply_eval_defaults(config, verbose=False):
+    """Apply MemGUI-Eval defaults that are derived from user-facing values."""
     base_url = config.get("BASE_URL")
 
-    # Apply BASE_URL to all URL fields if they are null (only when base_url is set)
     url_fields = [
         "MEMGUI_STEP_DESC_BASE_URL",
         "MEMGUI_FINAL_DECISION_BASE_URL",
@@ -64,19 +29,13 @@ def apply_mode_presets(config, verbose=False):
     for url_field in url_fields:
         if config.get(url_field) is None and base_url is not None:
             config[url_field] = base_url
-
-    # Apply environment mode presets
-    env_presets = presets.get("environment", {}).get(environment_mode, {})
-    for preset_key, config_key in preset_to_config.items():
-        if preset_key in env_presets and config_key:
-            preset_value = env_presets[preset_key]
-            if config.get(config_key) is None:
-                config[config_key] = preset_value
+    config.setdefault("MEMGUI_STEP_DESC_PROVIDER", "openai_compatible")
+    config.setdefault("MEMGUI_FINAL_DECISION_PROVIDER", "openai_compatible")
+    config.setdefault("MEMGUI_MAX_RETRIES", 4)
 
     if verbose:
         print("\n📊 Effective configuration:")
         print(f"   • BASE_URL: {config.get('BASE_URL')}")
-        print(f"   • DATASET_PATH: {config.get('DATASET_PATH')}")
         print(f"   • MEMGUI_STEP_DESC_MODEL: {config.get('MEMGUI_STEP_DESC_MODEL')}")
         print(f"   • MEMGUI_FINAL_DECISION_MODEL: {config.get('MEMGUI_FINAL_DECISION_MODEL')}")
         print()
@@ -94,10 +53,7 @@ def _normalize_env_value(value):
 
 def _apply_env_overrides(config, config_path=None):
     """
-    Apply user-facing .env values on top of config.yaml defaults.
-
-    config.yaml keeps benchmark defaults and paths; .env contains the small set
-    of values users normally edit, matching the MobileWorld setup style.
+    Apply user-facing .env values on top of optional config.yaml defaults.
     """
     candidates = []
     if config_path:
@@ -131,7 +87,7 @@ def _apply_env_overrides(config, config_path=None):
 
 def load_config(config_path=None, verbose=False):
     """
-    Load configuration from YAML file with mode presets applied.
+    Load configuration from YAML file with .env overrides applied.
 
     Args:
         config_path: Path to config.yaml. If None, auto-detects from project root.
@@ -166,11 +122,11 @@ def load_config(config_path=None, verbose=False):
     except Exception as e:
         raise Exception(f"Error loading config.yaml: {e}")
 
-    # Apply .env overrides before presets so null values can still inherit defaults.
+    # Apply .env overrides before derived defaults so empty endpoint fields can
+    # still inherit BASE_URL.
     config = _apply_env_overrides(config, config_path=config_path)
 
-    # Apply mode-based presets
-    config = apply_mode_presets(config, verbose=verbose)
+    config = apply_eval_defaults(config, verbose=verbose)
 
     return config
 

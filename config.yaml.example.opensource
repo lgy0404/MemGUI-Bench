@@ -1,38 +1,14 @@
 # ==============================================================================
-# MemGUI-Bench Fixed Configuration
+# MemGUI-Bench Internal Configuration
 # ==============================================================================
-# MobileWorld-style usage:
-#   1. uv run mg env init
-#   2. Edit .env API/model fields
-#   3. sudo uv run mg env check
-#   4. sudo uv run mg env run --count 4
-#   5. sudo uv run mg eval --agent-type qwen3vl --task ALL \
-#        --log-file-root traj_logs/my-experiment --max-concurrency 4
-#
-# Ordinary users should edit `.env` and CLI flags, not this file.
+# Ordinary users should configure `.env` and CLI flags. This file is kept only
+# as a compatibility template for legacy MemGUI-Eval imports.
 # ==============================================================================
-
-ENVIRONMENT_MODE: "docker"
-DATASET_PATH: "./data/memgui-tasks-all.csv"
-MEMGUI_SNAPSHOT_TAG: "init_state"
-
-_MODE_PRESETS:
-  environment:
-    docker:
-      _ADB_PATH: "adb"
-      _EMULATOR_PATH: "/root/.android/emulator/emulator"
-      _ANDROID_SDK_PATH: "/root/.android"
-      _DEFAULT_KEYBOARD_PACKAGE: "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME"
-      _SYS_AVD_HOME: "/root/.android/avd"
-      _SOURCE_AVD_HOME: "/root/.android/avd"
 
 # MemGUI-Eval defaults. `.env` overrides these values.
 BASE_URL: null
 MEMGUI_API_KEY: null
 MEMGUI_STEP_DESC_MODEL: "google/gemini-2.5-flash"
-MEMGUI_STEP_DESC_PROVIDER: "openai_compatible"
 MEMGUI_STEP_DESC_BASE_URL: null  # null means use BASE_URL
 MEMGUI_FINAL_DECISION_MODEL: "google/gemini-2.5-pro"
-MEMGUI_FINAL_DECISION_PROVIDER: "openai_compatible"
 MEMGUI_FINAL_DECISION_BASE_URL: null  # null means use BASE_URL
-MEMGUI_MAX_RETRIES: 4

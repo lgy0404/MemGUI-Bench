@@ -94,12 +94,12 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
     # Init subcommand
     init_parser = env_subparsers.add_parser(
         "init",
-        help="Create local .env and config.yaml from examples",
+        help="Create local .env from the example file",
     )
     init_parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite existing .env/config.yaml files",
+        help="Overwrite an existing .env file",
     )
 
     # Run subcommand
@@ -986,7 +986,11 @@ def _exec_container(args: argparse.Namespace) -> None:
 def _find_project_root(start: Path) -> Path:
     """Find the nearest project root for local setup files."""
     for candidate in [start] + list(start.parents):
-        if (candidate / "pyproject.toml").exists():
+        if (candidate / ".env.example").exists():
+            return candidate
+    module_path = Path(__file__).resolve()
+    for candidate in module_path.parents:
+        if (candidate / ".env.example").exists():
             return candidate
     return start
 
@@ -1006,7 +1010,6 @@ def _init_environment(args: argparse.Namespace) -> None:
     project_root = _find_project_root(Path.cwd())
     targets = [
         (project_root / ".env.example", Path.cwd() / ".env"),
-        (project_root / "config.yaml.example.opensource", Path.cwd() / "config.yaml"),
     ]
 
     table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
