@@ -257,7 +257,7 @@ def register_routes(rt, base_path: str = "/"):
         )
 
     def _process_tasks_for_display(
-        log_root, status_filter, score_filter, tag_filter, search_query="", suite_family="mobile_world"
+        log_root, status_filter, score_filter, tag_filter, search_query="", suite_family="memgui_bench"
     ):
         task_folders = get_task_folders(log_root)
         task_rows = []
@@ -888,7 +888,7 @@ def register_routes(rt, base_path: str = "/"):
 
         # Read suite family metadata
         metadata = read_log_metadata(log_root)
-        suite_family = metadata.get("suite_family", "mobile_world")
+        suite_family = metadata.get("suite_family", "memgui_bench")
 
         task_info = get_task_info(log_root, task_name)
         if not task_info:
@@ -1393,7 +1393,7 @@ def register_routes(rt, base_path: str = "/"):
 
         # Read suite family metadata
         metadata = read_log_metadata(log_root) if log_root else {}
-        suite_family = metadata.get("suite_family", "mobile_world")
+        suite_family = metadata.get("suite_family", "memgui_bench")
 
         # Pagination
         try:
@@ -1428,7 +1428,7 @@ def register_routes(rt, base_path: str = "/"):
                     # Header
                     Div(
                         Div(
-                            H1("📱 MobileWorld Trajectory Viewer"),
+                            H1("MemGUI-Bench Trajectory Viewer"),
                             Div(
                                 f"Last Updated: {current_time}",
                                 cls="last-update",
@@ -1577,17 +1577,22 @@ def register_routes(rt, base_path: str = "/"):
             task_rows = task_rows[start_idx:end_idx]
 
         suite_label = suite_family.replace("_", " ").title() if log_root else ""
-        suite_badge_cls = {"mobile_world": "badge finished", "android_world": "badge running", "user_task": "badge stale"}.get(suite_family, "badge neutral")
+        suite_badge_cls = {
+            "memgui_bench": "badge finished",
+            "mobile_world": "badge finished",
+            "android_world": "badge running",
+            "user_task": "badge stale",
+        }.get(suite_family, "badge neutral")
 
         return (
-            Title("📱 MobileWorld Log Viewer"),
+            Title("MemGUI-Bench Trajectory Viewer"),
             Style(DARK_THEME_CSS),
             Div(
                 # Header
                 Div(
                     Div(
                         Div(
-                            H1("📱 MobileWorld Log Viewer"),
+                            H1("MemGUI-Bench Trajectory Viewer"),
                             Span(
                                 suite_label,
                                 cls=suite_badge_cls,
@@ -1861,7 +1866,7 @@ def register_routes(rt, base_path: str = "/"):
 
         # Read suite family metadata
         metadata = read_log_metadata(log_root)
-        suite_family = metadata.get("suite_family", "mobile_world")
+        suite_family = metadata.get("suite_family", "memgui_bench")
 
         status_filter = request.query_params.get("status_filter", "all")
         score_filter = request.query_params.get("score_filter", "all")

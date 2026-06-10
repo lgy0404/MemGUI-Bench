@@ -197,7 +197,7 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
     destroy_parser.add_argument(
         "container_names",
         nargs="*",
-        help="Container names to destroy (omit for all mobile_world containers)",
+        help="Container names to destroy (omit for all MemGUI-Bench containers)",
     )
     destroy_parser.add_argument(
         "--all",
@@ -281,7 +281,7 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
     # Check subcommand
     env_subparsers.add_parser(
         "check",
-        help="Check prerequisites for running MobileWorld (Docker, KVM)",
+        help="Check prerequisites for running MemGUI-Bench (Docker, KVM, .env)",
     )
 
 
@@ -710,7 +710,7 @@ def _destroy_containers(args: argparse.Namespace) -> None:
 
 
 def _list_containers(args: argparse.Namespace) -> None:
-    """List MobileWorld containers."""
+    """List MemGUI-Bench containers."""
     containers = list_containers(
         image_filter=args.image,
         name_prefix=args.name_prefix,
@@ -720,7 +720,7 @@ def _list_containers(args: argparse.Namespace) -> None:
     if not containers:
         console.print(
             Panel(
-                "[yellow]No MobileWorld containers found[/yellow]",
+                "[yellow]No MemGUI-Bench containers found[/yellow]",
                 title="[yellow]ℹ Info[/yellow]",
                 border_style="yellow",
             )
@@ -751,7 +751,7 @@ def _list_containers(args: argparse.Namespace) -> None:
         console.print()
 
         table = Table(
-            title="MobileWorld Containers",
+            title="MemGUI-Bench Containers",
             show_header=True,
             header_style="bold magenta",
         )

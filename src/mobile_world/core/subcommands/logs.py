@@ -105,7 +105,7 @@ def print_results_table(log_roots: list[str]) -> None:
             continue
 
         metadata = read_log_metadata(log_root)
-        suite_family = metadata.get("suite_family", "mobile_world")
+        suite_family = metadata.get("suite_family", "memgui_bench")
         stats = calculate_task_stats(log_root, suite_family=suite_family)
         # Use basename for display, but show full path if duplicates exist
         display_name = os.path.basename(log_root.rstrip("/"))
@@ -146,7 +146,7 @@ async def execute(args: argparse.Namespace) -> None:
 async def _execute_view(args: argparse.Namespace) -> None:
     """Execute the logs view command."""
     try:
-        print("🚀 Starting MobileWorld Log Viewer...")
+        print("🚀 Starting MemGUI-Bench Trajectory Viewer...")
         print(f"📂 Log Root: {args.log_dir}")
         print(f"🌐 Opening web interface on port {args.port}...")
 

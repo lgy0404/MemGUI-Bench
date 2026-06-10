@@ -77,7 +77,7 @@ def _log_docker_permission_help() -> None:
     logger.error("     $ sudo usermod -aG docker $USER")
     logger.error("     $ newgrp docker")
     logger.error("  2. Run the command with sudo:")
-    logger.error("     $ sudo mobile-world env list")
+    logger.error("     $ sudo uv run mg env list")
     logger.error("  3. Check Docker daemon is running:")
     logger.error("     $ sudo systemctl status docker")
 
@@ -216,7 +216,7 @@ def discover_backends(
     """Discover backend URLs from running containers.
 
     Args:
-        image_filter: Image name substring to filter containers (default: mobile_world)
+        image_filter: Image name substring to filter containers (default: MemGUI-Bench image)
 
     Returns:
         list[str]: List of backend URLs in format http://localhost:PORT

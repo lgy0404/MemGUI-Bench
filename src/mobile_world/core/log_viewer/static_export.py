@@ -109,7 +109,7 @@ def export_static_site(log_root: str, output_dir: str, max_workers: int = 8) -> 
     os.makedirs(screenshots_dir, exist_ok=True)
 
     metadata = read_log_metadata(log_root)
-    suite_family = metadata.get("suite_family", "mobile_world")
+    suite_family = metadata.get("suite_family", "memgui_bench")
 
     task_folders = get_task_folders(log_root)
     stats = calculate_task_stats(log_root, suite_family=suite_family)
@@ -317,7 +317,7 @@ def _generate_index_page(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📱 MobileWorld Log Viewer - {_escape_html(title)}</title>
+    <title>MemGUI-Bench Trajectory Viewer - {_escape_html(title)}</title>
     <style>{css}</style>
 </head>
 <body>
@@ -325,8 +325,8 @@ def _generate_index_page(
     <div class="app-header">
         <div class="app-title">
             <div style="display: flex; align-items: center;">
-                <h1>📱 MobileWorld Log Viewer</h1>
-                <span class="badge {'finished' if suite_family == 'mobile_world' else 'running' if suite_family == 'android_world' else 'stale'}" style="margin-left: 12px; font-size: 14px;">{_escape_html(suite_family.replace('_', ' ').title())}</span>
+                <h1>MemGUI-Bench Trajectory Viewer</h1>
+                <span class="badge {'finished' if suite_family in {'memgui_bench', 'mobile_world'} else 'running' if suite_family == 'android_world' else 'stale'}" style="margin-left: 12px; font-size: 14px;">{_escape_html(suite_family.replace('_', ' ').title())}</span>
             </div>
             <div class="last-update">Log: {_escape_html(title)}</div>
         </div>
