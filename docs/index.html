@@ -2,754 +2,573 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MemGUI-Bench: Benchmarking Memory of Mobile GUI Agents</title>
-  <link rel="icon" href="assets/favicon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MemGUI-Bench: Benchmarking Memory for Mobile GUI Agents</title>
+    <meta name="description"
+        content="MemGUI-Bench evaluates memory-intensive mobile GUI agents on long-horizon, cross-app Android tasks.">
+    <meta name="keywords" content="MemGUI-Bench, Mobile GUI Agent, Android, Benchmark, Memory">
 
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
-
-  <!-- Bootstrap & Icons -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-
-  <!-- Custom CSS -->
-  <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-  <!-- Navigation -->
-  <nav class="navbar navbar-expand-lg fixed-top">
-    <div class="container">
-      <a class="navbar-brand" href="#">
-        <img src="assets/favicon.png" alt="MemGUI-Bench" class="brand-icon">
-        <span class="brand-text">MemGUI-Bench</span>
-      </a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ms-auto">
-          <li class="nav-item"><a class="nav-link" href="#overview">Overview</a></li>
-          <li class="nav-item"><a class="nav-link" href="#memgui-eval">Evaluation</a></li>
-          <li class="nav-item"><a class="nav-link" href="#results">Results</a></li>
-          <li class="nav-item"><a class="nav-link" href="leaderboard.html">Leaderboard</a></li>
-          <li class="nav-item"><a class="nav-link" href="submission.html">Submit</a></li>
-          <li class="nav-item"><a class="nav-link" href="#citation">Citation</a></li>
-        </ul>
-      </div>
-    </div>
-  </nav>
-
-  <!-- Hero Section -->
-  <header class="hero-section">
-    <div class="hero-bg"></div>
-    <div class="container">
-      <div class="hero-layout">
-        <!-- Left: Main Content -->
-        <div class="hero-content">
-          <h1 class="hero-title">
-            <span class="gradient-text">MemGUI-Bench</span>
-          </h1>
-          <p class="hero-subtitle">
-            Benchmarking Memory of Mobile GUI Agents in Dynamic Environments
-          </p>
-
-          <!-- Action Buttons -->
-          <div class="hero-buttons">
-            <a href="https://arxiv.org/abs/2602.06075" target="_blank" class="btn btn-primary btn-lg">
-              <i class="bi bi-file-earmark-pdf"></i> Paper
+    <nav class="navbar is-fixed-top" role="navigation" aria-label="main navigation">
+        <div class="navbar-brand">
+            <a class="navbar-item navbar-title" href="#">
+                <strong>MemGUI-Bench</strong>
             </a>
-            <a href="https://github.com/lgy0404/MemGUI-Bench" target="_blank" class="btn btn-outline-light btn-lg">
-              <i class="bi bi-github"></i> Code
+            <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" id="navbar-burger">
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
             </a>
-            <a href="https://huggingface.co/datasets/lgy0404/MemGUI-Bench" target="_blank" class="btn btn-outline-light btn-lg">
-              <i class="bi bi-list-task"></i> Tasks
-            </a>
-            <a href="https://huggingface.co/datasets/lgy0404/memgui-bench-trajs" target="_blank" class="btn btn-outline-light btn-lg">
-              <i class="bi bi-collection"></i> Trajectories
-            </a>
-          </div>
-
-          <!-- Authors -->
-          <div class="hero-authors">
-            <div class="authors-list">
-              <span class="author"><span class="author-name">Guangyi Liu</span><sup>1*</sup></span>
-              <span class="author"><span class="author-name">Pengxiang Zhao</span><sup>1*</sup></span>
-              <span class="author"><span class="author-name">Yaozhen Liang</span><sup>1*</sup></span>
-              <span class="author"><span class="author-name">Qinyi Luo</span><sup>2</sup></span>
-              <span class="author"><span class="author-name">Shunye Tang</span><sup>2</sup></span>
-              <span class="author"><span class="author-name">Yuxiang Chai</span><sup>3</sup></span>
-              <span class="author"><span class="author-name">Weifeng Lin</span><sup>3</sup></span>
-              <span class="author"><span class="author-name">Han Xiao</span><sup>3</sup></span>
-              <span class="author"><span class="author-name">WenHao Wang</span><sup>1</sup></span>
-              <span class="author"><span class="author-name">Siheng Chen</span><sup>4</sup></span>
-              <span class="author"><span class="author-name">Zhengxi Lu</span><sup>1</sup></span>
-              <span class="author"><span class="author-name">Gao Wu</span><sup>1</sup></span>
-              <span class="author"><span class="author-name">Hao Wang</span><sup>5</sup></span>
-              <span class="author"><span class="author-name">Liang Liu</span><sup>5†</sup></span>
-              <span class="author"><span class="author-name">Yong Liu</span><sup>1</sup><span class="corresponding-icon"
-                  title="Corresponding Author">✉</span></span>
+        </div>
+        <div class="navbar-menu" id="navbar-menu">
+            <div class="navbar-start">
+                <a class="navbar-item" href="#leaderboard">Leaderboard</a>
+                <a class="navbar-item" href="#overview">Overview</a>
+                <a class="navbar-item" href="#runtime">Runtime</a>
+                <a class="navbar-item" href="#evaluation">Evaluation</a>
             </div>
-            <div class="affiliations-list">
-              <span class="affiliation"><sup>1</sup>Zhejiang University</span>
-              <span class="affiliation"><sup>2</sup>Nankai University</span>
-              <span class="affiliation"><sup>3</sup>The Chinese University of Hong Kong</span>
-              <span class="affiliation"><sup>4</sup>Shanghai Jiao Tong University</span>
-              <span class="affiliation"><sup>5</sup>vivo AI Lab</span>
-            </div>
-            <div class="author-notes">
-              <span>* Equal contribution</span>
-              <span>† Project Lead</span>
-              <span>✉ Corresponding author</span>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Right: Live Leaderboard (Dynamic) -->
-        <div class="hero-leaderboard-panel">
-          <div class="lb-panel-header">
-            <span class="lb-panel-title">🏆 Live Leaderboard</span>
-            <a href="leaderboard.html" class="lb-panel-link">View All →</a>
-          </div>
-          <div class="lb-panel-table" id="heroLeaderboardTable">
-            <div class="lb-panel-loading">Loading...</div>
-          </div>
-          <a href="leaderboard.html" class="lb-panel-cta">
-            <i class="bi bi-bar-chart-line"></i> Explore Full Leaderboard
-          </a>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <!-- Overview Section -->
-  <section id="overview" class="section-padding">
-    <div class="container">
-      <h2 class="section-title text-center">Overview</h2>
-
-      <!-- Problem Statement & Stats -->
-      <div class="row align-items-center mb-5">
-        <div class="col-lg-6">
-          <div class="overview-text">
-            <p class="lead">
-              Current mobile GUI agent benchmarks systematically fail to assess memory capabilities,
-              with only <strong>5.2-11.8%</strong> memory-related tasks and no cross-session learning evaluation.
-            </p>
-            <p>
-              <strong>MemGUI-Bench</strong> introduces a comprehensive memory-centric benchmark with
-              pass@k evaluation and staged LLM-as-judge evaluation, designed to rigorously test
-              agents' ability to retain and utilize information across complex, multi-application workflows.
-            </p>
-          </div>
-        </div>
-        <div class="col-lg-6">
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-number">128</div>
-              <div class="stat-label">Tasks</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-number">26</div>
-              <div class="stat-label">Applications</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-number">68</div>
-              <div class="stat-label">Scenarios</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-number">36</div>
-              <div class="stat-label">Avg Steps</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-number">1-4</div>
-              <div class="stat-label">Cross-App Span</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-number">89.8%</div>
-              <div class="stat-label">Memory-Intensive</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Key Contributions -->
-      <h3 class="subsection-title text-center mb-4">Key Contributions</h3>
-      <div class="row g-4 mb-5">
-        <div class="col-md-6 col-lg-3">
-          <div class="feature-card">
-            <div class="feature-icon">📊</div>
-            <h4>Memory Taxonomy</h4>
-            <p>Systematic analysis of 11 agents across 5 architectures, identifying key memory mechanisms.</p>
-          </div>
-        </div>
-        <div class="col-md-6 col-lg-3">
-          <div class="feature-card">
-            <div class="feature-icon">🎯</div>
-            <h4>128 Curated Tasks</h4>
-            <p>Cross-temporal and cross-spatial retention challenges across 26 real-world applications.</p>
-          </div>
-        </div>
-        <div class="col-md-6 col-lg-3">
-          <div class="feature-card">
-            <div class="feature-icon">⚖️</div>
-            <h4>MemGUI-Eval</h4>
-            <p>Automated Progressive Scrutiny pipeline with 7 hierarchical metrics for accurate evaluation.</p>
-          </div>
-        </div>
-        <div class="col-md-6 col-lg-3">
-          <div class="feature-card">
-            <div class="feature-icon">🔬</div>
-            <h4>RQ-Driven Analysis</h4>
-            <p>Comprehensive assessment revealing 5 distinct failure modes and design implications.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Evaluation Metrics -->
-      <h3 class="subsection-title text-center mb-4">Evaluation Metrics</h3>
-      <div class="row mb-5">
-        <div class="col-lg-6">
-          <div class="metric-group">
-            <h4><span class="metric-badge short-term">♣</span> Short-Term Memory (pass@1)</h4>
-            <ul class="metric-list">
-              <li><strong>SR</strong> - Success Rate: Baseline performance measurement</li>
-              <li><strong>IRR</strong> - Information Retention Rate: Memory fidelity metric</li>
-              <li><strong>MTPR</strong> - Memory-Task Proficiency Ratio: Memory-specific capability isolation</li>
-            </ul>
-          </div>
-        </div>
-        <div class="col-lg-6">
-          <div class="metric-group">
-            <h4><span class="metric-badge long-term">♠</span> Long-Term Memory (pass@k)</h4>
-            <ul class="metric-list">
-              <li><strong>SR@k</strong> - Multi-Attempt Success Rate: Cross-session learning capability</li>
-              <li><strong>FRR</strong> - Failure Recovery Rate: Learning from failure efficiency</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <!-- Framework Overview -->
-      <h3 class="subsection-title text-center mb-4">Framework Overview</h3>
-
-      <!-- Overview + Task Suite + Architecture -->
-      <div class="row g-4">
-        <div class="col-lg-4">
-          <div class="figure-card h-100">
-            <div class="figure-img-wrapper">
-              <img src="images/fig1-overview.png" alt="MemGUI-Bench Overview">
-            </div>
-            <div class="figure-caption">
-              <h5>Figure 1: MemGUI-Bench Overview</h5>
-              <p>First comprehensive benchmark for GUI agent memory evaluation.</p>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-4">
-          <div class="figure-card h-100">
-            <div class="figure-img-wrapper">
-              <img src="images/fig2-task-suite.png" alt="Task Suite Statistics">
-            </div>
-            <div class="figure-caption">
-              <h5>Figure 2: Task Suite Statistics</h5>
-              <p>128 tasks (64 mirror pairs), 26 apps, 3 difficulty levels.</p>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-4">
-          <div class="figure-card h-100">
-            <div class="figure-img-wrapper">
-              <img src="images/fig3-architecture.png" alt="Unified Architecture">
-            </div>
-            <div class="figure-caption">
-              <h5>Figure 3: Plug-and-Play Framework</h5>
-              <p>Snapshot-based architecture with parallel execution.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- MemGUI-Eval Section -->
-  <section id="memgui-eval" class="section-padding bg-light-alt">
-    <div class="container">
-      <h2 class="section-title text-center">MemGUI-Eval</h2>
-      <p class="text-center text-secondary mb-4">Progressive Scrutiny Evaluation for Memory-Intensive GUI Tasks</p>
-
-      <div class="row align-items-center">
-        <div class="col-lg-6">
-          <div class="eval-intro">
-            <p class="lead">
-              Traditional evaluation methods face critical limitations: rigid rule-based matching cannot handle semantic
-              variations,
-              while "LLM-as-Judge" approaches overwhelm models with complete trajectories.
-            </p>
-            <p>
-              <strong>MemGUI-Eval</strong> introduces a novel <em>"Progressive Scrutiny"</em> pipeline that mimics
-              efficient human expert verification,
-              achieving <strong>95.9% F1-score</strong> at only <strong>$0.031 per trajectory</strong>.
-            </p>
-
-            <div class="eval-stages mt-4">
-              <div class="eval-stage">
-                <span class="stage-num">1</span>
-                <div class="stage-info">
-                  <strong>Cost-Effective Triage</strong>
-                  <span>Rapid screening with minimal evidence (last 3 screenshots)</span>
-                </div>
-              </div>
-              <div class="eval-stage">
-                <span class="stage-num">2</span>
-                <div class="stage-info">
-                  <strong>Full Semantic Analysis</strong>
-                  <span>Enriched textual descriptions for comprehensive judgment</span>
-                </div>
-              </div>
-              <div class="eval-stage">
-                <span class="stage-num">3</span>
-                <div class="stage-info">
-                  <strong>Targeted Visual Verification</strong>
-                  <span>Precisely requested historical screenshots for final decision</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-4">
-              <a href="eval-pipeline.html" class="btn btn-primary">
-                <i class="bi bi-diagram-3"></i> View Detailed Pipeline
-              </a>
-              <a href="failure-analysis.html" class="btn btn-outline-secondary ms-2">
-                <i class="bi bi-bug"></i> Failure Analysis
-              </a>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-6">
-          <div class="figure-card">
-            <div class="figure-img-wrapper">
-              <img src="images/fig4-eval-pipeline.png" alt="MemGUI-Eval Pipeline">
-            </div>
-            <div class="figure-caption">
-              <h5>Three-Stage Progressive Scrutiny Pipeline</h5>
-              <p>Four specialized agents: Triage Judge, Step Descriptor, Semantic Judge, and Visual Judge.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Benchmark Comparison Section -->
-  <section id="benchmark" class="section-padding">
-    <div class="container">
-      <h2 class="section-title text-center">Benchmark Comparison</h2>
-      <p class="text-center text-secondary mb-4">Comprehensive comparison across evaluation environment, pipeline, and
-        agent support dimensions</p>
-      <div class="table-responsive">
-        <table class="table table-bordered table-hover comparison-table">
-          <thead>
-            <tr>
-              <th rowspan="2" class="align-middle">Benchmark</th>
-              <th colspan="5" class="text-center bg-success-subtle">Evaluation Environment</th>
-              <th colspan="3" class="text-center bg-info-subtle">Evaluation Pipeline</th>
-              <th rowspan="2" class="align-middle text-center">Agents<br>Tested</th>
-            </tr>
-            <tr>
-              <th>Memory<br>Tasks</th>
-              <th>Cross-app<br>Tasks</th>
-              <th>Total<br>Tasks</th>
-              <th>3rd-party<br>Apps</th>
-              <th>Auto<br>Reset</th>
-              <th>Long-term<br>Memory</th>
-              <th>Auto<br>Eval</th>
-              <th>Memory<br>Metrics</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr class="table-secondary">
-              <td colspan="10" class="fw-bold text-muted">Rule-based Evaluation Pipeline</td>
-            </tr>
-            <tr>
-              <td>AndroidArena</td>
-              <td>22</td>
-              <td>22</td>
-              <td>221</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td>1/4</td>
-              <td>1</td>
-            </tr>
-            <tr>
-              <td>AndroidWorld</td>
-              <td>6</td>
-              <td>6</td>
-              <td>116</td>
-              <td class="text-success">✓</td>
-              <td class="text-success">✓</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td>1/1</td>
-              <td>3</td>
-            </tr>
-            <tr>
-              <td>AndroidLab</td>
-              <td>45</td>
-              <td>0</td>
-              <td>138</td>
-              <td class="text-success">✓</td>
-              <td class="text-success">✓</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td>1/4</td>
-              <td>4</td>
-            </tr>
-            <tr>
-              <td>LlamaTouch</td>
-              <td>0</td>
-              <td>0</td>
-              <td>495</td>
-              <td class="text-success">✓</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td>1/1</td>
-              <td>4</td>
-            </tr>
-            <tr>
-              <td>B-MoCA</td>
-              <td>0</td>
-              <td>0</td>
-              <td>60</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td>1/1</td>
-              <td>3</td>
-            </tr>
-            <tr>
-              <td>MobileAgentBench</td>
-              <td>0</td>
-              <td>0</td>
-              <td>100</td>
-              <td class="text-danger">✗</td>
-              <td class="text-success">✓</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td>1/6</td>
-              <td>5</td>
-            </tr>
-            <tr class="table-secondary">
-              <td colspan="10" class="fw-bold text-muted">LLM-as-a-Judge Evaluation Pipeline</td>
-            </tr>
-            <tr>
-              <td>A3</td>
-              <td>9</td>
-              <td>0</td>
-              <td>201</td>
-              <td class="text-success">✓</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td class="text-success">✓</td>
-              <td>1/2</td>
-              <td>6</td>
-            </tr>
-            <tr>
-              <td>SPA-Bench</td>
-              <td>40</td>
-              <td>40</td>
-              <td>340</td>
-              <td class="text-success">✓</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td class="text-danger">✗</td>
-              <td>1/7</td>
-              <td>11</td>
-            </tr>
-            <tr class="table-primary fw-bold">
-              <td>MemGUI-Bench (Ours)</td>
-              <td class="text-success">115</td>
-              <td class="text-success">100</td>
-              <td>128</td>
-              <td class="text-success">✓</td>
-              <td class="text-success">✓</td>
-              <td class="text-success">✓</td>
-              <td class="text-success">✓</td>
-              <td class="text-success">4/7</td>
-              <td>11</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="text-center text-muted mt-3">
-        MemGUI-Bench is the first benchmark to systematically evaluate both short-term and long-term memory capabilities
-        of Mobile GUI agents.
-      </p>
-    </div>
-  </section>
-
-  <!-- Results Section -->
-  <section id="results" class="section-padding">
-    <div class="container">
-      <h2 class="section-title text-center">Key Results</h2>
-      <p class="text-center text-secondary mb-5">
-        Comprehensive evaluation of 11 GUI agents reveals critical insights about memory capabilities.
-      </p>
-
-      <!-- Research Questions & Conclusions -->
-      <h3 class="subsection-title text-center mb-4">Research Questions & Key Findings</h3>
-      <div class="rq-grid">
-        <div class="rq-card">
-          <div class="rq-header">
-            <span class="rq-badge">RQ1</span>
-            <span class="rq-question">How do current GUI agents perform on memory-intensive tasks?</span>
-          </div>
-          <div class="rq-answer">
-            <strong>4-10× capability gaps hidden by standard benchmarks.</strong>
-            M3A achieves highest pass@1 SR (32.8%), while Agent-S2 demonstrates exceptional learning potential with
-            highest pass@3 (49.2%). End-to-end models achieve only 0.0-6.2%. Performance drops dramatically from
-            AndroidWorld to MemGUI-Bench (Agent-S2: 54.3%→27.3%, GUI-Owl-7B: 66.4%→6.2%).
-          </div>
-        </div>
-
-        <div class="rq-card">
-          <div class="rq-header">
-            <span class="rq-badge">RQ2</span>
-            <span class="rq-question">Are memory mechanisms essential or optional?</span>
-          </div>
-          <div class="rq-answer">
-            <strong>Short-term memory is mandatory; long-term memory is beneficial but optional.</strong>
-            Removing short-term memory causes catastrophic collapse (M3A: 32.5%→2.5%, IRR: 35.1%→0.0%). Long-term memory
-            provides +21.9 pp improvement but agents remain functional without it.
-          </div>
-        </div>
-
-        <div class="rq-card">
-          <div class="rq-header">
-            <span class="rq-badge">RQ3</span>
-            <span class="rq-question">How does cross-application complexity affect memory?</span>
-          </div>
-          <div class="rq-answer">
-            <strong>16-40pp performance degradation, the primary memory bottleneck.</strong>
-            M3A drops from 46.4% (1-app) to 30.0% (4-app), Agent-S2 from 50.0% to 10.0%. Cross-app information transfer
-            is the critical challenge.
-          </div>
-        </div>
-
-        <div class="rq-card">
-          <div class="rq-header">
-            <span class="rq-badge">RQ4</span>
-            <span class="rq-question">Can long-context capability improve performance?</span>
-          </div>
-          <div class="rq-answer">
-            <strong>+18.8pp improvement, revealing untapped potential.</strong>
-            M3A multi-turn achieves 51.6% (vs 32.8% single-turn). UI-TARS-1.5-7B with 5-turn limit achieves only
-            3.1-6.2%, confirming context constraints severely limit performance.
-          </div>
-        </div>
-
-        <div class="rq-card">
-          <div class="rq-header">
-            <span class="rq-badge">RQ5</span>
-            <span class="rq-question">Can long-term memory enable cross-session learning?</span>
-          </div>
-          <div class="rq-answer">
-            <strong>+21.9pp improvement but remains underutilized.</strong>
-            Agent-S2 demonstrates 27.3%→49.2% improvement with 21.5% FRR, while agents without explicit memory show
-            minimal FRR (0.8-4.4%). Only 2 of 11 agents implement cross-session learning.
-          </div>
-        </div>
-
-        <div class="rq-card">
-          <div class="rq-header">
-            <span class="rq-badge">RQ6</span>
-            <span class="rq-question">What are the computational trade-offs?</span>
-          </div>
-          <div class="rq-answer">
-            <strong>Severe trade-offs under deployment constraints.</strong>
-            Agent-S2 (41,760 tokens/step) drops from 49.2% to 0% under token limits. M3A shows optimal balance with
-            graceful degradation (47.7%→21.9%) at 31% of Agent-S2's tokens.
-          </div>
-        </div>
-      </div>
-
-      <div class="text-center mt-4">
-        <a href="leaderboard.html" class="btn btn-primary btn-lg">
-          <i class="bi bi-bar-chart-line"></i> View Full Leaderboard
-        </a>
-      </div>
-
-      <!-- Additional Resources -->
-      <div class="text-center mt-4">
-        <p class="text-muted mb-3">Explore detailed analysis:</p>
-        <a href="eval-pipeline.html" class="btn btn-outline-primary me-2">
-          <i class="bi bi-diagram-3"></i> MemGUI-Eval Pipeline
-        </a>
-        <a href="failure-analysis.html" class="btn btn-outline-secondary">
-          <i class="bi bi-bug"></i> Failure Analysis
-        </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- Citation Section -->
-  <section id="citation" class="section-padding">
-    <div class="container">
-      <h2 class="section-title text-center">Citation</h2>
-      <div class="citation-box">
-        <pre><code>@misc{liu2026memguibenchbenchmarkingmemorymobile,
-  title={MemGUI-Bench: Benchmarking Memory of Mobile GUI Agents in Dynamic Environments},
-  author={Guangyi Liu and Pengxiang Zhao and Yaozhen Liang and Qinyi Luo and Shunye Tang and Yuxiang Chai and Weifeng Lin and Han Xiao and WenHao Wang and Siheng Chen and Zhengxi Lu and Gao Wu and Hao Wang and Liang Liu and Yong Liu},
+            <div class="navbar-end">
+                <div class="navbar-item">
+                    <div class="buttons">
+                        <a href="https://arxiv.org/abs/2602.06075" class="button is-small is-dark" target="_blank">
+                            <span class="icon"><i class="ai ai-arxiv"></i></span>
+                            <span>Paper</span>
+                        </a>
+                        <a href="https://huggingface.co/datasets/lgy0404/memgui-bench"
+                            class="button is-small is-dark" target="_blank">
+                            <span class="icon"><i class="fas fa-database"></i></span>
+                            <span>Dataset</span>
+                        </a>
+                        <a href="https://github.com/lgy0404/MemGUI-Bench" class="button is-small is-dark"
+                            target="_blank">
+                            <span class="icon"><i class="fab fa-github"></i></span>
+                            <span>Code</span>
+                        </a>
+                        <a href="https://github.com/lgy0404/MemGUI-Bench/tree/main/docs"
+                            class="button is-small is-dark" target="_blank">
+                            <span class="icon"><i class="fas fa-book-open"></i></span>
+                            <span>Docs</span>
+                        </a>
+                        <div class="dropdown is-hoverable is-right" id="cite-dropdown">
+                            <div class="dropdown-trigger">
+                                <button class="button is-small is-dark" aria-haspopup="true" aria-controls="cite-menu">
+                                    <span class="icon"><i class="fas fa-quote-right"></i></span>
+                                    <span>Cite</span>
+                                </button>
+                            </div>
+                            <div class="dropdown-menu" id="cite-menu" role="menu">
+                                <div class="dropdown-content cite-dropdown-content">
+                                    <div class="dropdown-item">
+                                        <p class="is-size-7 has-text-weight-semibold mb-2">BibTeX</p>
+                                        <pre class="cite-bibtex"><code>@misc{memgui2026bench,
+  title={MemGUI-Bench: Benchmarking Memory for Mobile GUI Agents},
+  author={MemGUI-Bench Team},
   year={2026},
   eprint={2602.06075},
   archivePrefix={arXiv},
-  primaryClass={cs.DC},
-  url={https://arxiv.org/abs/2602.06075},
+  primaryClass={cs.AI},
+  url={https://arxiv.org/abs/2602.06075}
 }</code></pre>
-        <button class="btn btn-sm btn-outline-light copy-btn" onclick="copyBibtex()">
-          <i class="bi bi-clipboard"></i> Copy
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Affiliations Section -->
-  <section id="affiliations" class="affiliations-section">
-    <div class="container">
-      <h3 class="affiliations-title text-center">Contributing Institutions</h3>
-      <div class="affiliations-logos">
-        <a href="https://www.zju.edu.cn/" target="_blank" class="affiliation-logo" title="Zhejiang University">
-          <img src="images/logos/zhejiang-university.svg" alt="Zhejiang University">
-        </a>
-        <a href="https://www.nankai.edu.cn/" target="_blank" class="affiliation-logo" title="Nankai University">
-          <img src="images/logos/nankai-university.svg" alt="Nankai University">
-        </a>
-        <a href="https://www.cuhk.edu.hk/" target="_blank" class="affiliation-logo"
-          title="The Chinese University of Hong Kong">
-          <img src="images/logos/cuhk.svg" alt="The Chinese University of Hong Kong">
-        </a>
-        <a href="https://www.sjtu.edu.cn/" target="_blank" class="affiliation-logo"
-          title="Shanghai Jiao Tong University">
-          <img src="images/logos/sjtu.svg" alt="Shanghai Jiao Tong University">
-        </a>
-        <a href="https://www.vivo.com/" target="_blank" class="affiliation-logo" title="vivo">
-          <img src="images/logos/vivo.svg" alt="vivo">
-        </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="footer">
-    <div class="container text-center">
-      <p>MemGUI-Bench © 2026 | Built with ❤️ for the research community</p>
-      <p class="text-muted">Last updated: February 2026</p>
-    </div>
-  </footer>
-
-  <!-- Scripts -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="js/config.js"></script>
-  <script>
-    function copyBibtex() {
-      const bibtex = document.querySelector('.citation-box code').textContent;
-      navigator.clipboard.writeText(bibtex);
-      const btn = document.querySelector('.copy-btn');
-      btn.innerHTML = '<i class="bi bi-check"></i> Copied!';
-      setTimeout(() => {
-        btn.innerHTML = '<i class="bi bi-clipboard"></i> Copy';
-      }, 2000);
-    }
-
-    // Load Hero Leaderboard dynamically
-    async function loadHeroLeaderboard() {
-      try {
-        // First load agent list from index.json
-        await loadAgentList();
-
-        // Load each agent file in parallel
-        const agentPromises = AGENT_FILES.map(async (agentId) => {
-          const response = await fetch(`data/agents/${agentId}.json`);
-          if (!response.ok) return null;
-          return response.json();
-        });
-        const agents = (await Promise.all(agentPromises)).filter(a => a !== null);
-        const data = { agents: agents };
-
-        // Sort by avg p@3 descending
-        const sorted = [...data.agents].sort((a, b) => b.avg.p3 - a.avg.p3);
-        const top5 = sorted.slice(0, 5);
-
-        // Find best values for highlighting
-        const bestP1 = Math.max(...top5.map(a => a.avg.p1));
-        const bestP3 = Math.max(...top5.map(a => a.avg.p3));
-        const bestIRR = Math.max(...top5.map(a => a.metrics?.shortTerm?.irr ?? 0));
-        const bestMTPR = Math.max(...top5.map(a => a.metrics?.shortTerm?.mtpr ?? 0));
-        const bestFRR = Math.max(...top5.map(a => a.metrics?.longTerm?.frr ?? 0));
-
-        // Build HTML
-        let html = `
-          <div class="lb-panel-row header">
-            <span class="lb-col-rank">#</span>
-            <span class="lb-col-name">Agent</span>
-            <span class="lb-col-metric">p@1</span>
-            <span class="lb-col-metric">p@3</span>
-            <span class="lb-col-metric">IRR</span>
-            <span class="lb-col-metric">MTPR</span>
-            <span class="lb-col-metric">FRR</span>
-          </div>
-        `;
-
-        top5.forEach((agent, index) => {
-          const rank = index + 1;
-          const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
-          const rankClass = rank <= 3 ? `rank-${rank}` : '';
-
-          const p1 = agent.avg.p1;
-          const p3 = agent.avg.p3;
-          const irr = agent.metrics?.shortTerm?.irr ?? '-';
-          const mtpr = agent.metrics?.shortTerm?.mtpr ?? '-';
-          const frr = agent.metrics?.longTerm?.frr ?? '-';
-
-          const p1Class = p1 === bestP1 ? 'highlight' : '';
-          const p3Class = p3 === bestP3 ? 'highlight' : '';
-          const irrClass = irr === bestIRR ? 'highlight' : '';
-          const mtprClass = mtpr === bestMTPR ? 'highlight' : '';
-          const frrClass = frr === bestFRR ? 'highlight' : '';
-
-          html += `
-            <div class="lb-panel-row ${rankClass}">
-              <span class="lb-col-rank">${rankIcon}</span>
-              <span class="lb-col-name">${agent.name}</span>
-              <span class="lb-col-metric ${p1Class}">${typeof p1 === 'number' ? p1.toFixed(1) : '-'}</span>
-              <span class="lb-col-metric ${p3Class}">${typeof p3 === 'number' ? p3.toFixed(1) : '-'}</span>
-              <span class="lb-col-metric ${irrClass}">${typeof irr === 'number' ? irr.toFixed(1) : '-'}</span>
-              <span class="lb-col-metric ${mtprClass}">${typeof mtpr === 'number' ? mtpr.toFixed(2) : '-'}</span>
-              <span class="lb-col-metric ${frrClass}">${typeof frr === 'number' ? frr.toFixed(1) : '-'}</span>
+                                        <button class="button is-small is-fullwidth mt-2" id="copy-cite-btn">
+                                            <span class="icon"><i class="fas fa-copy"></i></span>
+                                            <span>Copy to Clipboard</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-          `;
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-body">
+            <div class="container is-max-desktop">
+                <div class="columns is-centered">
+                    <div class="column has-text-centered">
+                        <img src="assets/memgui-bench-logo.png" alt="MemGUI-Bench"
+                            style="max-width: 760px; width: 90%; margin-bottom: 1.25rem;">
+                        <h1 class="title is-2 publication-title">
+                            Benchmarking Memory for Mobile GUI Agents
+                        </h1>
+                        <div class="is-size-5 publication-authors">
+                            <span class="author-block">128 long-horizon tasks</span>
+                            <span class="author-block">26 Android apps</span>
+                            <span class="author-block">Memory-intensive cross-app workflows</span>
+                        </div>
+                        <div class="publication-links mt-5">
+                            <a class="button is-dark" href="#runtime">
+                                <span class="icon"><i class="fas fa-play"></i></span>
+                                <span>Run Benchmark</span>
+                            </a>
+                            <a class="button is-light" href="#leaderboard">
+                                <span class="icon"><i class="fas fa-ranking-star"></i></span>
+                                <span>View Leaderboard</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-full">
+                    <div class="banner">
+                        <img src="assets/fig1-overview.png" alt="MemGUI-Bench overview">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <main class="container is-max-desktop">
+        <section id="leaderboard" class="section">
+            <h2 class="title is-3 has-text-centered">Leaderboard</h2>
+            <div class="content has-text-justified">
+                <p>
+                    Success rate (%) on MemGUI-Bench. We report <strong>Pass@1</strong>,
+                    <strong>Pass@3</strong>, and memory-oriented metrics including
+                    <strong>IRR</strong> (Information Retention Rate) and
+                    <strong>FRR</strong> (Failure Recovery Rate). Leaderboard evaluation
+                    uses the fixed MemGUI-Eval model setup for comparable submissions.
+                </p>
+            </div>
+
+            <div class="box leaderboard-filters">
+                <div class="columns is-mobile is-multiline is-vcentered is-variable is-3">
+                    <div class="column is-narrow">
+                        <div class="field">
+                            <label class="label is-small">Model Type:</label>
+                            <div class="control">
+                                <div class="select">
+                                    <select id="filter-model-type">
+                                        <option value="all">All</option>
+                                        <option value="Agentic Workflow">Agentic Workflow</option>
+                                        <option value="Agent-as-a-Model">Agent-as-a-Model</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-narrow">
+                        <div class="field">
+                            <label class="label is-small">Sort:</label>
+                            <div class="control">
+                                <div class="select">
+                                    <select id="filter-sort">
+                                        <option value="pass1">Pass@1</option>
+                                        <option value="pass3">Pass@3</option>
+                                        <option value="irr">IRR</option>
+                                        <option value="frr">FRR</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-narrow">
+                        <div class="field">
+                            <label class="label is-small">&nbsp;</label>
+                            <div class="control">
+                                <button class="button is-light" id="clear-filters">
+                                    Clear Filters
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <p class="is-size-7 has-text-grey">
+                            Tasks: <span id="task-count-total">128</span> total,
+                            <span id="task-count-easy">48</span> easy,
+                            <span id="task-count-medium">42</span> medium,
+                            <span id="task-count-hard">38</span> hard.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-container osworld-table-container">
+                <table class="table is-fullwidth is-hoverable osworld-leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">Rank</th>
+                            <th style="width: 120px;">Category</th>
+                            <th>Model</th>
+                            <th class="has-text-centered sortable-header" data-sort="pass1">
+                                Pass@1 <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th class="has-text-centered sortable-header" data-sort="pass3">
+                                Pass@3 <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th class="has-text-centered sortable-header" data-sort="irr">
+                                IRR <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th class="has-text-centered sortable-header" data-sort="frr">
+                                FRR <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body">
+                        <tr>
+                            <td colspan="7" class="has-text-centered">Loading leaderboard data...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="overview" class="section">
+            <h2 class="title is-3">Overview</h2>
+            <div class="content has-text-justified">
+                <p>
+                    <strong>MemGUI-Bench</strong> evaluates memory capabilities that are
+                    central to mobile GUI agents: retaining information from earlier UI
+                    states, carrying facts across applications, and avoiding memory
+                    hallucination during long trajectories.
+                </p>
+                <p>
+                    The benchmark includes <strong>128 tasks</strong> over
+                    <strong>26 apps</strong>. Tasks average <strong>36.2 golden
+                    steps</strong>, <strong>78.1%</strong> involve multiple apps, and
+                    <strong>89.8%</strong> require UI memory.
+                </p>
+            </div>
+
+            <figure class="image mt-4">
+                <img src="assets/fig2-task-suite.png" alt="MemGUI-Bench task suite">
+                <figcaption class="has-text-centered mt-2" style="font-size: 0.9rem; color: #666;">
+                    <strong>Figure:</strong> MemGUI-Bench task suite and memory-oriented task design.
+                </figcaption>
+            </figure>
+        </section>
+
+        <section class="section">
+            <h2 class="title is-4">Benchmark Comparison</h2>
+            <div class="content has-text-justified">
+                <p>
+                    MemGUI-Bench focuses on memory-intensive mobile use. Compared with
+                    general mobile-agent benchmarks, it stresses long-horizon execution,
+                    cross-app information transfer, and dedicated memory metrics.
+                </p>
+            </div>
+
+            <div class="table-container">
+                <table class="table is-fullwidth is-striped is-hoverable comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Benchmark</th>
+                            <th class="has-text-centered">#Apps</th>
+                            <th class="has-text-centered">#Tasks</th>
+                            <th class="has-text-centered">Long-Horizon</th>
+                            <th class="has-text-centered">Cross-App</th>
+                            <th class="has-text-centered">Memory Metrics</th>
+                            <th class="has-text-centered">MobileWorld Runtime</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>AndroidWorld</td>
+                            <td class="has-text-centered">20</td>
+                            <td class="has-text-centered">116</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered no-mark">✗</td>
+                            <td class="has-text-centered no-mark">✗</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                        </tr>
+                        <tr>
+                            <td>MobileWorld</td>
+                            <td class="has-text-centered">20</td>
+                            <td class="has-text-centered">201</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered no-mark">✗</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                        </tr>
+                        <tr class="highlight-row">
+                            <td><strong>MemGUI-Bench (Ours)</strong></td>
+                            <td class="has-text-centered"><strong>26</strong></td>
+                            <td class="has-text-centered"><strong>128</strong></td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <figure class="image mt-4">
+                <img src="assets/benchmark-comparison.png" alt="Benchmark comparison">
+            </figure>
+        </section>
+
+        <section id="runtime" class="section">
+            <h2 class="title is-4">MobileWorld Runtime</h2>
+            <div class="content has-text-justified">
+                <p>
+                    The open-source MemGUI-Bench runner now follows the
+                    MobileWorld-androidworld architecture: Docker-managed Android
+                    environments, one container per parallel emulator, MobileWorld action
+                    parsing and actuation, local <code>traj_logs/</code>, and the shared
+                    trajectory viewer.
+                </p>
+            </div>
+
+            <div class="columns is-vcentered">
+                <div class="column">
+                    <pre><code class="language-bash">uv run mg env init
+sudo uv run mg env check
+sudo uv run mg env run --count 4 --launch-interval 20
+sudo uv run mg eval \
+  --agent-type qwen3vl \
+  --model-name qwen3-vl-8b \
+  --task ALL \
+  --log-file-root traj_logs/memgui-qwen3vl \
+  --max-concurrency 4
+uv run mg logs view --log-dir traj_logs/memgui-qwen3vl</code></pre>
+                </div>
+                <div class="column">
+                    <div class="content">
+                        <ol>
+                            <li>Pull and launch the pre-configured MemGUI Docker image.</li>
+                            <li>Run agents through the MobileWorld environment queue.</li>
+                            <li>Store trajectories on the host in MobileWorld format.</li>
+                            <li>Score each trajectory with MemGUI-Eval.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="evaluation" class="section">
+            <h2 class="title is-4">Evaluation Pipeline</h2>
+            <div class="content has-text-justified">
+                <p>
+                    Execution and logging use MobileWorld. Scoring remains MemGUI-specific:
+                    the evaluator generates step descriptions, makes a final decision,
+                    computes information retention, and classifies bad cases. A
+                    compatibility workspace is generated under <code>_memgui_eval/</code>
+                    while the public trajectory remains <code>traj.json</code>,
+                    screenshots, marked screenshots, and <code>result.txt</code>.
+                </p>
+            </div>
+
+            <figure class="image">
+                <img src="assets/fig4-eval-pipeline.png" alt="MemGUI-Eval pipeline">
+                <figcaption class="has-text-centered mt-2" style="font-size: 0.9rem; color: #666;">
+                    <strong>Figure:</strong> MemGUI-Eval analyzes MobileWorld trajectories through a generated
+                    compatibility workspace.
+                </figcaption>
+            </figure>
+        </section>
+
+        <section class="section">
+            <h2 class="title is-4">System Architecture</h2>
+            <div class="content has-text-justified">
+                <p>
+                    MemGUI-Bench reuses MobileWorld's container orchestration, backend API,
+                    environment queue, controller, action execution, and log viewer. The
+                    benchmark-specific pieces are the MemGUI task registry, MemGUI-Eval
+                    scoring bridge, and the configured MemGUI Docker image.
+                </p>
+            </div>
+
+            <figure class="image">
+                <img src="assets/fig3-architecture.png" alt="MemGUI-Bench architecture">
+            </figure>
+        </section>
+
+        <section class="section">
+            <h2 class="title is-3">Acknowledgements</h2>
+            <div class="content has-text-justified">
+                <p>
+                    MemGUI-Bench is built on the MobileWorld runtime and benefits from
+                    the broader mobile-agent benchmark ecosystem, including AndroidWorld
+                    and related open-source GUI-agent projects.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="content has-text-centered">
+            <p>
+                <strong>MemGUI-Bench Team</strong> &middot;
+                <a href="https://github.com/lgy0404/MemGUI-Bench">GitHub</a> &middot;
+                <a href="https://github.com/lgy0404/MemGUI-Bench/issues">Issues</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        hljs.highlightAll();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const burger = document.getElementById('navbar-burger');
+            const menu = document.getElementById('navbar-menu');
+            if (burger && menu) {
+                burger.addEventListener('click', () => {
+                    burger.classList.toggle('is-active');
+                    menu.classList.toggle('is-active');
+                });
+            }
         });
 
-        document.getElementById('heroLeaderboardTable').innerHTML = html;
-      } catch (error) {
-        console.error('Error loading leaderboard:', error);
-        document.getElementById('heroLeaderboardTable').innerHTML = '<div class="lb-panel-loading">Failed to load data</div>';
-      }
-    }
+        document.addEventListener('DOMContentLoaded', () => {
+            const copyCiteBtn = document.getElementById('copy-cite-btn');
+            if (copyCiteBtn) {
+                copyCiteBtn.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    const bibtex = copyCiteBtn.closest('.dropdown-item').querySelector('code').textContent;
+                    navigator.clipboard.writeText(bibtex).then(() => {
+                        const originalHTML = copyCiteBtn.innerHTML;
+                        copyCiteBtn.innerHTML = '<span class="icon"><i class="fas fa-check"></i></span><span>Copied!</span>';
+                        copyCiteBtn.classList.add('is-success');
+                        setTimeout(() => {
+                            copyCiteBtn.innerHTML = originalHTML;
+                            copyCiteBtn.classList.remove('is-success');
+                        }, 2000);
+                    });
+                });
+            }
+        });
 
-    // Load on page ready
-    document.addEventListener('DOMContentLoaded', loadHeroLeaderboard);
-  </script>
+        document.addEventListener('DOMContentLoaded', async function () {
+            const tbody = document.getElementById('leaderboard-body');
+            const filterModelType = document.getElementById('filter-model-type');
+            const filterSort = document.getElementById('filter-sort');
+            const clearFiltersBtn = document.getElementById('clear-filters');
+            let leaderboardData = [];
+            let filteredData = [];
+            let currentSort = { key: 'pass1', dir: 'desc' };
+
+            try {
+                const response = await fetch('leaderboard.json');
+                const data = await response.json();
+                leaderboardData = data.results;
+                filteredData = [...leaderboardData];
+                const counts = data.task_counts || {};
+                document.getElementById('task-count-total').textContent = counts.Total ?? 128;
+                document.getElementById('task-count-easy').textContent = counts.Easy ?? 48;
+                document.getElementById('task-count-medium').textContent = counts.Medium ?? 42;
+                document.getElementById('task-count-hard').textContent = counts.Hard ?? 38;
+                updateSortIcons();
+                renderTable();
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="7" class="has-text-centered">Failed to load leaderboard data.</td></tr>';
+                console.error('Error loading leaderboard:', error);
+            }
+
+            document.querySelectorAll('.sortable-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const sortKey = header.dataset.sort;
+                    if (currentSort.key === sortKey) {
+                        currentSort.dir = currentSort.dir === 'desc' ? 'asc' : 'desc';
+                    } else {
+                        currentSort.key = sortKey;
+                        currentSort.dir = 'desc';
+                    }
+                    filterSort.value = currentSort.key;
+                    updateSortIcons();
+                    renderTable();
+                });
+            });
+
+            filterModelType.addEventListener('change', applyFilters);
+            filterSort.addEventListener('change', () => {
+                currentSort = { key: filterSort.value, dir: 'desc' };
+                updateSortIcons();
+                renderTable();
+            });
+            clearFiltersBtn.addEventListener('click', () => {
+                filterModelType.value = 'all';
+                filterSort.value = 'pass1';
+                currentSort = { key: 'pass1', dir: 'desc' };
+                applyFilters();
+                updateSortIcons();
+            });
+
+            function applyFilters() {
+                filteredData = leaderboardData.filter(row => (
+                    filterModelType.value === 'all' || row.model_type === filterModelType.value
+                ));
+                renderTable();
+            }
+
+            function updateSortIcons() {
+                document.querySelectorAll('.sortable-header').forEach(header => {
+                    const icon = header.querySelector('.sort-icon');
+                    if (header.dataset.sort === currentSort.key) {
+                        icon.className = currentSort.dir === 'desc'
+                            ? 'fas fa-sort-down sort-icon active'
+                            : 'fas fa-sort-up sort-icon active';
+                    } else {
+                        icon.className = 'fas fa-sort sort-icon';
+                    }
+                });
+            }
+
+            function formatDate(dateStr) {
+                const date = new Date(dateStr);
+                if (Number.isNaN(date.getTime())) return dateStr;
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+            }
+
+            function formatScore(value) {
+                return value === null || value === undefined ? '-' : Number(value).toFixed(1);
+            }
+
+            function renderTable() {
+                const sorted = [...filteredData].sort((a, b) => {
+                    const aVal = a[currentSort.key] ?? -1;
+                    const bVal = b[currentSort.key] ?? -1;
+                    return currentSort.dir === 'desc' ? bVal - aVal : aVal - bVal;
+                });
+
+                tbody.innerHTML = sorted.map((row, index) => {
+                    const rank = index + 1;
+                    const rowClass = rank === 1 ? 'first-rank-row' : '';
+                    const href = row.link && row.link !== '#'
+                        ? (row.link.startsWith('http') ? row.link : `https://${row.link}`)
+                        : '';
+                    const modelName = href
+                        ? `<a href="${href}" class="model-link" target="_blank" rel="noopener noreferrer">${row.model}</a>`
+                        : row.model;
+                    const categoryClass = row.model_type === 'Agentic Workflow'
+                        ? 'tag is-info is-light'
+                        : 'tag is-link is-light';
+
+                    return `
+                        <tr class="${rowClass}">
+                            <td class="has-text-centered"><strong>${rank}</strong></td>
+                            <td><span class="category-badge ${categoryClass}">${row.model_type}</span></td>
+                            <td class="model-cell">
+                                <div class="model-name"><strong>${modelName}</strong></div>
+                                <div class="model-org">${row.organization}</div>
+                                <div class="model-date"><i class="far fa-calendar"></i> ${formatDate(row.date)}</div>
+                            </td>
+                            <td class="has-text-centered"><strong class="overall-score">${formatScore(row.pass1)}</strong></td>
+                            <td class="has-text-centered">${formatScore(row.pass3)}</td>
+                            <td class="has-text-centered">${formatScore(row.irr)}</td>
+                            <td class="has-text-centered">${formatScore(row.frr)}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        });
+    </script>
 </body>
 
 </html>
