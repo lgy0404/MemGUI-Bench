@@ -93,14 +93,12 @@ packages = ["src/mobile_world", "memgui_eval", "memgui_bench"]
 include = [
     "config_loader.py",
     "data/*.csv",
-    "config.yaml.example.opensource",
     ".env.example",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
 "config_loader.py" = "config_loader.py"
 "data" = "data"
-"config.yaml.example.opensource" = "config.yaml.example.opensource"
 ".env.example" = ".env.example"
 
 
