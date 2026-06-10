@@ -20,7 +20,7 @@ if [ "${ENABLE_VIEWER:-false}" = "true" ] || [ "${ENABLE_VIEWER:-false}" = "1" ]
         >> /var/log/viewer.log 2>&1 &
 fi
 
-# Dev mode: sync extra deps and re-install AndroidWorld
+# Dev mode: sync extra deps and re-install optional benchmark adapters
 if [ "${DEV_MODE:-false}" = "true" ] || [ "${DEV_MODE:-false}" = "1" ]; then
     uv sync --extra dev --no-cache
     if [ -d /app/service/resources/android_world ]; then
@@ -38,7 +38,7 @@ find /root/.android/avd/ -name '*.lock' -type f -delete 2>/dev/null
 socat TCP-LISTEN:5556,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:5555 &
 SOCAT_PID=$!
 
-uv run mobile-world server --port 6800 >> /var/log/server.log 2>&1 &
+uv run mg server --port 6800 >> /var/log/server.log 2>&1 &
 
 # Execute specified command
 "$@"

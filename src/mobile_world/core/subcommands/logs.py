@@ -1,4 +1,4 @@
-"""Logs subcommand for MobileWorld CLI - Work with trajectory logs."""
+"""Logs subcommand for MemGUI-Bench CLI - Work with trajectory logs."""
 
 import argparse
 import os

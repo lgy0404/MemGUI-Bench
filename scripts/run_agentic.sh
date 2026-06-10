@@ -4,12 +4,12 @@ set -euo pipefail
 sudo uv run mg env run --count 4 --launch-interval 20
 
 sudo uv run mg eval \
-    --agent_type planner_executor \
+    --agent-type planner_executor \
     --task ALL \
-    --max_round 50 \
-    --step_wait_time 3 \
-    --model_name "${PLANNER_MODEL_NAME:-qwen3-vl-8b}" \
-    --executor_agent_class uiins \
-    --executor_model_name "${EXECUTOR_MODEL_NAME:-qwen3-vl-8b}" \
-    --log_file_root traj_logs/memgui_agentic \
-    --max_concurrency 4
+    --max-round 50 \
+    --step-wait-time 3 \
+    --model-name "${PLANNER_MODEL_NAME:-qwen3-vl-8b}" \
+    --executor-agent-class uiins \
+    --executor-model-name "${EXECUTOR_MODEL_NAME:-qwen3-vl-8b}" \
+    --log-file-root traj_logs/memgui-agentic \
+    --max-concurrency 4

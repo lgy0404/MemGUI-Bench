@@ -1,7 +1,7 @@
-"""Environment (Docker container) management APIs for MobileWorld.
+"""Environment (Docker container) management APIs for MemGUI-Bench.
 
 This module provides programmatic access to Docker container management
-for running MobileWorld environments.
+for running MemGUI-Bench environments.
 """
 
 import json
@@ -362,7 +362,7 @@ def list_containers(
     name_prefix: str | None = DEFAULT_NAME_PREFIX,
     include_all: bool = False,
 ) -> list[ContainerInfo]:
-    """List MobileWorld containers.
+    """List MemGUI-Bench containers.
 
     Args:
         image_filter: Filter by image name
@@ -519,7 +519,7 @@ def remove_containers(
 
 
 def kill_server_in_container(container_name: str) -> bool:
-    """Kill the MobileWorld server in a container.
+    """Kill the MemGUI-Bench server in a container.
 
     Args:
         container_name: Name of the container
@@ -546,7 +546,7 @@ def restart_server_in_container(
     detach: bool = True,
     enable_mcp: bool = True,
 ) -> bool:
-    """Restart the MobileWorld server in a container.
+    """Restart the MemGUI-Bench server in a container.
 
     Args:
         container_name: Name of the container
@@ -802,7 +802,7 @@ def check_iptables_nat() -> PrerequisiteCheckResult:
 
 
 def check_prerequisites() -> PrerequisiteCheckResults:
-    """Run all prerequisite checks for MobileWorld environment.
+    """Run all prerequisite checks for MemGUI-Bench environment.
 
     Returns:
         PrerequisiteCheckResults with all check results

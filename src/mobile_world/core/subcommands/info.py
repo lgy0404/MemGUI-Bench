@@ -1,4 +1,4 @@
-"""Info subcommand for MobileWorld CLI."""
+"""Info subcommand for MemGUI-Bench CLI."""
 
 import argparse
 from pathlib import Path

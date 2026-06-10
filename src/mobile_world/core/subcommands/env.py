@@ -1,4 +1,4 @@
-"""Environment subcommand for MobileWorld CLI - Docker container management."""
+"""Environment subcommand for MemGUI-Bench CLI - Docker container management."""
 
 import argparse
 import json
