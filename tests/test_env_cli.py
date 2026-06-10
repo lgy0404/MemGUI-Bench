@@ -8,7 +8,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from memgui_bench.core.cli import create_parser
-from memgui_bench.core.subcommands.env import execute
+from memgui_bench.core.subcommands.env import _check_env_file, execute
 
 
 class EnvCliTest(unittest.TestCase):
@@ -93,6 +93,44 @@ class EnvCliTest(unittest.TestCase):
                 self.assertTrue((root / ".env").exists())
             finally:
                 os.chdir(old_cwd)
+
+    def test_env_check_requires_env_file(self) -> None:
+        old_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                os.chdir(tmp)
+                check = _check_env_file()
+            finally:
+                os.chdir(old_cwd)
+
+        self.assertFalse(check.ok)
+        self.assertEqual(check.name, ".env Configuration")
+        self.assertIn(".env file not found", check.detail)
+
+    def test_env_check_accepts_valid_env_file(self) -> None:
+        old_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                os.chdir(tmp)
+                Path(".env").write_text(
+                    "\n".join(
+                        [
+                            "BASE_URL=https://example.test/v1",
+                            "API_KEY=agent-key",
+                            "MEMGUI_API_KEY=eval-key",
+                            "MEMGUI_STEP_DESC_MODEL=desc-model",
+                            "MEMGUI_FINAL_DECISION_MODEL=judge-model",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                check = _check_env_file()
+            finally:
+                os.chdir(old_cwd)
+
+        self.assertTrue(check.ok)
+        self.assertEqual(check.name, ".env Configuration")
+        self.assertIn(".env file configured correctly", check.detail)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dotenv import dotenv_values
+
 from memgui_bench.core.paths import project_root
 
 
@@ -416,6 +418,49 @@ def _next_container_index(prefix: str) -> int:
     return max_index + 1
 
 
+def _check_env_file() -> Check:
+    env_path = Path.cwd() / ".env"
+    if not env_path.exists():
+        return Check(
+            ".env Configuration",
+            False,
+            ".env file not found in current directory. Run `uv run mg env init` and edit `.env`.",
+        )
+
+    try:
+        env_vars = dotenv_values(env_path)
+    except Exception as exc:
+        return Check(".env Configuration", False, f"Failed to read .env file: {exc}")
+
+    required = [
+        "BASE_URL",
+        "API_KEY",
+        "MEMGUI_API_KEY",
+        "MEMGUI_STEP_DESC_MODEL",
+        "MEMGUI_FINAL_DECISION_MODEL",
+    ]
+    placeholder_values = {"YOUR_API_KEY_HERE", "your-api-key", "your_api_key"}
+
+    missing = []
+    placeholders = []
+    for key in required:
+        value = (env_vars.get(key) or "").strip()
+        if not value:
+            missing.append(key)
+        elif value in placeholder_values:
+            placeholders.append(key)
+
+    issues = []
+    if missing:
+        issues.append(f"missing: {', '.join(missing)}")
+    if placeholders:
+        issues.append(f"placeholder: {', '.join(placeholders)}")
+    if issues:
+        return Check(".env Configuration", False, "; ".join(issues))
+
+    return Check(".env Configuration", True, ".env file configured correctly")
+
+
 def _checks(args: argparse.Namespace) -> list[Check]:
     checks: list[Check] = []
     docker_path = shutil.which("docker")
@@ -434,6 +479,7 @@ def _checks(args: argparse.Namespace) -> list[Check]:
 
     env_example_path = project_root() / ".env.example"
     checks.append(Check("env example", env_example_path.exists(), str(env_example_path)))
+    checks.append(_check_env_file())
 
     if docker_ok:
         image_exists = _docker_image_exists(args.image)
