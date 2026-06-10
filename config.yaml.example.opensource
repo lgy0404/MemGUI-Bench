@@ -6,20 +6,22 @@
 #   - Part 5-7: Fixed configurations, generally no modification needed
 #
 # Quick Start:
-#   1. Copy this file as config.yaml
-#   2. Set the mode in Part 1
-#   3. Set experiment parameters in Part 2 (DATASET_PATH, SESSION_ID_SUFFIX)
-#   4. Configure API settings in Part 3 (BASE_URL, NUM_OF_EMULATOR, etc.)
-#   5. Run: python run.py
+#   Host:
+#   1. uv run mg env init
+#   2. Edit config.yaml API/model fields
+#   3. sudo uv run mg env check
+#   4. sudo uv run mg env run --count 4
+#      This starts 4 ready MemGUI backend containers and mounts local ./results.
+#   5. sudo uv run mg eval --agent-type Qwen3VL --tasks ALL --session-id my-experiment --num-emulators 4
+#      This discovers the backends and feeds tasks through a dynamic queue.
 # ==============================================================================
 
 # ==============================================================================
 # Part 1: Mode Selection (Check before each experiment)
 # ==============================================================================
-# Environment mode: "docker" (Docker environment) | "local" (local environment)
-#   - docker: Use Docker container paths (/root/...)
-#   - local: Use local development environment paths
-ENVIRONMENT_MODE: "local"
+# Environment mode. The configured Docker image already contains Android SDK,
+# ADB, emulator binaries, and the MemGUI-AVD snapshot.
+ENVIRONMENT_MODE: "docker"
 
 # ==============================================================================
 # Part 2: Experiment Settings (Must configure for each experiment)
@@ -42,7 +44,7 @@ SESSION_ID_SUFFIX: "v25122902-debug"
 BASE_URL: "https://openrouter.fans/v1"
 
 # Parallelism settings
-NUM_OF_EMULATOR: 4       # Number of emulators to use
+NUM_OF_EMULATOR: 4       # Number of MemGUI backend containers to use
 MAX_EVAL_SUBPROCESS: 8   # Max parallel evaluation processes
 
 # ==============================================================================
@@ -71,20 +73,11 @@ _MODE_PRESETS:
   environment:
     docker:
       _ADB_PATH: "adb"
-      _CONDA_PATH: "/root/miniconda3"
       _EMULATOR_PATH: "/root/.android/emulator/emulator"
       _ANDROID_SDK_PATH: "/root/.android"
       _DEFAULT_KEYBOARD_PACKAGE: "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME"
       _SYS_AVD_HOME: "/root/.android/avd"
       _SOURCE_AVD_HOME: "/root/.android/avd"
-    local:
-      _ADB_PATH: "adb"
-      _CONDA_PATH: "/home/user/miniconda3"
-      _EMULATOR_PATH: "/path/to/android-sdk/emulator/emulator"
-      _ANDROID_SDK_PATH: "/path/to/android-sdk"
-      _DEFAULT_KEYBOARD_PACKAGE: "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME"
-      _SYS_AVD_HOME: "/path/to/avd"
-      _SOURCE_AVD_HOME: "/path/to/avd"
 
   run:
     _MAX_ATTEMPTS: 3
@@ -96,17 +89,17 @@ _MODE_PRESETS:
 # ==============================================================================
 MAX_ROUNDS: 0
 
-# AVD configuration
+# Preloaded AVD configuration
 SOURCE_AVD_NAME: "MemGUI-AVD-250704"
 
 # Agent list
 AGENTS:
   - NAME: "Qwen3VL"
     REPO_PATH: "./framework/models/AndroidWorld"
-    ENV_NAME: "android_world"
+    ENV_NAME: ""
   - NAME: "GUIOwl15"
     REPO_PATH: "./framework/models/AndroidWorld"
-    ENV_NAME: "android_world"
+    ENV_NAME: ""
 
 # ==============================================================================
 # Part 7: MemGUI Evaluator Configuration (Fixed evaluator settings)

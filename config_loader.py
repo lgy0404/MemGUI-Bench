@@ -24,7 +24,7 @@ def apply_mode_presets(config, verbose=False):
     Mode precedence: Custom overrides > Mode presets > Default values
 
     Supported modes:
-    - ENVIRONMENT_MODE: "docker" | "local" (affects system paths)
+    - ENVIRONMENT_MODE: "docker" (uses the preconfigured benchmark container)
 
     Special handling:
     - DATASET_PATH: Must always be specified by user (no preset)
@@ -40,7 +40,7 @@ def apply_mode_presets(config, verbose=False):
     presets = config.get("_MODE_PRESETS", {})
 
     # Get current mode selections
-    environment_mode = config.get("ENVIRONMENT_MODE", "local")
+    environment_mode = config.get("ENVIRONMENT_MODE", "docker")
 
     if verbose:
         print("📋 Loading configuration with modes:")
@@ -50,7 +50,6 @@ def apply_mode_presets(config, verbose=False):
     preset_to_config = {
         # Environment presets
         "_ADB_PATH": "ADB_PATH",
-        "_CONDA_PATH": "CONDA_PATH",
         "_EMULATOR_PATH": "EMULATOR_PATH",
         "_ANDROID_SDK_PATH": "ANDROID_SDK_PATH",
         "_DEFAULT_KEYBOARD_PACKAGE": "DEFAULT_KEYBOARD_PACKAGE",

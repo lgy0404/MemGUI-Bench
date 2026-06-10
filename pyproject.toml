@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "memgui-bench"
+version = "0.2.0"
+description = "MemGUI-Bench benchmark runner and trajectory tooling"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "absl-py==2.1.0",
+    "dm_env==1.6",
+    "fuzzywuzzy==0.18.0",
+    "google-generativeai==0.5.1",
+    "grpcio-tools==1.62.2",
+    "immutabledict==2.0.0",
+    "IPython",
+    "jsonschema==4.17.3",
+    "matplotlib>=3.6.1",
+    "portpicker",
+    "protobuf==4.25.3",
+    "pydub",
+    "python-Levenshtein",
+    "requests==2.31.0",
+    "tenacity",
+    "termcolor",
+    "pyyaml",
+    "pandas",
+    "python-dotenv",
+    "openai",
+    "faiss-cpu",
+    "openpyxl",
+    "filelock",
+    "pillow",
+    "numpy",
+    "opencv-python",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.1.6",
+]
+
+[project.scripts]
+memgui = "memgui_bench.core.cli:main"
+mg = "memgui_bench.core.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["memgui_bench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100

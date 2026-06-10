@@ -30,9 +30,26 @@ parser.add_argument(
 parser.add_argument("--session_id", type=str, default=config["SESSION_ID"])
 parser.add_argument("--task_id", type=str, default=None)
 parser.add_argument("--no_concurrent", action="store_true")
-parser.add_argument("--setup_avd", action="store_true", default=True)
+parser.add_argument(
+    "--setup_avd",
+    "--setup-avd",
+    dest="setup_avd",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+)
 parser.add_argument("--setup_emulator", action="store_true")
 parser.add_argument("--skip_key_components", type=bool, default=True)
+parser.add_argument("--base_url", "--base-url", dest="base_url", type=str, default=None)
+parser.add_argument("--api_key", "--api-key", dest="api_key", type=str, default=None)
+parser.add_argument(
+    "--memgui_api_key", "--memgui-api-key", dest="memgui_api_key", type=str, default=None
+)
+parser.add_argument("--model_name", "--model-name", dest="model_name", type=str, default=None)
+parser.add_argument(
+    "--num_emulators", "--num-emulators", dest="num_emulators", type=int, default=None
+)
+parser.add_argument("--results_dir", "--results-dir", dest="results_dir", type=str, default=None)
+parser.add_argument("--dataset", dest="dataset", type=str, default=None)
 parser.add_argument(
     "--reasoning_mode", type=str, default="direct", choices=["result_only", "direct"]
 )
@@ -51,6 +68,28 @@ parser.add_argument(
     help="Maximum number of attempts for each task.",
 )
 args = parser.parse_args()
+
+if args.base_url:
+    config["BASE_URL"] = args.base_url
+    for url_key in [
+        "QWEN_BASE_URL",
+        "MEMGUI_STEP_DESC_BASE_URL",
+        "MEMGUI_FINAL_DECISION_BASE_URL",
+    ]:
+        config[url_key] = args.base_url
+if args.api_key:
+    config["OPENAI_API_KEY"] = args.api_key
+    config["QWEN_API_KEY"] = args.api_key
+if args.memgui_api_key:
+    config["MEMGUI_API_KEY"] = args.memgui_api_key
+if args.model_name:
+    config["QWEN_MODEL"] = args.model_name
+if args.num_emulators is not None:
+    config["NUM_OF_EMULATOR"] = args.num_emulators
+if args.results_dir:
+    config["RESULTS_DIR"] = args.results_dir
+if args.dataset:
+    config["DATASET_PATH"] = args.dataset
 
 # 初始化输出目录和结果DataFrame
 output_dir = utils.setup_output_directory(
@@ -128,9 +167,9 @@ results_df = utils.setup_results_csv(
 )
 config["output_dir"] = output_dir
 # Only override API keys if environment variables are set, otherwise keep config.yaml values
-if os.getenv("OPENAI_API_KEY"):
+if os.getenv("OPENAI_API_KEY") and not args.api_key:
     config["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
-if os.getenv("QWEN_API_KEY"):
+if os.getenv("QWEN_API_KEY") and not args.api_key:
     config["QWEN_API_KEY"] = os.getenv("QWEN_API_KEY")
 
 # 确定任务范围

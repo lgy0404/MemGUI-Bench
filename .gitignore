@@ -16,6 +16,8 @@ screenlog*
 screenshot_*
 temp_*
 *test*
+!tests/
+!tests/*.py
 swift
 flagged
 framework/avd/

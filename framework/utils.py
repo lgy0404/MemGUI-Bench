@@ -6,6 +6,8 @@ import shutil
 import json
 import time
 import re
+import shlex
+import sys
 from filelock import FileLock
 from functools import wraps
 from datetime import datetime
@@ -76,6 +78,14 @@ def get_all_devices():
 def setup_devices():
     devices = get_all_devices()
     print(f"{len(devices)} device(s) found: {devices}")
+    preferred_device = os.environ.get("MEMGUI_DEVICE_SERIAL")
+    if preferred_device:
+        if preferred_device not in devices:
+            print(f"Preferred device {preferred_device} not found.")
+            exit(1)
+        return [
+            {"serial": preferred_device, "console_port": None, "grpc_port": None}
+        ]
     if len(devices) == 0:
         exit(1)
     elif len(devices) > 1:
@@ -1377,15 +1387,11 @@ def execute_evaluation(
         )
         return False
 
-    # 读取config来获取conda路径 (使用config_loader以支持模式预设)
-    from config_loader import get_config
+    evaluator_path = os.path.join(os.getcwd(), "memgui_eval/evaluator.py")
+    python_prefix = shlex.quote(sys.executable)
 
-    config = get_config(verbose=False)
-    conda_path = config["CONDA_PATH"]
-
-    # 构建包含conda路径的命令
     command = (
-        f'export PATH="{conda_path}/bin:$PATH" && conda run -n MemGUI python {os.path.join(os.getcwd(), "memgui_eval/evaluator.py")} '
+        f'{python_prefix} {evaluator_path} '
         f"--task_identifier {task_identifier} "
         f"--result_dir {output_dir} "
         f"--mode {mode} "

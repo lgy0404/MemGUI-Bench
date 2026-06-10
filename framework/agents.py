@@ -1,5 +1,7 @@
 import subprocess
 import os
+import shlex
+import sys
 from . import utils
 import shutil
 from collections import namedtuple
@@ -101,15 +103,12 @@ class BaseAgent:
         self.setup_keyboard(device["serial"], task_language)
 
         is_linux = os.name == "posix"
-        if is_linux:
-            env = f"""export PATH="{self.config["CONDA_PATH"]}/bin:$PATH" && source activate && conda deactivate && conda activate {self.agent_config["ENV_NAME"]}"""
-        else:
-            env = f"""conda activate {self.agent_config["ENV_NAME"]}"""
+        python_cmd = shlex.quote(sys.executable)
 
         script, args = self.construct_command(
             task, task.task_description, output_dir, device
         )
-        command = f"{env} && python {script} {args}"
+        command = f"{python_cmd} {script} {args}"
 
         print(command)
         if is_linux:

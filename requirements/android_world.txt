@@ -2,7 +2,7 @@ absl-py==2.1.0
 dm_env==1.6
 fuzzywuzzy==0.18.0
 google-generativeai==0.5.1
-grpcio-tools
+grpcio-tools==1.62.2
 immutabledict==2.0.0
 IPython
 jsonschema==4.17.3
@@ -18,3 +18,4 @@ tenacity
 termcolor
 openai
 portpicker
+protobuf==4.25.3

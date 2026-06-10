@@ -34,7 +34,7 @@
 
 ## 📋 Table of Contents
 
-- [🐳 Environment Setup](#-environment-setup)
+- [💾 Environment Setup](#-environment-setup)
 - [⚙️ Configuration](#️-configuration)
 - [🚀 Usage](#-usage)
 - [📁 Benchmark Session](#-benchmark-session)
@@ -54,189 +54,228 @@
 - **2026-02-03**: Initial release of MemGUI-Bench benchmark. Check out our [website](https://lgy0404.github.io/MemGUI-Bench/).
 
 
-## 🐳 Environment Setup
+## 💾 Environment Setup
 
 <div align="center">
   <img src="assets/unified-architecture.drawio.png" alt="Task Distribution" width="100%" />
 </div>
 
+### System Requirements
 
-### Option 1: Docker (Recommended)
+- **Linux host** with Docker and KVM acceleration
+- Permission to run privileged Docker containers
+- Python 3.11 and `uv` on the host
 
-Use our pre-configured Docker image with all dependencies installed:
+The Docker image already includes the Android SDK, ADB, emulator binaries,
+MemGUI-AVD snapshot, Python dependencies, and benchmark code. Users do not need
+to install Android Studio, download AVD snapshots, or configure emulator paths.
 
-```bash
-# Pull the image (public, no login required)
-sudo docker pull \
-  crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/memgui/memgui-bench:26020301
-
-# Run container
-sudo docker run -it --privileged \
-  --name memgui-bench \
-  -w /root/MemGUI-Bench \
-  crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/memgui/memgui-bench:26020301 \
-  bash
-
-# Inside container, you're already in /root/MemGUI-Bench
-python run.py
-```
-
-> **Note**: The `--privileged` flag is required for Android emulator support.
-
-The Docker image includes:
-
-- Pre-configured Android emulator with MemGUI-AVD
-- All required conda environments
-- ADB and Android SDK tools
-
-### Option 2: Local Setup
-
-For developers who prefer local installation:
-
-<details>
-<summary><b>Click to expand local setup instructions</b></summary>
-
-#### Prerequisites
-
-1. **Conda**: Install from [conda.io](https://conda.io/projects/conda/en/latest/user-guide/install/index.html)
-2. **Android Debug Bridge (ADB)**: Install from [Android Developer](https://developer.android.com/tools/adb) and add to PATH
-3. **Android Studio & AVD**:
-   - Download and install [Android Studio](https://developer.android.com/studio)
-   - Download the pre-configured MemGUI-AVD emulator snapshot:
-     - **Download**: [Baidu Netdisk](https://pan.baidu.com/s/11MhISCYTV5JJPjf9FALy2g?pwd=tfnb) (Code: `tfnb`)
-     - **File**: `MemGUI-AVD-250704-base.zip`
-   - Extract to your AVD directory:
-     - **Windows**: `C:\Users\[Username]\.android\avd\`
-     - **macOS**: `~/Library/Android/avd/`
-     - **Linux**: `~/.android/avd/`
-   - Launch Android Studio → Device Manager → Start MemGUI-AVD
-
-#### Repository Setup
+### Quick Install
 
 ```bash
-# Clone repository with submodules
-git clone --recursive https://github.com/lgy0404/MemGUI-Bench.git
-cd MemGUI-Bench
+# Create local config.yaml and edit the API/model fields
+uv run mg env init
 
-# If already cloned without --recursive, init submodules manually:
-# git submodule update --init --recursive
+# Check Docker/KVM and pull the pre-configured image if needed
+sudo uv run mg env check
 
-# Run setup script
-./setup.sh
+# Launch ready MemGUI backend containers with local config/results mounted
+sudo uv run mg env run --count 4
 
-# Configure
-cp config.yaml.example.opensource config.yaml
-# Edit config.yaml with your paths
+# Run the benchmark from the host; --num-emulators controls backend count
+sudo uv run mg eval \
+  --agent-type Qwen3VL \
+  --tasks ALL \
+  --session-id my-experiment \
+  --num-emulators 4
 ```
 
-</details>
+`mg env run` starts detached privileged backend containers from the configured
+image, maps backend ports from `http://localhost:6800`, maps the trajectory
+viewer port from `http://localhost:8760`, and waits for `/health` before the
+container is treated as ready. It also mounts the host `./config.yaml` and
+`./results` into the container, so trajectory logs are stored locally instead of
+inside the container filesystem.
+Use `sudo uv run mg env run --results-dir ./my-results` to choose a different
+local trajectory directory. `mg eval --num-emulators N` discovers N MemGUI
+backends on the host and feeds tasks to them through a dynamic queue, with one
+Android emulator inside each backend container.
 
----
+### Environment Configuration
+
+On the host, create `config.yaml` from the example:
+
+```bash
+uv run mg env init
+```
+
+Edit only the experiment and API fields:
+
+- `BASE_URL`: OpenAI-compatible model endpoint
+- `QWEN_API_KEY`: API key for the evaluated agent model
+- `MEMGUI_API_KEY`: API key for MemGUI-Eval
+- `QWEN_MODEL`: Agent model name
+- `NUM_OF_EMULATOR`: Number of parallel MemGUI backend containers
 
 ## ⚙️ Configuration
 
-Edit `config.yaml` to match your environment:
+Minimal `config.yaml` fields to edit:
 
 ```yaml
-# Environment Mode
-ENVIRONMENT_MODE: "local"  # "local" or "docker"
+ENVIRONMENT_MODE: "docker"
 
-# Experiment Settings
+BASE_URL: "https://api.openai.com/v1"
+QWEN_API_KEY: "your-api-key"
+QWEN_MODEL: "qwen3-vl-8b"
+MEMGUI_API_KEY: "your-api-key"
+
 AGENT_NAME: "Qwen3VL"
 DATASET_PATH: "./data/memgui-tasks-all.csv"
 SESSION_ID_SUFFIX: "my-experiment"
-
-# API & Parallelism
-BASE_URL: "https://api.openai.com/v1"
 NUM_OF_EMULATOR: 4
 MAX_EVAL_SUBPROCESS: 8
-
-# Model API Keys
-QWEN_API_KEY: "your-api-key"
-QWEN_MODEL: "qwen3-vl-8b"
 ```
-
-<details>
-<summary><b>Full configuration example (for local mode)</b></summary>
-
-```yaml
-# Part 1: Environment Mode
-ENVIRONMENT_MODE: "local"  # "local" or "docker"
-
-# Part 2: Experiment Settings
-AGENT_NAME: "Qwen3VL"
-DATASET_PATH: "./data/memgui-tasks-all.csv"
-SESSION_ID_SUFFIX: "my-experiment"
-
-# Part 3: API & Parallelism
-BASE_URL: "https://api.openai.com/v1"
-NUM_OF_EMULATOR: 4
-MAX_EVAL_SUBPROCESS: 8
-
-# Part 4: Model API Keys
-QWEN_API_KEY: "your-api-key"
-QWEN_MODEL: "qwen3-vl-8b"
-
-# Part 5: Paths (for local mode)
-_MODE_PRESETS:
-  environment:
-    local:
-      _CONDA_PATH: "/path/to/miniconda3"
-      _EMULATOR_PATH: "/path/to/android-sdk/emulator/emulator"
-      _ANDROID_SDK_PATH: "/path/to/android-sdk"
-      _SYS_AVD_HOME: "/path/to/.android/avd"
-      _SOURCE_AVD_HOME: "/path/to/.android/avd"
-```
-
-</details>
 
 ---
 
 ## 🚀 Usage
 
-### Running the Benchmark
+MemGUI-Bench provides a MobileWorld-style CLI for running experiments, checking
+configuration, and browsing trajectories.
+
+### Quick Start
 
 ```bash
-conda activate MemGUI
-python run.py
+# 1. Create/edit local config.yaml
+uv run mg env init
+
+# 2. Check Docker/KVM, pull the image, and launch containers
+sudo uv run mg env check
+sudo uv run mg env run --count 4
+
+# 3. Run the full benchmark from the host
+sudo uv run mg eval \
+  --agent-type Qwen3VL \
+  --tasks ALL \
+  --session-id my-experiment \
+  --max-attempts 3 \
+  --num-emulators 4
 ```
 
-### Command-line Arguments
+`mg eval --num-emulators 4` discovers four MemGUI backend containers and feeds
+the selected tasks through a dynamic environment queue. Each backend runs
+exactly one Android emulator and writes trajectories into the mounted local
+`./results` directory.
+
+For a single-container debug shell:
+
+```bash
+sudo uv run mg env exec
+uv run mg eval \
+  --agent-type Qwen3VL \
+  --tasks 001-FindProductAndFilter \
+  --session-id my-experiment \
+  --max-attempts 3 \
+  --num-emulators 1 \
+  --no-container
+```
+
+View trajectories and results from the host:
+
+```bash
+uv run mg logs view --log-dir results/session-my-experiment
+```
+
+The viewer opens a local web UI at `http://localhost:8760`, with task-level
+status, per-attempt screenshots, action traces, evaluator decisions, IRR, and
+BadCase analysis. Because `mg env run` mounts host `./results`, the same
+`results/session-*` directories are available on the host after the container
+exits or is removed.
+
+### Available Commands
+
+| Command | Description |
+| ------- | ----------- |
+| `sudo uv run mg env check` | Check Docker/KVM and pull the configured image if needed |
+| `sudo uv run mg env run` | Launch container(s) with local config/results mounted |
+| `sudo uv run mg env list` | List MemGUI-Bench containers |
+| `sudo uv run mg env exec` | Open a shell or run a command in a container for debugging |
+| `sudo uv run mg env rm` | Remove MemGUI-Bench containers |
+| `uv run mg env init` | Create `config.yaml` from `config.yaml.example.opensource` |
+| `uv run mg server` | Run the backend service inside a container; normally started by `mg env run` |
+| `sudo uv run mg eval` / `sudo uv run mg run` | Run execution/evaluation across MemGUI containers |
+| `uv run mg info task` | List or filter benchmark tasks |
+| `uv run mg info agent` | List configured agents |
+| `uv run mg info app` | Show app-level task counts |
+| `uv run mg logs view` | Launch the interactive trajectory viewer |
+| `uv run mg logs results` | Print a compact session summary table |
+| `uv run mg logs export` | Export a static HTML trajectory site |
+
+### `mg eval` Arguments
 
 | Argument            | Default  | Description                                |
 | ------------------- | -------- | ------------------------------------------ |
-| `--agents`        | config   | Agent name(s), comma-separated             |
+| `--agent-type` / `--agents` | config | Agent name(s), comma-separated             |
+| `--tasks`         | `ALL`    | Task id(s), comma-separated, or `ALL`      |
 | `--mode`          | `full` | `full` (exec+eval) / `exec` / `eval` |
-| `--session_id`    | config   | Session identifier for results             |
-| `--task_id`       | None     | Run specific task only                     |
-| `--max_attempts`  | 3        | Max attempts per task                      |
+| `--session-id`    | config   | Session identifier for results             |
+| `--max-attempts`  | 3        | Max attempts per task                      |
+| `--num-emulators` | config   | Override `NUM_OF_EMULATOR`                 |
+| `--max-concurrency` | config | Alias for `--num-emulators`                |
+| `--aw-host` / `--backend` | auto | Comma-separated backend URL(s); auto-discovered when omitted |
+| `--auto-retry` | 0 | Retry backend task failures at the host scheduling layer |
+| `--no-container` | False | Run in the current environment instead of backend containers |
+| `--model-name`    | config   | Override the agent model name              |
+| `--llm-base-url`  | config   | Override OpenAI-compatible base URL        |
+| `--api-key`       | config   | Override the agent API key                 |
+| `--memgui-api-key` | `--api-key` | Override the evaluator API key         |
 | `--overwrite`     | False    | Overwrite existing results                 |
-| `--no_concurrent` | False    | Disable parallel evaluation                |
+| `--no-concurrent` | False    | Disable parallel execution                 |
 
 ### Examples
 
 ```bash
 # Full benchmark (execution + evaluation)
-python run.py
+uv run mg eval --agent-type Qwen3VL --tasks ALL --session-id qwen3vl-full
 
 # Run specific task
-python run.py --task_id 001-FindProductAndFilter
+uv run mg eval --agent-type Qwen3VL --tasks 001-FindProductAndFilter --session-id debug
 
 # Evaluation only (on existing trajectories)
-python run.py --mode eval --session_id my-experiment
+uv run mg eval --mode eval --session-id my-experiment
 
 # Multiple attempts
-python run.py --max_attempts 5
+uv run mg eval --max-attempts 5 --session-id pass5
 
 # Disable parallel execution
-python run.py --no_concurrent
+uv run mg eval --no-concurrent --session-id single-backend
+
+# Print the underlying runner command without executing it
+uv run mg eval --agent-type Qwen3VL --tasks 001-FindProductAndFilter --dry-run
+```
+
+### Viewing and Exporting Results
+
+```bash
+# Interactive web viewer
+uv run mg logs view --log-dir results/session-my-experiment --port 8760
+
+# Terminal summary
+uv run mg logs results results/session-my-experiment
+
+# Static HTML export for sharing or archiving
+uv run mg logs export \
+  --log-dir results/session-my-experiment \
+  --output exported-sites/my-experiment
 ```
 
 ---
 
 ## 📁 Benchmark Session
 
-Each `session_id` creates an isolated benchmark folder in `./results/`.
+Each `session_id` creates an isolated benchmark folder in local `./results/`.
+When running in Docker through `mg env run`, this directory is mounted into the
+container and remains on the host.
 
 - The dataset is copied to `results.csv` to track progress
 - Re-running the same session resumes from incomplete tasks
@@ -313,7 +352,7 @@ Add your agent to `config.yaml`:
 AGENTS:
   - NAME: "MyAgent"
     REPO_PATH: "./framework/models/MyAgent"
-    ENV_NAME: "my_agent_env"
+    ENV_NAME: ""
 ```
 
 ### Step 2: Implement Agent Class
