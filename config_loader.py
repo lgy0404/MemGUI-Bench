@@ -6,8 +6,7 @@ Provides unified configuration loading with mode-based presets support.
 This module handles:
 1. Loading config.yaml
 2. Applying user-facing .env overrides
-3. Applying mode-based presets (ENVIRONMENT_MODE)
-4. Allowing custom overrides to take precedence over presets
+3. Applying fixed environment presets (ENVIRONMENT_MODE)
 
 Usage:
     from config_loader import load_config
@@ -23,14 +22,10 @@ def apply_mode_presets(config, verbose=False):
     """
     Apply mode-based presets to configuration.
 
-    Mode precedence: Custom overrides > Mode presets > Default values
+    Mode precedence: .env overrides > mode presets > default values
 
     Supported modes:
     - ENVIRONMENT_MODE: "docker" (uses the preconfigured benchmark container)
-
-    Special handling:
-    - DATASET_PATH: Must always be specified by user (no preset)
-    - SESSION_ID: Generated from SESSION_ID_SUFFIX with auto-prefix "memgui-"
 
     Args:
         config: Raw configuration dictionary loaded from YAML
@@ -50,16 +45,12 @@ def apply_mode_presets(config, verbose=False):
 
     # Define mapping from preset keys to config keys
     preset_to_config = {
-        # Environment presets
         "_ADB_PATH": "ADB_PATH",
         "_EMULATOR_PATH": "EMULATOR_PATH",
         "_ANDROID_SDK_PATH": "ANDROID_SDK_PATH",
         "_DEFAULT_KEYBOARD_PACKAGE": "DEFAULT_KEYBOARD_PACKAGE",
         "_SYS_AVD_HOME": "SYS_AVD_HOME",
         "_SOURCE_AVD_HOME": "SOURCE_AVD_HOME",
-        # Run presets
-        "_MAX_ATTEMPTS": "MAX_ATTEMPTS",
-        "_RESULTS_DIR": "RESULTS_DIR",
     }
 
     # Get BASE_URL from config (user-defined, no default to avoid leakage)
@@ -67,7 +58,6 @@ def apply_mode_presets(config, verbose=False):
 
     # Apply BASE_URL to all URL fields if they are null (only when base_url is set)
     url_fields = [
-        "QWEN_BASE_URL",
         "MEMGUI_STEP_DESC_BASE_URL",
         "MEMGUI_FINAL_DECISION_BASE_URL",
     ]
@@ -83,35 +73,12 @@ def apply_mode_presets(config, verbose=False):
             if config.get(config_key) is None:
                 config[config_key] = preset_value
 
-    # Apply run presets (fixed benchmark settings)
-    run_presets = presets.get("run", {})
-    for preset_key, config_key in preset_to_config.items():
-        if preset_key in run_presets and config_key:
-            preset_value = run_presets[preset_key]
-            if config.get(config_key) is None:
-                config[config_key] = preset_value
-
-    # Special handling: Generate SESSION_ID from suffix + prefix
-    session_suffix = config.get("SESSION_ID_SUFFIX", "")
-    session_prefix = run_presets.get("_SESSION_PREFIX", "memgui-")
-    if session_suffix:
-        config["SESSION_ID"] = f"{session_prefix}{session_suffix}"
-    else:
-        # Fallback if no suffix provided
-        config["SESSION_ID"] = f"{session_prefix}default"
-
     if verbose:
-        # Print effective configuration for key settings
         print("\n📊 Effective configuration:")
         print(f"   • BASE_URL: {config.get('BASE_URL')}")
-        print(f"   • NUM_OF_EMULATOR: {config.get('NUM_OF_EMULATOR')}")
-        print(f"   • MAX_EVAL_SUBPROCESS: {config.get('MAX_EVAL_SUBPROCESS')}")
-        print(f"   • MAX_ATTEMPTS: {config.get('MAX_ATTEMPTS')}")
-        print(f"   • RESULTS_DIR: {config.get('RESULTS_DIR')}")
-        print(
-            f"   • SESSION_ID: {config.get('SESSION_ID')} (from suffix: {session_suffix})"
-        )
         print(f"   • DATASET_PATH: {config.get('DATASET_PATH')}")
+        print(f"   • MEMGUI_STEP_DESC_MODEL: {config.get('MEMGUI_STEP_DESC_MODEL')}")
+        print(f"   • MEMGUI_FINAL_DECISION_MODEL: {config.get('MEMGUI_FINAL_DECISION_MODEL')}")
         print()
 
     return config
@@ -145,18 +112,19 @@ def _apply_env_overrides(config, config_path=None):
         "BASE_URL",
         "MEMGUI_API_KEY",
         "MEMGUI_STEP_DESC_MODEL",
+        "MEMGUI_STEP_DESC_PROVIDER",
         "MEMGUI_STEP_DESC_BASE_URL",
         "MEMGUI_FINAL_DECISION_MODEL",
+        "MEMGUI_FINAL_DECISION_PROVIDER",
         "MEMGUI_FINAL_DECISION_BASE_URL",
+        "MEMGUI_MAX_RETRIES",
     ]
     for key in direct_keys:
         if key in values:
-            config[key] = _normalize_env_value(values.get(key))
-
-    api_key = _normalize_env_value(values.get("API_KEY"))
-    if api_key is not None:
-        config["OPENAI_API_KEY"] = api_key
-        config["QWEN_API_KEY"] = api_key
+            value = _normalize_env_value(values.get(key))
+            if key == "MEMGUI_MAX_RETRIES" and value is not None:
+                value = int(value)
+            config[key] = value
 
     return config
 

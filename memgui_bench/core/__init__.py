@@ -1,2 +1,2 @@
-"""Core CLI modules for MemGUI-Bench."""
+"""Compatibility wrappers for the MobileWorld-based MemGUI-Bench CLI."""
 

@@ -1,57 +1,21 @@
 # ==============================================================================
-# MemGUI-Bench Configuration Example
+# MemGUI-Bench Fixed Configuration
 # ==============================================================================
-# This file stores fixed benchmark defaults. In the MobileWorld-style workflow,
-# users should edit `.env` for model/API settings and use CLI flags for
-# experiment-specific overrides.
-#
-# Quick Start:
-#   Host:
+# MobileWorld-style usage:
 #   1. uv run mg env init
 #   2. Edit .env API/model fields
 #   3. sudo uv run mg env check
 #   4. sudo uv run mg env run --count 4
-#      This starts 4 ready MemGUI backend containers and mounts local .env/results.
-#   5. sudo uv run mg eval --agent-type Qwen3VL --tasks ALL --session-id my-experiment --num-emulators 4
-#      This discovers the backends and feeds tasks through a dynamic queue.
+#   5. sudo uv run mg eval --agent-type qwen3vl --task ALL \
+#        --log-file-root traj_logs/my-experiment --max-concurrency 4
+#
+# Ordinary users should edit `.env` and CLI flags, not this file.
 # ==============================================================================
 
-# ==============================================================================
-# Part 1: Fixed Environment Defaults
-# ==============================================================================
-# Environment mode. The configured Docker image already contains Android SDK,
-# ADB, emulator binaries, and the MemGUI-AVD snapshot.
 ENVIRONMENT_MODE: "docker"
-
-# ==============================================================================
-# Part 2: Fixed Experiment Defaults
-# ==============================================================================
-# Override these with CLI flags when needed; ordinary users do not need to edit
-# this file.
-AGENT_NAME: "Qwen3VL"
 DATASET_PATH: "./data/memgui-tasks-all.csv"
-SESSION_ID_SUFFIX: "v25122902-debug"
+MEMGUI_SNAPSHOT_TAG: "init_state"
 
-# ==============================================================================
-# Part 3: Fixed API and Parallelism Defaults
-# ==============================================================================
-BASE_URL: null
-
-# Parallelism settings
-NUM_OF_EMULATOR: 4       # Number of MemGUI backend containers to use
-MAX_EVAL_SUBPROCESS: 8   # Max parallel evaluation processes
-
-# ==============================================================================
-# Part 4: Fixed Agent Model Defaults
-# ==============================================================================
-OPENAI_API_KEY: null
-QWEN_API_KEY: null
-QWEN_MODEL: "qwen/qwen3-vl-8b-instruct"
-GUIOWL_LAST_IMAGE: 5
-
-# ==============================================================================
-# Part 5: Mode Presets
-# ==============================================================================
 _MODE_PRESETS:
   environment:
     docker:
@@ -62,36 +26,12 @@ _MODE_PRESETS:
       _SYS_AVD_HOME: "/root/.android/avd"
       _SOURCE_AVD_HOME: "/root/.android/avd"
 
-  run:
-    _MAX_ATTEMPTS: 3
-    _RESULTS_DIR: "./results"
-    _SESSION_PREFIX: "memgui-"
-
-# ==============================================================================
-# Part 6: Fixed Agent Configuration
-# ==============================================================================
-MAX_ROUNDS: 0
-
-# Preloaded AVD configuration
-SOURCE_AVD_NAME: "MemGUI-AVD-250704"
-
-# Agent list
-AGENTS:
-  - NAME: "Qwen3VL"
-    REPO_PATH: "./framework/models/AndroidWorld"
-    ENV_NAME: ""
-  - NAME: "GUIOwl15"
-    REPO_PATH: "./framework/models/AndroidWorld"
-    ENV_NAME: ""
-
-# ==============================================================================
-# Part 7: MemGUI Evaluator Defaults
-# ==============================================================================
+# MemGUI-Eval defaults. `.env` overrides these values.
+BASE_URL: null
 MEMGUI_API_KEY: null
 MEMGUI_STEP_DESC_MODEL: "google/gemini-2.5-flash"
 MEMGUI_STEP_DESC_PROVIDER: "openai_compatible"
 MEMGUI_STEP_DESC_BASE_URL: null  # null means use BASE_URL
-
 MEMGUI_FINAL_DECISION_MODEL: "google/gemini-2.5-pro"
 MEMGUI_FINAL_DECISION_PROVIDER: "openai_compatible"
 MEMGUI_FINAL_DECISION_BASE_URL: null  # null means use BASE_URL

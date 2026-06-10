@@ -6,6 +6,7 @@ import json
 import base64
 import time
 from openai import OpenAI
+from dotenv import dotenv_values
 
 # Add project root to path for config_loader import
 _project_root = os.path.join(os.path.dirname(__file__), "../../..")
@@ -13,6 +14,19 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 from config_loader import get_config
+
+
+def _normalize_optional(value):
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip().lower() in {"", "none", "null"}:
+        return None
+    return value
+
+
+def _load_env_values():
+    file_values = dotenv_values(os.path.join(os.getcwd(), ".env"))
+    return {**file_values, **os.environ}
 
 
 try:
@@ -26,15 +40,20 @@ try:
     MEMGUI_FINAL_DECISION_BASE_URL = _config.get("MEMGUI_FINAL_DECISION_BASE_URL")
     MEMGUI_FINAL_DECISION_MODEL = _config.get("MEMGUI_FINAL_DECISION_MODEL")
 except Exception as e:
-    # 如果读取配置失败，fallback到环境变量（仅通用变量，无默认 URL）
+    # 如果读取配置失败，fallback到 .env / 环境变量（仅通用变量，无默认 URL）
     print(
         f"Warning: Failed to load config.yaml, falling back to environment variables: {e}"
     )
-    MEMGUI_API_KEY = os.environ.get("MEMGUI_API_KEY")
-    MEMGUI_STEP_DESC_BASE_URL = os.environ.get("MEMGUI_STEP_DESC_BASE_URL")
-    MEMGUI_STEP_DESC_MODEL = os.environ.get("MEMGUI_STEP_DESC_MODEL")
-    MEMGUI_FINAL_DECISION_BASE_URL = os.environ.get("MEMGUI_FINAL_DECISION_BASE_URL")
-    MEMGUI_FINAL_DECISION_MODEL = os.environ.get("MEMGUI_FINAL_DECISION_MODEL")
+    _env_values = _load_env_values()
+    MEMGUI_API_KEY = _env_values.get("MEMGUI_API_KEY")
+    MEMGUI_STEP_DESC_BASE_URL = _env_values.get("MEMGUI_STEP_DESC_BASE_URL")
+    MEMGUI_STEP_DESC_MODEL = _env_values.get("MEMGUI_STEP_DESC_MODEL")
+    MEMGUI_FINAL_DECISION_BASE_URL = _env_values.get("MEMGUI_FINAL_DECISION_BASE_URL")
+    MEMGUI_FINAL_DECISION_MODEL = _env_values.get("MEMGUI_FINAL_DECISION_MODEL")
+
+BASE_URL = _normalize_optional(_load_env_values().get("BASE_URL"))
+MEMGUI_STEP_DESC_BASE_URL = _normalize_optional(MEMGUI_STEP_DESC_BASE_URL) or BASE_URL
+MEMGUI_FINAL_DECISION_BASE_URL = _normalize_optional(MEMGUI_FINAL_DECISION_BASE_URL) or BASE_URL
 
 if not MEMGUI_API_KEY:
     raise ValueError(

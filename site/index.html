@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MemGUI-Bench: Benchmarking Memory for Mobile GUI Agents</title>
+    <meta name="description"
+        content="MemGUI-Bench evaluates memory-intensive mobile GUI agents on long-horizon, cross-app Android tasks.">
+    <meta name="keywords" content="MemGUI-Bench, Mobile GUI Agent, Android, Benchmark, Memory">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <nav class="navbar is-fixed-top" role="navigation" aria-label="main navigation">
+        <div class="navbar-brand">
+            <a class="navbar-item navbar-title" href="#">
+                <strong>MemGUI-Bench</strong>
+            </a>
+            <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" id="navbar-burger">
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
+            </a>
+        </div>
+        <div class="navbar-menu" id="navbar-menu">
+            <div class="navbar-start">
+                <a class="navbar-item" href="#leaderboard">Leaderboard</a>
+                <a class="navbar-item" href="#overview">Overview</a>
+                <a class="navbar-item" href="#runtime">Runtime</a>
+                <a class="navbar-item" href="#evaluation">Evaluation</a>
+            </div>
+            <div class="navbar-end">
+                <div class="navbar-item">
+                    <div class="buttons">
+                        <a href="https://arxiv.org/abs/2602.06075" class="button is-small is-dark" target="_blank">
+                            <span class="icon"><i class="ai ai-arxiv"></i></span>
+                            <span>Paper</span>
+                        </a>
+                        <a href="https://huggingface.co/datasets/lgy0404/memgui-bench"
+                            class="button is-small is-dark" target="_blank">
+                            <span class="icon"><i class="fas fa-database"></i></span>
+                            <span>Dataset</span>
+                        </a>
+                        <a href="https://github.com/lgy0404/MemGUI-Bench" class="button is-small is-dark"
+                            target="_blank">
+                            <span class="icon"><i class="fab fa-github"></i></span>
+                            <span>Code</span>
+                        </a>
+                        <a href="https://github.com/lgy0404/MemGUI-Bench/tree/main/docs"
+                            class="button is-small is-dark" target="_blank">
+                            <span class="icon"><i class="fas fa-book-open"></i></span>
+                            <span>Docs</span>
+                        </a>
+                        <div class="dropdown is-hoverable is-right" id="cite-dropdown">
+                            <div class="dropdown-trigger">
+                                <button class="button is-small is-dark" aria-haspopup="true" aria-controls="cite-menu">
+                                    <span class="icon"><i class="fas fa-quote-right"></i></span>
+                                    <span>Cite</span>
+                                </button>
+                            </div>
+                            <div class="dropdown-menu" id="cite-menu" role="menu">
+                                <div class="dropdown-content cite-dropdown-content">
+                                    <div class="dropdown-item">
+                                        <p class="is-size-7 has-text-weight-semibold mb-2">BibTeX</p>
+                                        <pre class="cite-bibtex"><code>@misc{memgui2026bench,
+  title={MemGUI-Bench: Benchmarking Memory for Mobile GUI Agents},
+  author={MemGUI-Bench Team},
+  year={2026},
+  eprint={2602.06075},
+  archivePrefix={arXiv},
+  primaryClass={cs.AI},
+  url={https://arxiv.org/abs/2602.06075}
+}</code></pre>
+                                        <button class="button is-small is-fullwidth mt-2" id="copy-cite-btn">
+                                            <span class="icon"><i class="fas fa-copy"></i></span>
+                                            <span>Copy to Clipboard</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-body">
+            <div class="container is-max-desktop">
+                <div class="columns is-centered">
+                    <div class="column has-text-centered">
+                        <img src="assets/memgui-bench-logo.png" alt="MemGUI-Bench"
+                            style="max-width: 760px; width: 90%; margin-bottom: 1.25rem;">
+                        <h1 class="title is-2 publication-title">
+                            Benchmarking Memory for Mobile GUI Agents
+                        </h1>
+                        <div class="is-size-5 publication-authors">
+                            <span class="author-block">128 long-horizon tasks</span>
+                            <span class="author-block">26 Android apps</span>
+                            <span class="author-block">Memory-intensive cross-app workflows</span>
+                        </div>
+                        <div class="publication-links mt-5">
+                            <a class="button is-dark" href="#runtime">
+                                <span class="icon"><i class="fas fa-play"></i></span>
+                                <span>Run Benchmark</span>
+                            </a>
+                            <a class="button is-light" href="#leaderboard">
+                                <span class="icon"><i class="fas fa-ranking-star"></i></span>
+                                <span>View Leaderboard</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-full">
+                    <div class="banner">
+                        <img src="assets/fig1-overview.png" alt="MemGUI-Bench overview">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <main class="container is-max-desktop">
+        <section id="leaderboard" class="section">
+            <h2 class="title is-3 has-text-centered">Leaderboard</h2>
+            <div class="content has-text-justified">
+                <p>
+                    Success rate (%) on MemGUI-Bench. We report <strong>Pass@1</strong>,
+                    <strong>Pass@3</strong>, and memory-oriented metrics including
+                    <strong>IRR</strong> (Information Retention Rate) and
+                    <strong>FRR</strong> (Failure Recovery Rate). Leaderboard evaluation
+                    uses the fixed MemGUI-Eval model setup for comparable submissions.
+                </p>
+            </div>
+
+            <div class="box leaderboard-filters">
+                <div class="columns is-mobile is-multiline is-vcentered is-variable is-3">
+                    <div class="column is-narrow">
+                        <div class="field">
+                            <label class="label is-small">Model Type:</label>
+                            <div class="control">
+                                <div class="select">
+                                    <select id="filter-model-type">
+                                        <option value="all">All</option>
+                                        <option value="Agentic Workflow">Agentic Workflow</option>
+                                        <option value="Agent-as-a-Model">Agent-as-a-Model</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-narrow">
+                        <div class="field">
+                            <label class="label is-small">Sort:</label>
+                            <div class="control">
+                                <div class="select">
+                                    <select id="filter-sort">
+                                        <option value="pass1">Pass@1</option>
+                                        <option value="pass3">Pass@3</option>
+                                        <option value="irr">IRR</option>
+                                        <option value="frr">FRR</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-narrow">
+                        <div class="field">
+                            <label class="label is-small">&nbsp;</label>
+                            <div class="control">
+                                <button class="button is-light" id="clear-filters">
+                                    Clear Filters
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <p class="is-size-7 has-text-grey">
+                            Tasks: <span id="task-count-total">128</span> total,
+                            <span id="task-count-easy">48</span> easy,
+                            <span id="task-count-medium">42</span> medium,
+                            <span id="task-count-hard">38</span> hard.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-container osworld-table-container">
+                <table class="table is-fullwidth is-hoverable osworld-leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">Rank</th>
+                            <th style="width: 120px;">Category</th>
+                            <th>Model</th>
+                            <th class="has-text-centered sortable-header" data-sort="pass1">
+                                Pass@1 <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th class="has-text-centered sortable-header" data-sort="pass3">
+                                Pass@3 <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th class="has-text-centered sortable-header" data-sort="irr">
+                                IRR <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th class="has-text-centered sortable-header" data-sort="frr">
+                                FRR <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body">
+                        <tr>
+                            <td colspan="7" class="has-text-centered">Loading leaderboard data...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="overview" class="section">
+            <h2 class="title is-3">Overview</h2>
+            <div class="content has-text-justified">
+                <p>
+                    <strong>MemGUI-Bench</strong> evaluates memory capabilities that are
+                    central to mobile GUI agents: retaining information from earlier UI
+                    states, carrying facts across applications, and avoiding memory
+                    hallucination during long trajectories.
+                </p>
+                <p>
+                    The benchmark includes <strong>128 tasks</strong> over
+                    <strong>26 apps</strong>. Tasks average <strong>36.2 golden
+                    steps</strong>, <strong>78.1%</strong> involve multiple apps, and
+                    <strong>89.8%</strong> require UI memory.
+                </p>
+            </div>
+
+            <figure class="image mt-4">
+                <img src="assets/fig2-task-suite.png" alt="MemGUI-Bench task suite">
+                <figcaption class="has-text-centered mt-2" style="font-size: 0.9rem; color: #666;">
+                    <strong>Figure:</strong> MemGUI-Bench task suite and memory-oriented task design.
+                </figcaption>
+            </figure>
+        </section>
+
+        <section class="section">
+            <h2 class="title is-4">Benchmark Comparison</h2>
+            <div class="content has-text-justified">
+                <p>
+                    MemGUI-Bench focuses on memory-intensive mobile use. Compared with
+                    general mobile-agent benchmarks, it stresses long-horizon execution,
+                    cross-app information transfer, and dedicated memory metrics.
+                </p>
+            </div>
+
+            <div class="table-container">
+                <table class="table is-fullwidth is-striped is-hoverable comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Benchmark</th>
+                            <th class="has-text-centered">#Apps</th>
+                            <th class="has-text-centered">#Tasks</th>
+                            <th class="has-text-centered">Long-Horizon</th>
+                            <th class="has-text-centered">Cross-App</th>
+                            <th class="has-text-centered">Memory Metrics</th>
+                            <th class="has-text-centered">MobileWorld Runtime</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>AndroidWorld</td>
+                            <td class="has-text-centered">20</td>
+                            <td class="has-text-centered">116</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered no-mark">✗</td>
+                            <td class="has-text-centered no-mark">✗</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                        </tr>
+                        <tr>
+                            <td>MobileWorld</td>
+                            <td class="has-text-centered">20</td>
+                            <td class="has-text-centered">201</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered no-mark">✗</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                        </tr>
+                        <tr class="highlight-row">
+                            <td><strong>MemGUI-Bench (Ours)</strong></td>
+                            <td class="has-text-centered"><strong>26</strong></td>
+                            <td class="has-text-centered"><strong>128</strong></td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                            <td class="has-text-centered yes-mark">✓</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <figure class="image mt-4">
+                <img src="assets/benchmark-comparison.png" alt="Benchmark comparison">
+            </figure>
+        </section>
+
+        <section id="runtime" class="section">
+            <h2 class="title is-4">MobileWorld Runtime</h2>
+            <div class="content has-text-justified">
+                <p>
+                    The open-source MemGUI-Bench runner now follows the
+                    MobileWorld-androidworld architecture: Docker-managed Android
+                    environments, one container per parallel emulator, MobileWorld action
+                    parsing and actuation, local <code>traj_logs/</code>, and the shared
+                    trajectory viewer.
+                </p>
+            </div>
+
+            <div class="columns is-vcentered">
+                <div class="column">
+                    <pre><code class="language-bash">uv run mg env init
+sudo uv run mg env check
+sudo uv run mg env run --count 4 --launch-interval 20
+sudo uv run mg eval \
+  --agent-type qwen3vl \
+  --model-name qwen3-vl-8b \
+  --task ALL \
+  --log-file-root traj_logs/memgui-qwen3vl \
+  --max-concurrency 4
+uv run mg logs view --log-dir traj_logs/memgui-qwen3vl</code></pre>
+                </div>
+                <div class="column">
+                    <div class="content">
+                        <ol>
+                            <li>Pull and launch the pre-configured MemGUI Docker image.</li>
+                            <li>Run agents through the MobileWorld environment queue.</li>
+                            <li>Store trajectories on the host in MobileWorld format.</li>
+                            <li>Score each trajectory with MemGUI-Eval.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="evaluation" class="section">
+            <h2 class="title is-4">Evaluation Pipeline</h2>
+            <div class="content has-text-justified">
+                <p>
+                    Execution and logging use MobileWorld. Scoring remains MemGUI-specific:
+                    the evaluator generates step descriptions, makes a final decision,
+                    computes information retention, and classifies bad cases. A
+                    compatibility workspace is generated under <code>_memgui_eval/</code>
+                    while the public trajectory remains <code>traj.json</code>,
+                    screenshots, marked screenshots, and <code>result.txt</code>.
+                </p>
+            </div>
+
+            <figure class="image">
+                <img src="assets/fig4-eval-pipeline.png" alt="MemGUI-Eval pipeline">
+                <figcaption class="has-text-centered mt-2" style="font-size: 0.9rem; color: #666;">
+                    <strong>Figure:</strong> MemGUI-Eval analyzes MobileWorld trajectories through a generated
+                    compatibility workspace.
+                </figcaption>
+            </figure>
+        </section>
+
+        <section class="section">
+            <h2 class="title is-4">System Architecture</h2>
+            <div class="content has-text-justified">
+                <p>
+                    MemGUI-Bench reuses MobileWorld's container orchestration, backend API,
+                    environment queue, controller, action execution, and log viewer. The
+                    benchmark-specific pieces are the MemGUI task registry, MemGUI-Eval
+                    scoring bridge, and the configured MemGUI Docker image.
+                </p>
+            </div>
+
+            <figure class="image">
+                <img src="assets/fig3-architecture.png" alt="MemGUI-Bench architecture">
+            </figure>
+        </section>
+
+        <section class="section">
+            <h2 class="title is-3">Acknowledgements</h2>
+            <div class="content has-text-justified">
+                <p>
+                    MemGUI-Bench is built on the MobileWorld runtime and benefits from
+                    the broader mobile-agent benchmark ecosystem, including AndroidWorld
+                    and related open-source GUI-agent projects.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="content has-text-centered">
+            <p>
+                <strong>MemGUI-Bench Team</strong> &middot;
+                <a href="https://github.com/lgy0404/MemGUI-Bench">GitHub</a> &middot;
+                <a href="https://github.com/lgy0404/MemGUI-Bench/issues">Issues</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        hljs.highlightAll();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const burger = document.getElementById('navbar-burger');
+            const menu = document.getElementById('navbar-menu');
+            if (burger && menu) {
+                burger.addEventListener('click', () => {
+                    burger.classList.toggle('is-active');
+                    menu.classList.toggle('is-active');
+                });
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const copyCiteBtn = document.getElementById('copy-cite-btn');
+            if (copyCiteBtn) {
+                copyCiteBtn.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    const bibtex = copyCiteBtn.closest('.dropdown-item').querySelector('code').textContent;
+                    navigator.clipboard.writeText(bibtex).then(() => {
+                        const originalHTML = copyCiteBtn.innerHTML;
+                        copyCiteBtn.innerHTML = '<span class="icon"><i class="fas fa-check"></i></span><span>Copied!</span>';
+                        copyCiteBtn.classList.add('is-success');
+                        setTimeout(() => {
+                            copyCiteBtn.innerHTML = originalHTML;
+                            copyCiteBtn.classList.remove('is-success');
+                        }, 2000);
+                    });
+                });
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', async function () {
+            const tbody = document.getElementById('leaderboard-body');
+            const filterModelType = document.getElementById('filter-model-type');
+            const filterSort = document.getElementById('filter-sort');
+            const clearFiltersBtn = document.getElementById('clear-filters');
+            let leaderboardData = [];
+            let filteredData = [];
+            let currentSort = { key: 'pass1', dir: 'desc' };
+
+            try {
+                const response = await fetch('leaderboard.json');
+                const data = await response.json();
+                leaderboardData = data.results;
+                filteredData = [...leaderboardData];
+                const counts = data.task_counts || {};
+                document.getElementById('task-count-total').textContent = counts.Total ?? 128;
+                document.getElementById('task-count-easy').textContent = counts.Easy ?? 48;
+                document.getElementById('task-count-medium').textContent = counts.Medium ?? 42;
+                document.getElementById('task-count-hard').textContent = counts.Hard ?? 38;
+                updateSortIcons();
+                renderTable();
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="7" class="has-text-centered">Failed to load leaderboard data.</td></tr>';
+                console.error('Error loading leaderboard:', error);
+            }
+
+            document.querySelectorAll('.sortable-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const sortKey = header.dataset.sort;
+                    if (currentSort.key === sortKey) {
+                        currentSort.dir = currentSort.dir === 'desc' ? 'asc' : 'desc';
+                    } else {
+                        currentSort.key = sortKey;
+                        currentSort.dir = 'desc';
+                    }
+                    filterSort.value = currentSort.key;
+                    updateSortIcons();
+                    renderTable();
+                });
+            });
+
+            filterModelType.addEventListener('change', applyFilters);
+            filterSort.addEventListener('change', () => {
+                currentSort = { key: filterSort.value, dir: 'desc' };
+                updateSortIcons();
+                renderTable();
+            });
+            clearFiltersBtn.addEventListener('click', () => {
+                filterModelType.value = 'all';
+                filterSort.value = 'pass1';
+                currentSort = { key: 'pass1', dir: 'desc' };
+                applyFilters();
+                updateSortIcons();
+            });
+
+            function applyFilters() {
+                filteredData = leaderboardData.filter(row => (
+                    filterModelType.value === 'all' || row.model_type === filterModelType.value
+                ));
+                renderTable();
+            }
+
+            function updateSortIcons() {
+                document.querySelectorAll('.sortable-header').forEach(header => {
+                    const icon = header.querySelector('.sort-icon');
+                    if (header.dataset.sort === currentSort.key) {
+                        icon.className = currentSort.dir === 'desc'
+                            ? 'fas fa-sort-down sort-icon active'
+                            : 'fas fa-sort-up sort-icon active';
+                    } else {
+                        icon.className = 'fas fa-sort sort-icon';
+                    }
+                });
+            }
+
+            function formatDate(dateStr) {
+                const date = new Date(dateStr);
+                if (Number.isNaN(date.getTime())) return dateStr;
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+            }
+
+            function formatScore(value) {
+                return value === null || value === undefined ? '-' : Number(value).toFixed(1);
+            }
+
+            function renderTable() {
+                const sorted = [...filteredData].sort((a, b) => {
+                    const aVal = a[currentSort.key] ?? -1;
+                    const bVal = b[currentSort.key] ?? -1;
+                    return currentSort.dir === 'desc' ? bVal - aVal : aVal - bVal;
+                });
+
+                tbody.innerHTML = sorted.map((row, index) => {
+                    const rank = index + 1;
+                    const rowClass = rank === 1 ? 'first-rank-row' : '';
+                    const href = row.link && row.link !== '#'
+                        ? (row.link.startsWith('http') ? row.link : `https://${row.link}`)
+                        : '';
+                    const modelName = href
+                        ? `<a href="${href}" class="model-link" target="_blank" rel="noopener noreferrer">${row.model}</a>`
+                        : row.model;
+                    const categoryClass = row.model_type === 'Agentic Workflow'
+                        ? 'tag is-info is-light'
+                        : 'tag is-link is-light';
+
+                    return `
+                        <tr class="${rowClass}">
+                            <td class="has-text-centered"><strong>${rank}</strong></td>
+                            <td><span class="category-badge ${categoryClass}">${row.model_type}</span></td>
+                            <td class="model-cell">
+                                <div class="model-name"><strong>${modelName}</strong></div>
+                                <div class="model-org">${row.organization}</div>
+                                <div class="model-date"><i class="far fa-calendar"></i> ${formatDate(row.date)}</div>
+                            </td>
+                            <td class="has-text-centered"><strong class="overall-score">${formatScore(row.pass1)}</strong></td>
+                            <td class="has-text-centered">${formatScore(row.pass3)}</td>
+                            <td class="has-text-centered">${formatScore(row.irr)}</td>
+                            <td class="has-text-centered">${formatScore(row.frr)}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        });
+    </script>
+</body>
+
+</html>

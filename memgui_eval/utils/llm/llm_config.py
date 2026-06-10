@@ -12,18 +12,61 @@ _project_root = os.path.join(os.path.dirname(__file__), "../../..")
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+from dotenv import dotenv_values
+
 from config_loader import get_config
+
+
+def _normalize_optional(value):
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip().lower() in {"", "none", "null"}:
+        return None
+    return value
+
+
+def _env_config():
+    file_values = dotenv_values(os.path.join(os.getcwd(), ".env"))
+    values = {**file_values, **os.environ}
+    base_url = _normalize_optional(values.get("BASE_URL"))
+    return {
+        "MEMGUI_STEP_DESC_MODEL": _normalize_optional(
+            values.get("MEMGUI_STEP_DESC_MODEL")
+        ),
+        "MEMGUI_STEP_DESC_PROVIDER": _normalize_optional(
+            values.get("MEMGUI_STEP_DESC_PROVIDER")
+        )
+        or "openai_compatible",
+        "MEMGUI_STEP_DESC_BASE_URL": _normalize_optional(
+            values.get("MEMGUI_STEP_DESC_BASE_URL")
+        )
+        or base_url,
+        "MEMGUI_FINAL_DECISION_MODEL": _normalize_optional(
+            values.get("MEMGUI_FINAL_DECISION_MODEL")
+        ),
+        "MEMGUI_FINAL_DECISION_PROVIDER": _normalize_optional(
+            values.get("MEMGUI_FINAL_DECISION_PROVIDER")
+        )
+        or "openai_compatible",
+        "MEMGUI_FINAL_DECISION_BASE_URL": _normalize_optional(
+            values.get("MEMGUI_FINAL_DECISION_BASE_URL")
+        )
+        or base_url,
+        "MEMGUI_API_KEY": _normalize_optional(values.get("MEMGUI_API_KEY")),
+        "MEMGUI_MAX_RETRIES": int(
+            _normalize_optional(values.get("MEMGUI_MAX_RETRIES")) or 4
+        ),
+    }
 
 
 try:
     # Use get_config() to get cached config with mode presets applied
     _config = get_config(verbose=False)
 except FileNotFoundError:
-    raise FileNotFoundError(
-        "config.yaml file not found. Please ensure config.yaml exists in the project root."
-    )
+    _config = _env_config()
 except Exception as e:
-    raise Exception(f"Error loading config.yaml: {e}")
+    print(f"Warning: Failed to load config.yaml, falling back to environment variables: {e}")
+    _config = _env_config()
 
 # 验证必需的配置项
 required_keys = [
@@ -40,7 +83,7 @@ required_keys = [
 missing_keys = [key for key in required_keys if key not in _config]
 if missing_keys:
     raise ValueError(
-        f"Missing required configuration keys in config.yaml: {missing_keys}"
+        f"Missing required MemGUI-Eval configuration keys: {missing_keys}"
     )
 
 # 从config.yaml读取模型参数 - 不再提供默认值
