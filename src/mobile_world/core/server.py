@@ -42,10 +42,6 @@ from mobile_world.runtime.utils.models import (
     TaskCallbackRequest,
     TaskOperationRequest,
 )
-from mobile_world.tasks.aw_registry import AWTaskRegistry
-from mobile_world.tasks.memgui_registry import MemGUITaskRegistry
-from mobile_world.tasks.registry import TaskRegistry
-
 SUITE_FAMILY: str = "memgui_bench"
 RUNNING_TASK = None
 AVD_MAPPING: dict[str, str] = {
@@ -75,14 +71,20 @@ def initialize_suite_family(suite_family: str, seed: int = None) -> None:
     if suite_family == "mobile_world":
         if seed is not None:
             raise ValueError("--seed is not supported for mobile_world tasks")
+        from mobile_world.tasks.registry import TaskRegistry
+
         task_registry = TaskRegistry()
         logger.info(f"Loaded {len(task_registry.tasks)} mobile_world tasks")
     elif suite_family == "android_world":
+        from mobile_world.tasks.aw_registry import AWTaskRegistry
+
         task_registry = AWTaskRegistry(seed=seed)
         logger.info(f"Loaded {len(task_registry.tasks)} android_world tasks")
     elif suite_family == "memgui_bench":
         if seed is not None:
             raise ValueError("--seed is not supported for memgui_bench tasks")
+        from mobile_world.tasks.memgui_registry import MemGUITaskRegistry
+
         task_registry = MemGUITaskRegistry()
         logger.info(f"Loaded {len(task_registry.tasks)} memgui_bench tasks")
     else:
