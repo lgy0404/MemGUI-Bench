@@ -5,8 +5,9 @@ Provides unified configuration loading with mode-based presets support.
 
 This module handles:
 1. Loading config.yaml
-2. Applying mode-based presets (ENVIRONMENT_MODE)
-3. Allowing custom overrides to take precedence over presets
+2. Applying user-facing .env overrides
+3. Applying mode-based presets (ENVIRONMENT_MODE)
+4. Allowing custom overrides to take precedence over presets
 
 Usage:
     from config_loader import load_config
@@ -15,6 +16,7 @@ Usage:
 
 import os
 import yaml
+from dotenv import dotenv_values
 
 
 def apply_mode_presets(config, verbose=False):
@@ -115,6 +117,50 @@ def apply_mode_presets(config, verbose=False):
     return config
 
 
+def _normalize_env_value(value):
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip().lower() in {"", "none", "null"}:
+        return None
+    return value
+
+
+def _apply_env_overrides(config, config_path=None):
+    """
+    Apply user-facing .env values on top of config.yaml defaults.
+
+    config.yaml keeps benchmark defaults and paths; .env contains the small set
+    of values users normally edit, matching the MobileWorld setup style.
+    """
+    candidates = []
+    if config_path:
+        candidates.append(os.path.join(os.path.dirname(os.path.abspath(config_path)), ".env"))
+    candidates.append(os.path.join(os.getcwd(), ".env"))
+
+    env_path = next((path for path in candidates if os.path.exists(path)), None)
+    file_values = dotenv_values(env_path) if env_path else {}
+    values = {**file_values, **os.environ}
+
+    direct_keys = [
+        "BASE_URL",
+        "MEMGUI_API_KEY",
+        "MEMGUI_STEP_DESC_MODEL",
+        "MEMGUI_STEP_DESC_BASE_URL",
+        "MEMGUI_FINAL_DECISION_MODEL",
+        "MEMGUI_FINAL_DECISION_BASE_URL",
+    ]
+    for key in direct_keys:
+        if key in values:
+            config[key] = _normalize_env_value(values.get(key))
+
+    api_key = _normalize_env_value(values.get("API_KEY"))
+    if api_key is not None:
+        config["OPENAI_API_KEY"] = api_key
+        config["QWEN_API_KEY"] = api_key
+
+    return config
+
+
 def load_config(config_path=None, verbose=False):
     """
     Load configuration from YAML file with mode presets applied.
@@ -151,6 +197,9 @@ def load_config(config_path=None, verbose=False):
             config = yaml.safe_load(file)
     except Exception as e:
         raise Exception(f"Error loading config.yaml: {e}")
+
+    # Apply .env overrides before presets so null values can still inherit defaults.
+    config = _apply_env_overrides(config, config_path=config_path)
 
     # Apply mode-based presets
     config = apply_mode_presets(config, verbose=verbose)

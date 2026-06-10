@@ -29,6 +29,7 @@ DEFAULT_BACKEND_PORT = 6800
 DEFAULT_VIEWER_PORT = 8760
 DEFAULT_CONTAINER_RESULTS_DIR = f"{DEFAULT_WORKDIR}/results"
 DEFAULT_CONTAINER_CONFIG_PATH = f"{DEFAULT_WORKDIR}/config.yaml"
+DEFAULT_CONTAINER_ENV_PATH = f"{DEFAULT_WORKDIR}/.env"
 CONTAINER_LABEL = "memgui.bench=1"
 
 
@@ -92,12 +93,27 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Host config.yaml to mount into the container when present (default: ./config.yaml).",
     )
     run.add_argument(
+        "--env-file",
+        "--env_file",
+        dest="env_file",
+        default="./.env",
+        help="Host .env to mount into the container when present (default: ./.env).",
+    )
+    run.add_argument(
         "--no-config-mount",
         "--no_config_mount",
         dest="mount_config",
         action="store_false",
         default=True,
         help="Do not mount host config.yaml into the container.",
+    )
+    run.add_argument(
+        "--no-env-mount",
+        "--no_env_mount",
+        dest="mount_env",
+        action="store_false",
+        default=True,
+        help="Do not mount host .env into the container.",
     )
     run.add_argument(
         "--no-results-mount",
@@ -177,11 +193,11 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     exec_cmd.add_argument("--dry-run", "--dry_run", dest="dry_run", action="store_true", help="Print Docker command without running it.")
 
-    init = env_subparsers.add_parser("init", help="Create config.yaml from the example")
+    init = env_subparsers.add_parser("init", help="Create config.yaml and .env from the examples")
     init.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite config.yaml if it already exists.",
+        help="Overwrite config.yaml and .env if they already exist.",
     )
 
 
@@ -254,6 +270,13 @@ def _volume_args(args: argparse.Namespace, dry_run: bool) -> list[str]:
             volumes.append((config_path, DEFAULT_CONTAINER_CONFIG_PATH))
         elif not dry_run:
             print(f"Warning: {config_path} not found. Run `uv run mg env init` to create a host-mounted config.")
+
+    if getattr(args, "mount_env", True):
+        env_path = _resolve_host_path(args.env_file)
+        if env_path.exists():
+            volumes.append((env_path, DEFAULT_CONTAINER_ENV_PATH))
+        elif not dry_run:
+            print(f"Warning: {env_path} not found. Run `uv run mg env init` to create a host-mounted .env.")
 
     docker_args: list[str] = []
     for host_path, container_path in volumes:
@@ -408,6 +431,9 @@ def _checks(args: argparse.Namespace) -> list[Check]:
 
     example_path = project_root() / "config.yaml.example.opensource"
     checks.append(Check("config example", example_path.exists(), str(example_path)))
+
+    env_example_path = project_root() / ".env.example"
+    checks.append(Check("env example", env_example_path.exists(), str(env_example_path)))
 
     if docker_ok:
         image_exists = _docker_image_exists(args.image)
@@ -572,17 +598,21 @@ def _execute_exec(args: argparse.Namespace) -> int:
 
 def _execute_init(args: argparse.Namespace) -> int:
     root = project_root()
-    src = root / "config.yaml.example.opensource"
-    dst = root / "config.yaml"
-    if not src.exists():
-        print(f"Error: example config not found: {src}")
-        return 1
-    if dst.exists() and not args.force:
-        print(f"config.yaml already exists: {dst}")
-        print("Use --force to overwrite it.")
-        return 1
-    shutil.copy2(src, dst)
-    print(f"Created {dst}")
+    files = [
+        (root / "config.yaml.example.opensource", root / "config.yaml"),
+        (root / ".env.example", root / ".env"),
+    ]
+    for src, _ in files:
+        if not src.exists():
+            print(f"Error: example file not found: {src}")
+            return 1
+
+    for src, dst in files:
+        if dst.exists() and not args.force:
+            print(f"{dst.name} already exists, leaving unchanged: {dst}")
+            continue
+        shutil.copy2(src, dst)
+        print(f"Created {dst}")
     return 0
 
 

@@ -55,7 +55,9 @@ class EnvCliTest(unittest.TestCase):
             try:
                 os.chdir(tmp)
                 config_path = Path(tmp) / "config.yaml"
+                env_path = Path(tmp) / ".env"
                 config_path.write_text("ENVIRONMENT_MODE: docker\n", encoding="utf-8")
+                env_path.write_text("API_KEY=test\n", encoding="utf-8")
                 args = parser.parse_args(["env", "run", "--dry-run"])
 
                 output = io.StringIO()
@@ -67,6 +69,30 @@ class EnvCliTest(unittest.TestCase):
         text = output.getvalue()
         self.assertEqual(status, 0)
         self.assertIn(f"{config_path}:/root/MemGUI-Bench/config.yaml", text)
+        self.assertIn(f"{env_path}:/root/MemGUI-Bench/.env", text)
+
+    def test_env_init_creates_env_file(self) -> None:
+        parser = create_parser()
+        old_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            try:
+                os.chdir(root)
+                (root / "run.py").write_text("", encoding="utf-8")
+                (root / "data").mkdir()
+                (root / "config.yaml.example.opensource").write_text("ENVIRONMENT_MODE: docker\n", encoding="utf-8")
+                (root / ".env.example").write_text("API_KEY=YOUR_API_KEY_HERE\n", encoding="utf-8")
+                args = parser.parse_args(["env", "init"])
+
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    status = execute(args)
+
+                self.assertEqual(status, 0)
+                self.assertTrue((root / "config.yaml").exists())
+                self.assertTrue((root / ".env").exists())
+            finally:
+                os.chdir(old_cwd)
 
 
 if __name__ == "__main__":

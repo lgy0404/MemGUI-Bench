@@ -1,73 +1,56 @@
 # ==============================================================================
 # MemGUI-Bench Configuration Example
 # ==============================================================================
-# Configuration Structure:
-#   - Part 1-4: Parameters to check/adjust for each experiment
-#   - Part 5-7: Fixed configurations, generally no modification needed
+# This file stores fixed benchmark defaults. In the MobileWorld-style workflow,
+# users should edit `.env` for model/API settings and use CLI flags for
+# experiment-specific overrides.
 #
 # Quick Start:
 #   Host:
 #   1. uv run mg env init
-#   2. Edit config.yaml API/model fields
+#   2. Edit .env API/model fields
 #   3. sudo uv run mg env check
 #   4. sudo uv run mg env run --count 4
-#      This starts 4 ready MemGUI backend containers and mounts local ./results.
+#      This starts 4 ready MemGUI backend containers and mounts local .env/results.
 #   5. sudo uv run mg eval --agent-type Qwen3VL --tasks ALL --session-id my-experiment --num-emulators 4
 #      This discovers the backends and feeds tasks through a dynamic queue.
 # ==============================================================================
 
 # ==============================================================================
-# Part 1: Mode Selection (Check before each experiment)
+# Part 1: Fixed Environment Defaults
 # ==============================================================================
 # Environment mode. The configured Docker image already contains Android SDK,
 # ADB, emulator binaries, and the MemGUI-AVD snapshot.
 ENVIRONMENT_MODE: "docker"
 
 # ==============================================================================
-# Part 2: Experiment Settings (Must configure for each experiment)
+# Part 2: Fixed Experiment Defaults
 # ==============================================================================
-# Agent name
+# Override these with CLI flags when needed; ordinary users do not need to edit
+# this file.
 AGENT_NAME: "Qwen3VL"
-
-# Dataset path (must be specified, no default)
 DATASET_PATH: "./data/memgui-tasks-all.csv"
-
-# Session ID suffix (only specify the suffix part)
-# Prefix "memgui-" is automatically added
-# Example: Set to "v25122902-qwen8b-test" -> "memgui-v25122902-qwen8b-test"
 SESSION_ID_SUFFIX: "v25122902-debug"
 
 # ==============================================================================
-# Part 3: API and Parallelism Settings (Adjust as needed)
+# Part 3: Fixed API and Parallelism Defaults
 # ==============================================================================
-# API Base URL for all models
-BASE_URL: "https://openrouter.fans/v1"
+BASE_URL: null
 
 # Parallelism settings
 NUM_OF_EMULATOR: 4       # Number of MemGUI backend containers to use
 MAX_EVAL_SUBPROCESS: 8   # Max parallel evaluation processes
 
 # ==============================================================================
-# Part 4: Agent Model Settings (Adjust as needed)
+# Part 4: Fixed Agent Model Defaults
 # ==============================================================================
-# Qwen3VL model configuration
-QWEN_API_KEY: "YOUR_API_KEY_HERE"  # Replace with your API Key
-QWEN_MODEL: "qwen/qwen3-vl-8b-instruct"  # Qwen3-VL-8B-Instruct openrouter
-
-# GUI-Owl-1.5 model configuration (uses same QWEN_* keys above)
-# Set AGENT_NAME to "GUIOwl15" and configure the model endpoint below:
-# QWEN_MODEL: "your-gui-owl-1.5-model"  # GUI-Owl-1.5 model name
-# GUIOWL_LAST_IMAGE: 5  # Number of recent screenshots to keep in context (default: 5)
-
+OPENAI_API_KEY: null
+QWEN_API_KEY: null
+QWEN_MODEL: "qwen/qwen3-vl-8b-instruct"
+GUIOWL_LAST_IMAGE: 5
 
 # ==============================================================================
-# ==============================================================================
-# Below are fixed configurations, generally no modification needed
-# ==============================================================================
-# ==============================================================================
-
-# ==============================================================================
-# Part 5: Mode Presets (Auto-applied based on Part 1 selection)
+# Part 5: Mode Presets
 # ==============================================================================
 _MODE_PRESETS:
   environment:
@@ -102,18 +85,14 @@ AGENTS:
     ENV_NAME: ""
 
 # ==============================================================================
-# Part 7: MemGUI Evaluator Configuration (Fixed evaluator settings)
+# Part 7: MemGUI Evaluator Defaults
 # ==============================================================================
-# Step description model
-MEMGUI_STEP_DESC_MODEL: "google/gemini-2.5-flash"  # google/gemini-2.5-flash
+MEMGUI_API_KEY: null
+MEMGUI_STEP_DESC_MODEL: "google/gemini-2.5-flash"
 MEMGUI_STEP_DESC_PROVIDER: "openai_compatible"
 MEMGUI_STEP_DESC_BASE_URL: null  # null means use BASE_URL
 
-# Final decision model
-MEMGUI_FINAL_DECISION_MODEL: "google/gemini-2.5-pro"  # gemini-2.5-pro
+MEMGUI_FINAL_DECISION_MODEL: "google/gemini-2.5-pro"
 MEMGUI_FINAL_DECISION_PROVIDER: "openai_compatible"
 MEMGUI_FINAL_DECISION_BASE_URL: null  # null means use BASE_URL
-
-# API configuration
-MEMGUI_API_KEY: "YOUR_API_KEY_HERE"  # Replace with your API Key
 MEMGUI_MAX_RETRIES: 4

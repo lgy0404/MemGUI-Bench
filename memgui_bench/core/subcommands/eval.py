@@ -465,6 +465,8 @@ def _ensure_backends(args: argparse.Namespace, count: int, root: Path) -> list[d
         container_results_dir=args.container_results_dir,
         config_path=str(root / "config.yaml"),
         mount_config=True,
+        env_file=str(root / ".env"),
+        mount_env=True,
         mount_results=True,
         backend_start_port=args.backend_start_port + len(backends),
         viewer_start_port=args.viewer_start_port + len(backends),
