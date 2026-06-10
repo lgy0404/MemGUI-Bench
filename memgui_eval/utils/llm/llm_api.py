@@ -42,7 +42,7 @@ try:
 except Exception as e:
     # 如果读取配置失败，fallback到 .env / 环境变量（仅通用变量，无默认 URL）
     print(
-        f"Warning: Failed to load config.yaml, falling back to environment variables: {e}"
+        f"Warning: Failed to load optional config file, falling back to environment variables: {e}"
     )
     _env_values = _load_env_values()
     MEMGUI_API_KEY = _env_values.get("MEMGUI_API_KEY")
@@ -57,11 +57,12 @@ MEMGUI_FINAL_DECISION_BASE_URL = _normalize_optional(MEMGUI_FINAL_DECISION_BASE_
 
 if not MEMGUI_API_KEY:
     raise ValueError(
-        "MEMGUI_API_KEY not found in config.yaml or MEMGUI_API_KEY not set in environment"
+        "MEMGUI_API_KEY not found in .env or environment variables"
     )
 if not MEMGUI_FINAL_DECISION_BASE_URL:
     raise ValueError(
-        "MEMGUI_FINAL_DECISION_BASE_URL not set in config.yaml or environment"
+        "MEMGUI_FINAL_DECISION_BASE_URL is not set in .env or environment variables, "
+        "and BASE_URL is also empty"
     )
 
 # 客户端缓存，避免重复创建

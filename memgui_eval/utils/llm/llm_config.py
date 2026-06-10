@@ -1,7 +1,7 @@
 # encoding: utf-8
 """
 LLM API调用的配置文件
-从config.yaml中读取模型配置，支持模式预设系统
+从.env读取模型配置，兼容可选config.yaml
 """
 
 import os
@@ -65,7 +65,7 @@ try:
 except FileNotFoundError:
     _config = _env_config()
 except Exception as e:
-    print(f"Warning: Failed to load config.yaml, falling back to environment variables: {e}")
+    print(f"Warning: Failed to load optional config file, falling back to environment variables: {e}")
     _config = _env_config()
 
 # 验证必需的配置项
@@ -86,7 +86,7 @@ if missing_keys:
         f"Missing required MemGUI-Eval configuration keys: {missing_keys}"
     )
 
-# 从config.yaml读取模型参数 - 不再提供默认值
+# 从.env或可选config.yaml读取模型参数 - 不再提供模型默认值
 # 最终决策模型配置
 DEFAULT_MODEL = _config["MEMGUI_FINAL_DECISION_MODEL"]
 DEFAULT_PROVIDER = _config["MEMGUI_FINAL_DECISION_PROVIDER"]
@@ -104,7 +104,7 @@ DEFAULT_TEMPERATURE = 0.01
 DEFAULT_APP_ID = None
 DEFAULT_APP_KEY = None
 
-# 从config.yaml读取重试参数
+# 从.env或可选config.yaml读取重试参数
 DEFAULT_MAX_RETRIES = _config["MEMGUI_MAX_RETRIES"]
 DEFAULT_RETRY_DELAY = 2
 

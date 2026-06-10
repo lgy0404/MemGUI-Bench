@@ -4,8 +4,8 @@ Configuration Loader Module
 Provides compatibility configuration loading for MemGUI-Eval.
 
 This module handles:
-1. Loading config.yaml when present
-2. Applying user-facing .env overrides
+1. Loading user-facing .env values
+2. Loading optional config.yaml compatibility defaults when present
 3. Inheriting BASE_URL for MemGUI-Eval endpoints when specific endpoints are empty
 
 Usage:
@@ -53,7 +53,7 @@ def _normalize_env_value(value):
 
 def _apply_env_overrides(config, config_path=None):
     """
-    Apply user-facing .env values on top of optional config.yaml defaults.
+    Apply user-facing .env values on top of optional compatibility defaults.
     """
     candidates = []
     if config_path:
@@ -87,40 +87,44 @@ def _apply_env_overrides(config, config_path=None):
 
 def load_config(config_path=None, verbose=False):
     """
-    Load configuration from YAML file with .env overrides applied.
+    Load configuration from .env with optional config.yaml compatibility defaults.
 
     Args:
-        config_path: Path to config.yaml. If None, auto-detects from project root.
+        config_path: Optional path to a legacy config.yaml.
         verbose: Whether to print configuration info
 
     Returns:
-        Configuration dictionary with mode presets applied
+        Configuration dictionary with derived MemGUI-Eval defaults applied
 
     Raises:
-        FileNotFoundError: If config.yaml is not found
+        FileNotFoundError: If an explicit config_path is provided but missing
         Exception: If there's an error loading the config
     """
+    config = {}
+
     if config_path is None:
-        # Try to find config.yaml in project root
-        # First, try relative to this file
+        # Optional legacy compatibility file. Normal users configure .env only.
         this_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(this_dir, "config.yaml")
 
         if not os.path.exists(config_path):
-            # Try current working directory
             config_path = os.path.join(os.getcwd(), "config.yaml")
+        if not os.path.exists(config_path):
+            config_path = None
 
-    if not os.path.exists(config_path):
+    if config_path is not None and not os.path.exists(config_path):
         raise FileNotFoundError(
             f"config.yaml not found at {config_path}. "
-            "Please ensure config.yaml exists in the project root."
+            "MemGUI-Bench normally uses .env; pass an existing config_path only "
+            "when using the legacy compatibility file."
         )
 
-    try:
-        with open(config_path, "r", encoding="utf-8") as file:
-            config = yaml.safe_load(file)
-    except Exception as e:
-        raise Exception(f"Error loading config.yaml: {e}")
+    if config_path is not None:
+        try:
+            with open(config_path, "r", encoding="utf-8") as file:
+                config = yaml.safe_load(file) or {}
+        except Exception as e:
+            raise Exception(f"Error loading config.yaml: {e}")
 
     # Apply .env overrides before derived defaults so empty endpoint fields can
     # still inherit BASE_URL.
@@ -158,7 +162,7 @@ def reload_config(verbose=False):
     """
     Force reload the configuration from file.
 
-    Use this if you need to pick up changes to config.yaml.
+    Use this if you need to pick up changes to .env or legacy config.yaml.
 
     Args:
         verbose: Whether to print configuration info
