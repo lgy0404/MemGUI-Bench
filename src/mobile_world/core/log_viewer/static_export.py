@@ -16,6 +16,8 @@ from mobile_world.core.log_viewer.utils import (
     get_all_trajectory_steps,
     get_latest_screenshot,
     get_latest_trajectory_action,
+    get_memgui_eval_info,
+    get_memgui_task_metadata,
     get_screenshots,
     get_task_folders,
     get_task_goal,
@@ -37,6 +39,62 @@ def _escape_html(text: str) -> str:
         .replace('"', "&quot;")
         .replace("'", "&#39;")
     )
+
+
+def _html_chip(label: str, cls: str = "") -> str:
+    classes = "meta-chip"
+    if cls:
+        classes += f" {cls}"
+    return f'<span class="{classes}">{_escape_html(str(label))}</span>'
+
+
+def _memgui_summary_html(metadata: dict) -> str:
+    chips = []
+    apps = ", ".join(metadata.get("apps") or [])
+    if apps:
+        chips.append(_html_chip(f"App: {apps}"))
+    golden_steps = metadata.get("golden_steps")
+    if golden_steps:
+        chips.append(_html_chip(f"Golden: {golden_steps}"))
+    if metadata.get("requires_ui_memory"):
+        chips.append(_html_chip("Memory", "meta-chip-warning"))
+    if metadata.get("is_cross_app"):
+        chips.append(_html_chip("Cross-App", "meta-chip-info"))
+    categories = metadata.get("categories") or []
+    if categories:
+        chips.append(_html_chip(categories[0]))
+    return f'<div class="meta-chip-list">{"".join(chips)}</div>' if chips else "-"
+
+
+def _pass_at_html(memgui_eval_info: dict) -> str:
+    pass_at = memgui_eval_info.get("pass_at") or {}
+    if not pass_at:
+        return "-"
+    chips = [
+        _html_chip(f"@{k} {'Pass' if passed else 'Fail'}", "meta-chip-success" if passed else "meta-chip-danger")
+        for k, passed in sorted(pass_at.items())
+    ]
+    return f'<div class="meta-chip-list">{"".join(chips)}</div>'
+
+
+def _format_memgui_irr(memgui_eval_info: dict, metadata: dict) -> str:
+    latest = memgui_eval_info.get("latest") or {}
+    irr = latest.get("irr_percentage")
+    if irr is not None:
+        return f"{irr:.1f}%"
+    if metadata and not metadata.get("requires_ui_memory"):
+        return "Skipped"
+    return "N/A"
+
+
+def _detail_meta_html(label: str, value, escape_value: bool = True) -> str:
+    value_html = _escape_html(str(value)) if escape_value else str(value)
+    return f"""
+            <div class="meta-item">
+                <span class="meta-label">{_escape_html(label)}</span>
+                <span class="meta-value">{value_html}</span>
+            </div>
+    """
 
 
 def _resize_and_save_image(
@@ -132,6 +190,14 @@ def export_static_site(log_root: str, output_dir: str, max_workers: int = 8) -> 
         latest_screenshot = get_latest_screenshot(task_folder)
         latest_action = get_latest_trajectory_action(task_folder)
         task_goal = get_task_goal(task_folder)
+        memgui_metadata = (
+            get_memgui_task_metadata(task_name) if suite_family == "memgui_bench" else {}
+        )
+        memgui_eval_info = (
+            get_memgui_eval_info(log_root, task_name)
+            if suite_family == "memgui_bench"
+            else {}
+        )
 
         # Queue screenshot processing
         screenshot_jobs.append((task_name, task_folder))
@@ -152,6 +218,8 @@ def export_static_site(log_root: str, output_dir: str, max_workers: int = 8) -> 
                 "reason": reason,
                 "screenshot_url": screenshot_url,
                 "latest_action": latest_action,
+                "memgui_metadata": memgui_metadata,
+                "memgui_eval_info": memgui_eval_info,
             }
         )
 
@@ -202,17 +270,75 @@ def export_static_site(log_root: str, output_dir: str, max_workers: int = 8) -> 
     logger.info(f"   Open {os.path.join(output_dir, 'index.html')} in a browser")
 
 
-def _generate_index_page(
-    task_data_list: list[dict],
-    stats: dict,
-    output_dir: str,
-    css: str,
-    title: str,
-    suite_family: str = "memgui_bench",
-) -> None:
-    """Generate the main index.html page."""
-    # Build stats HTML
-    stats_html = f"""
+def _build_index_stats_html(stats: dict, suite_family: str) -> str:
+    if suite_family == "memgui_bench":
+        memgui_eval = stats.get("memgui_eval") or {}
+        pass_rates = memgui_eval.get("pass_rates") or {}
+        pass_counts = memgui_eval.get("pass_counts") or {}
+        max_attempt = memgui_eval.get("max_attempt", 1) or 1
+        total_task_no = stats.get("total_task_no", 0)
+        pass_cards = []
+        for k in range(1, min(max_attempt, 3) + 1):
+            pass_cards.append(f"""
+        <div class="stat-card stat-card-wide">
+            <div class="stat-value success">{pass_rates.get(k, 0.0):.1f}%</div>
+            <div class="stat-label">pass@{k} ({pass_counts.get(k, 0)}/{total_task_no})</div>
+        </div>
+            """)
+
+        return f"""
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{total_task_no}</div>
+            <div class="stat-label">Task Set</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{stats["total"]}</div>
+            <div class="stat-label">Logged</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{memgui_eval.get("evaluated_count", stats["finished"])}</div>
+            <div class="stat-label">Evaluated</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value warning">{stats["running"]}</div>
+            <div class="stat-label">Running</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value success">{stats["success"]}</div>
+            <div class="stat-label">Success</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value danger">{stats["failed"]}</div>
+            <div class="stat-label">Failed</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{stats["avg_steps"]:.1f}</div>
+            <div class="stat-label">Avg Steps</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{stats.get("memgui_avg_step_ratio", 0.0):.2f}x</div>
+            <div class="stat-label">Step Ratio</div>
+        </div>
+    </div>
+    <div class="stats-grid stats-grid-rates">
+        {"".join(pass_cards)}
+        <div class="stat-card stat-card-wide">
+            <div class="stat-value">{memgui_eval.get("avg_irr", 0.0):.1f}%</div>
+            <div class="stat-label">IRR ({memgui_eval.get("irr_count", 0)}/{memgui_eval.get("memory_total", 0)} memory)</div>
+        </div>
+        <div class="stat-card stat-card-wide">
+            <div class="stat-value">{memgui_eval.get("mtpr", 0.0):.3f}</div>
+            <div class="stat-label">MTPR</div>
+        </div>
+        <div class="stat-card stat-card-wide">
+            <div class="stat-value">{memgui_eval.get("frr", 0.0):.1f}%</div>
+            <div class="stat-label">FRR ({memgui_eval.get("n_failed_1", 0)} failed@1)</div>
+        </div>
+    </div>
+        """
+
+    return f"""
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-value">{stats["total"]}</div>
@@ -267,6 +393,18 @@ def _generate_index_page(
     </div>
     """
 
+
+def _generate_index_page(
+    task_data_list: list[dict],
+    stats: dict,
+    output_dir: str,
+    css: str,
+    title: str,
+    suite_family: str = "memgui_bench",
+) -> None:
+    """Generate the main index.html page."""
+    stats_html = _build_index_stats_html(stats, suite_family)
+
     # Build task rows
     task_rows = []
     for task in task_data_list:
@@ -297,6 +435,37 @@ def _generate_index_page(
             else _escape_html(prediction)
         )
 
+        if suite_family == "memgui_bench":
+            memgui_metadata = task.get("memgui_metadata") or {}
+            memgui_eval_info = task.get("memgui_eval_info") or {}
+            latest_eval = memgui_eval_info.get("latest") or {}
+            eval_reason = latest_eval.get("details") or task.get("reason") or ""
+            badcase = latest_eval.get("badcase_category") or ""
+            badcase_html = _html_chip(badcase, "meta-chip-danger") if badcase else ""
+            failure_step = _escape_html(latest_eval.get("failure_step") or "-")
+            last_action = (
+                f"{_escape_html(str(latest.get('step')))} · {action_display}"
+                if latest
+                else "N/A"
+            )
+
+            task_rows.append(f"""
+        <tr>
+            <td class="col-screenshot">{screenshot_html}</td>
+            <td class="task-name-col"><a href="tasks/{task["name"]}.html">{_escape_html(task["name"])}</a></td>
+            <td class="col-goal">{goal_display}</td>
+            <td class="col-tags">{_memgui_summary_html(memgui_metadata)}</td>
+            <td class="col-status"><span class="badge {status_class}">{task["status"]}</span></td>
+            <td class="col-score">{score_display}</td>
+            <td class="col-pass">{_pass_at_html(memgui_eval_info)}</td>
+            <td class="col-irr">{_format_memgui_irr(memgui_eval_info, memgui_metadata)}</td>
+            <td class="col-step">{failure_step}</td>
+            <td class="col-reason"><div class="col-reason-block"><div class="col-reason-text">{_escape_html(eval_reason)}</div>{badcase_html}</div></td>
+            <td class="col-action">{last_action}</td>
+        </tr>
+            """)
+            continue
+
         task_rows.append(f"""
         <tr>
             <td class="col-screenshot">{screenshot_html}</td>
@@ -311,6 +480,36 @@ def _generate_index_page(
             <td class="col-prediction">{prediction_display}</td>
         </tr>
         """)
+
+    if suite_family == "memgui_bench":
+        table_headers = """
+                    <th>Screenshot</th>
+                    <th>Task Name</th>
+                    <th>Goal</th>
+                    <th>MemGUI</th>
+                    <th>Status</th>
+                    <th>Score</th>
+                    <th>pass@k</th>
+                    <th>IRR</th>
+                    <th>Failure Step</th>
+                    <th>Reason</th>
+                    <th>Last Action</th>
+        """
+        empty_colspan = 11
+    else:
+        table_headers = """
+                    <th>Screenshot</th>
+                    <th>Task Name</th>
+                    <th>Goal</th>
+                    <th>Tags</th>
+                    <th>Status</th>
+                    <th>Score</th>
+                    <th>Reason</th>
+                    <th>Step</th>
+                    <th>Action</th>
+                    <th>Prediction</th>
+        """
+        empty_colspan = 10
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -339,20 +538,11 @@ def _generate_index_page(
         <table class="task-table">
             <thead>
                 <tr>
-                    <th>Screenshot</th>
-                    <th>Task Name</th>
-                    <th>Goal</th>
-                    <th>Tags</th>
-                    <th>Status</th>
-                    <th>Score</th>
-                    <th>Reason</th>
-                    <th>Step</th>
-                    <th>Action</th>
-                    <th>Prediction</th>
+                    {table_headers}
                 </tr>
             </thead>
             <tbody>
-                {"".join(task_rows) if task_rows else '<tr><td colspan="10" style="text-align: center; padding: 40px; color: var(--text-secondary);">No tasks found</td></tr>'}
+                {"".join(task_rows) if task_rows else f'<tr><td colspan="{empty_colspan}" style="text-align: center; padding: 40px; color: var(--text-secondary);">No tasks found</td></tr>'}
             </tbody>
         </table>
     </div>
@@ -374,6 +564,13 @@ def _generate_task_page(
     task_info = get_task_info(log_root, task_name)
     if not task_info:
         return
+
+    metadata = read_log_metadata(log_root)
+    suite_family = metadata.get("suite_family", "memgui_bench")
+    is_memgui = suite_family == "memgui_bench"
+    memgui_metadata = task_info.get("memgui_metadata") or {}
+    memgui_eval_info = task_info.get("memgui_eval_info") or {}
+    latest_eval = memgui_eval_info.get("latest") or {}
 
     screenshots = task_info["screenshots"]
     trajectory_steps = task_info["trajectory_steps"]
@@ -398,6 +595,7 @@ def _generate_task_page(
             "index": i,
             "step_num": step_num,
             "action_type": action_type,
+            "action": action,
             "prediction": prediction,
             "screenshot_url": screenshot_url,
             "ask_user_response": ask_user_response,
@@ -434,7 +632,7 @@ def _generate_task_page(
 
     # Build tools HTML if available
     tools_html = ""
-    if task_info.get("tools"):
+    if (not is_memgui) and task_info.get("tools"):
         tools_items = []
         for tool in task_info["tools"]:
             schema_html = ""
@@ -486,7 +684,7 @@ def _generate_task_page(
 
     tools_link = (
         f'<a href="#" class="meta-value tools-link" onclick="document.getElementById(\'tools-modal\').style.display=\'flex\'; return false;">{len(task_info.get("tools", []))} tools</a>'
-        if task_info.get("tools")
+        if (not is_memgui) and task_info.get("tools")
         else '<span class="meta-value">-</span>'
     )
     token_link = (
@@ -494,6 +692,76 @@ def _generate_task_page(
         if task_info.get("token_usage")
         else '<span class="meta-value">-</span>'
     )
+
+    detail_meta_rows = [
+        _detail_meta_html("Suite", suite_family.replace("_", " ").title()),
+        f"""
+            <div class="meta-item">
+                <span class="meta-label">Status</span>
+                <span class="badge {status_class}">{task_info["status"]}</span>
+            </div>
+        """,
+        _detail_meta_html("Score", score_display),
+        _detail_meta_html("Goal", task_info.get("task_goal", "N/A")),
+    ]
+
+    if is_memgui:
+        apps = ", ".join(memgui_metadata.get("apps") or []) or "-"
+        categories = ", ".join(memgui_metadata.get("categories") or []) or "-"
+        detail_meta_rows.extend(
+            [
+                _detail_meta_html("Apps", apps),
+                _detail_meta_html("Categories", categories),
+                _detail_meta_html("Golden Steps", memgui_metadata.get("golden_steps") or "-"),
+                _detail_meta_html("Difficulty", memgui_metadata.get("difficulty") or "-"),
+                _detail_meta_html(
+                    "Memory", "Yes" if memgui_metadata.get("requires_ui_memory") else "No"
+                ),
+                _detail_meta_html(
+                    "Cross-App", "Yes" if memgui_metadata.get("is_cross_app") else "No"
+                ),
+                _detail_meta_html("Output Type", memgui_metadata.get("output_type") or "-"),
+                _detail_meta_html("pass@k", _pass_at_html(memgui_eval_info), escape_value=False),
+                _detail_meta_html("IRR", _format_memgui_irr(memgui_eval_info, memgui_metadata)),
+                _detail_meta_html("Eval Method", latest_eval.get("method") or "-"),
+                _detail_meta_html("Failure Step", latest_eval.get("failure_step") or "-"),
+                _detail_meta_html(
+                    "Reason", latest_eval.get("details") or task_info.get("reason") or "-"
+                ),
+            ]
+        )
+        if latest_eval.get("badcase_category"):
+            badcase_label = latest_eval["badcase_category"]
+            if latest_eval.get("badcase_confidence"):
+                badcase_label += f" ({latest_eval['badcase_confidence']})"
+            detail_meta_rows.append(_detail_meta_html("BadCase", badcase_label))
+        if latest_eval.get("badcase_key_failure_point"):
+            detail_meta_rows.append(
+                _detail_meta_html("Failure Point", latest_eval["badcase_key_failure_point"])
+            )
+        if latest_eval.get("badcase_suggested_improvement"):
+            detail_meta_rows.append(
+                _detail_meta_html("Suggested Fix", latest_eval["badcase_suggested_improvement"])
+            )
+    else:
+        detail_meta_rows.extend(
+            [
+                _detail_meta_html("Reason", task_info.get("reason") or "-"),
+                f"""
+            <div class="meta-item">
+                <span class="meta-label">Tools</span>
+                {tools_link}
+            </div>
+                """,
+            ]
+        )
+
+    detail_meta_rows.append(f"""
+            <div class="meta-item">
+                <span class="meta-label">Token Usage</span>
+                {token_link}
+            </div>
+    """)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -509,30 +777,7 @@ def _generate_task_page(
         <div class="back-nav"><a href="../index.html">← Back to Task List</a></div>
         <h1>Task: {_escape_html(task_name)}</h1>
         <div class="detail-meta-grid">
-            <div class="meta-item">
-                <span class="meta-label">Status</span>
-                <span class="badge {status_class}">{task_info["status"]}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Score</span>
-                <span class="meta-value">{score_display}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Goal</span>
-                <span class="meta-value">{_escape_html(task_info.get("task_goal", "N/A"))}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Reason</span>
-                <span class="meta-value">{_escape_html(task_info.get("reason") or "-")}</span>
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Tools</span>
-                {tools_link}
-            </div>
-            <div class="meta-item">
-                <span class="meta-label">Token Usage</span>
-                {token_link}
-            </div>
+            {"".join(detail_meta_rows)}
         </div>
     </div>
 
@@ -596,10 +841,22 @@ function selectStep(index) {{
         </div>
     `;
 
+    if (step.action && Object.keys(step.action).length > 0) {{
+        const actionStr = typeof step.action === 'object'
+            ? JSON.stringify(step.action, null, 2)
+            : String(step.action);
+        html += `
+            <div class="detail-group">
+                <label>Executed Action</label>
+                <pre class="prediction-box font-mono">${{escapeHtml(actionStr)}}</pre>
+            </div>
+        `;
+    }}
+
     if (step.prediction) {{
         html += `
             <div class="detail-group">
-                <label>Prediction</label>
+                <label>Model Prediction</label>
                 <div class="prediction-box">${{escapeHtml(step.prediction)}}</div>
             </div>
         `;

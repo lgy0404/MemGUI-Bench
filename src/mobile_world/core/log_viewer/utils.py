@@ -1,7 +1,10 @@
 """Utility functions for log viewer."""
 
+import ast
+import csv
 import json
 import os
+import re
 import time
 
 from loguru import logger
@@ -11,6 +14,7 @@ from mobile_world.core.api.info import get_task_registry
 # Global state for log root (could be enhanced with proper session management)
 _log_root_state: dict[str, str] = {}
 _task_registries: dict[str, object] = {}
+_ATTEMPT_EVAL_RE = re.compile(r"^(?P<prefix>.+_attempt_(?P<attempt>\d+))_evaluation$")
 
 
 def parse_result_file(result_file: str) -> tuple[float | None, str | None]:
@@ -23,6 +27,73 @@ def parse_result_file(result_file: str) -> tuple[float | None, str | None]:
         score = None
     reason = lines[1].strip() if len(lines) > 1 else None
     return score, reason
+
+
+def _clean_csv_value(value) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if text.lower() == "nan":
+        return ""
+    return text
+
+
+def _to_float(value) -> float | None:
+    text = _clean_csv_value(value)
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _to_int(value) -> int | None:
+    number = _to_float(value)
+    if number is None:
+        return None
+    return int(number)
+
+
+def _memgui_results_csv_path(log_root: str) -> str:
+    return os.path.join(log_root, "_memgui_eval", "results.csv")
+
+
+def _read_memgui_results_rows(log_root: str) -> tuple[list[dict], list[str]]:
+    csv_path = _memgui_results_csv_path(log_root)
+    if not os.path.exists(csv_path):
+        return [], []
+    try:
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            return list(reader), reader.fieldnames or []
+    except (OSError, csv.Error) as e:
+        logger.warning(f"Error reading MemGUI results.csv in {log_root}: {e}")
+        return [], []
+
+
+def _get_attempt_prefixes(fieldnames: list[str]) -> list[tuple[int, str]]:
+    prefixes: list[tuple[int, str]] = []
+    seen: set[tuple[int, str]] = set()
+    for field in fieldnames:
+        match = _ATTEMPT_EVAL_RE.match(field)
+        if not match:
+            continue
+        attempt = int(match.group("attempt"))
+        prefix = match.group("prefix")
+        item = (attempt, prefix)
+        if item not in seen:
+            prefixes.append(item)
+            seen.add(item)
+    return sorted(prefixes, key=lambda item: (item[0], item[1]))
+
+
+def _is_success_value(value) -> bool:
+    return _clean_csv_value(value).upper() == "S"
+
+
+def _is_evaluated_value(value) -> bool:
+    return _clean_csv_value(value).upper() in {"S", "F", "E"}
 
 
 def get_log_root_state() -> dict[str, str]:
@@ -128,10 +199,231 @@ def get_task_tags(task_name: str, suite_family: str = "memgui_bench") -> list[st
         if registry.has_task(task_name):
             task = registry.get_task(task_name)
             if hasattr(task, "task_tags"):
-                return task.task_tags
+                return sorted(task.task_tags)
     except Exception:
         pass
     return []
+
+
+def _parse_memgui_list(value: str | None) -> list[str]:
+    if not value:
+        return []
+    try:
+        parsed = ast.literal_eval(value)
+    except (SyntaxError, ValueError):
+        return [value]
+    if isinstance(parsed, list):
+        return [str(item) for item in parsed]
+    return [str(parsed)]
+
+
+def _parse_bool_flag(value: str | None) -> bool:
+    return (value or "").strip().upper() == "Y"
+
+
+def get_memgui_task_metadata(task_name: str) -> dict:
+    """Return MemGUI-specific metadata for a task."""
+    registry = get_registry("memgui_bench")
+    if not registry:
+        return {}
+    try:
+        if not registry.has_task(task_name):
+            return {}
+        task = registry.get_task(task_name)
+        record = task.record
+    except Exception:
+        return {}
+
+    try:
+        golden_steps = int(float(record.golden_steps))
+    except ValueError:
+        golden_steps = None
+
+    return {
+        "apps": _parse_memgui_list(record.task_app),
+        "num_apps": record.num_apps,
+        "is_cross_app": _parse_bool_flag(record.is_cross_app),
+        "categories": _parse_memgui_list(record.category),
+        "requires_ui_memory": _parse_bool_flag(record.requires_ui_memory),
+        "shortcut_potential": record.shortcut_potential,
+        "output_type": record.output_type,
+        "golden_steps": golden_steps,
+        "difficulty": record.task_difficulty,
+        "language": record.task_language,
+    }
+
+
+def get_memgui_eval_info(log_root: str, task_name: str) -> dict:
+    """Return MemGUI-Eval CSV details for one task."""
+    rows, fieldnames = _read_memgui_results_rows(log_root)
+    if not rows:
+        return {}
+
+    row = next((item for item in rows if item.get("task_identifier") == task_name), None)
+    if not row:
+        return {}
+
+    attempts = []
+    successful_attempts: list[int] = []
+    for attempt, prefix in _get_attempt_prefixes(fieldnames):
+        evaluation = _clean_csv_value(row.get(f"{prefix}_evaluation"))
+        if not evaluation:
+            continue
+        is_success = evaluation.upper() == "S"
+        if is_success:
+            successful_attempts.append(attempt)
+        attempts.append(
+            {
+                "attempt": attempt,
+                "prefix": prefix,
+                "evaluation": evaluation,
+                "success": is_success,
+                "details": _clean_csv_value(row.get(f"{prefix}_details")),
+                "method": _clean_csv_value(row.get(f"{prefix}_evaluation_method")),
+                "failure_step": _clean_csv_value(row.get(f"{prefix}_failure_step")),
+                "irr_percentage": _to_float(row.get(f"{prefix}_irr_percentage")),
+                "irr_total_units": _clean_csv_value(row.get(f"{prefix}_irr_total_units")),
+                "irr_correct_units": _clean_csv_value(row.get(f"{prefix}_irr_correct_units")),
+                "irr_reason": _clean_csv_value(row.get(f"{prefix}_irr_reason")),
+                "irr_method": _clean_csv_value(row.get(f"{prefix}_irr_method")),
+                "badcase_category": _clean_csv_value(row.get(f"{prefix}_badcase_category")),
+                "badcase_confidence": _clean_csv_value(row.get(f"{prefix}_badcase_confidence")),
+                "badcase_key_failure_point": _clean_csv_value(
+                    row.get(f"{prefix}_badcase_key_failure_point")
+                ),
+                "badcase_suggested_improvement": _clean_csv_value(
+                    row.get(f"{prefix}_badcase_suggested_improvement")
+                ),
+            }
+        )
+
+    latest_attempt = attempts[-1] if attempts else {}
+    max_attempt = max((attempt["attempt"] for attempt in attempts), default=0)
+    pass_at = {
+        k: any(attempt <= k for attempt in successful_attempts)
+        for k in range(1, max(max_attempt, 1) + 1)
+    }
+
+    return {
+        "attempts": attempts,
+        "latest": latest_attempt,
+        "successful_attempts": successful_attempts,
+        "pass_at": pass_at,
+        "max_attempt": max_attempt,
+    }
+
+
+def calculate_memgui_eval_metrics(log_root: str, total_tasks: int) -> dict:
+    """Calculate MemGUI leaderboard-style metrics from `_memgui_eval/results.csv`."""
+    rows, fieldnames = _read_memgui_results_rows(log_root)
+    attempt_prefixes = _get_attempt_prefixes(fieldnames)
+    max_attempt = max((attempt for attempt, _ in attempt_prefixes), default=1)
+
+    pass_counts = {k: 0 for k in range(1, max_attempt + 1)}
+    pass_memory_counts = {k: 0 for k in range(1, max_attempt + 1)}
+    pass_standard_counts = {k: 0 for k in range(1, max_attempt + 1)}
+    task_attempt_results: dict[str, dict[int, bool]] = {}
+
+    memory_total = 0
+    standard_total = 0
+    evaluated_count = 0
+    irr_sum = 0.0
+    irr_count = 0
+
+    for row in rows:
+        task_id = row.get("task_identifier", "")
+        if not task_id:
+            continue
+        is_memory_task = _parse_bool_flag(row.get("requires_ui_memory"))
+        if is_memory_task:
+            memory_total += 1
+        else:
+            standard_total += 1
+
+        attempt_results: dict[int, bool] = {}
+        first_success_attempt: int | None = None
+        has_evaluation = False
+        for attempt, prefix in attempt_prefixes:
+            evaluation_value = row.get(f"{prefix}_evaluation")
+            if _is_evaluated_value(evaluation_value):
+                has_evaluation = True
+            success = _is_success_value(evaluation_value)
+            attempt_results[attempt] = success
+            if success and first_success_attempt is None:
+                first_success_attempt = attempt
+
+            if is_memory_task and attempt == 1:
+                irr_value = _to_float(row.get(f"{prefix}_irr_percentage"))
+                if irr_value is not None:
+                    irr_sum += irr_value
+                    irr_count += 1
+
+        if has_evaluation:
+            evaluated_count += 1
+        task_attempt_results[task_id] = attempt_results
+
+        if first_success_attempt is not None:
+            for k in range(first_success_attempt, max_attempt + 1):
+                pass_counts[k] += 1
+                if is_memory_task:
+                    pass_memory_counts[k] += 1
+                else:
+                    pass_standard_counts[k] += 1
+
+    denominator = total_tasks if total_tasks > 0 else len(rows)
+    pass_rates = {
+        k: (pass_counts[k] / denominator * 100 if denominator > 0 else 0.0)
+        for k in pass_counts
+    }
+    pass_memory_rates = {
+        k: (pass_memory_counts[k] / memory_total * 100 if memory_total > 0 else 0.0)
+        for k in pass_memory_counts
+    }
+    pass_standard_rates = {
+        k: (pass_standard_counts[k] / standard_total * 100 if standard_total > 0 else 0.0)
+        for k in pass_standard_counts
+    }
+
+    n_failed_1 = 0
+    recovery_counts = {k: 0 for k in range(2, max_attempt + 1)}
+    for results in task_attempt_results.values():
+        if results.get(1, False):
+            continue
+        if 1 in results:
+            n_failed_1 += 1
+        for k in range(2, max_attempt + 1):
+            if results.get(k, False) and all(not results.get(i, False) for i in range(1, k)):
+                recovery_counts[k] += 1
+                break
+
+    weighted_recoveries = sum(
+        (1.0 / (2 ** (k - 2))) * count for k, count in recovery_counts.items()
+    )
+    frr = weighted_recoveries / n_failed_1 * 100 if n_failed_1 > 0 else 0.0
+    mtpr = (
+        pass_memory_rates.get(1, 0.0) / pass_standard_rates.get(1, 0.0)
+        if pass_standard_rates.get(1, 0.0) > 0
+        else 0.0
+    )
+
+    return {
+        "max_attempt": max_attempt,
+        "evaluated_count": evaluated_count,
+        "memory_total": memory_total,
+        "standard_total": standard_total,
+        "pass_counts": pass_counts,
+        "pass_rates": pass_rates,
+        "pass_memory_counts": pass_memory_counts,
+        "pass_memory_rates": pass_memory_rates,
+        "pass_standard_counts": pass_standard_counts,
+        "pass_standard_rates": pass_standard_rates,
+        "avg_irr": irr_sum / irr_count if irr_count else 0.0,
+        "irr_count": irr_count,
+        "mtpr": mtpr,
+        "frr": frr,
+        "recovery_counts": recovery_counts,
+        "n_failed_1": n_failed_1,
+    }
 
 
 def count_ask_user_actions(trajectory_steps: list[dict]) -> int:
@@ -415,12 +707,20 @@ def get_task_info(log_root: str, task_name: str) -> dict | None:
     if not os.path.exists(task_folder):
         return None
 
+    metadata = read_log_metadata(log_root)
+    suite_family = metadata.get("suite_family", "memgui_bench")
     status, score, reason = get_task_status(task_folder)
     screenshots = get_screenshots(task_folder)
     trajectory_steps = get_all_trajectory_steps(task_folder)
     task_goal = get_task_goal(task_folder)
     tools = get_task_tools(task_folder)
     token_usage = get_task_token_usage(task_folder)
+    memgui_metadata = (
+        get_memgui_task_metadata(task_name) if suite_family == "memgui_bench" else {}
+    )
+    memgui_eval_info = (
+        get_memgui_eval_info(log_root, task_name) if suite_family == "memgui_bench" else {}
+    )
 
     return {
         "name": task_name,
@@ -433,6 +733,8 @@ def get_task_info(log_root: str, task_name: str) -> dict | None:
         "task_goal": task_goal,
         "tools": tools,
         "token_usage": token_usage,
+        "memgui_metadata": memgui_metadata,
+        "memgui_eval_info": memgui_eval_info,
     }
 
 
@@ -476,6 +778,15 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
             "uiq": 0.0,
             "avg_queries": 0.0,
             "avg_mcp_calls": 0.0,
+            "finished_success_rate": 0.0,
+            "memgui_memory_success": 0,
+            "memgui_memory_finished": 0,
+            "memgui_memory_success_rate": 0.0,
+            "memgui_cross_app_success": 0,
+            "memgui_cross_app_finished": 0,
+            "memgui_cross_app_success_rate": 0.0,
+            "memgui_avg_step_ratio": 0.0,
+            "memgui_eval": {},
         }
 
     finished_count = 0
@@ -505,6 +816,12 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
 
     # Ave. MCP Calls: sum of MCP calls for MCP tasks
     total_mcp_calls = 0
+    memgui_memory_success = 0
+    memgui_memory_finished = 0
+    memgui_cross_app_success = 0
+    memgui_cross_app_finished = 0
+    total_memgui_step_ratio = 0.0
+    memgui_step_ratio_count = 0
 
     for task_name in task_folders:
         task_folder = os.path.join(log_root, task_name)
@@ -521,6 +838,15 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
         has_mcp = "agent-mcp" in task_tags
         has_user_interaction = "agent-user-interaction" in task_tags
         is_standard = not has_mcp and not has_user_interaction
+        memgui_metadata = (
+            get_memgui_task_metadata(task_name) if suite_family == "memgui_bench" else {}
+        )
+        is_memgui_memory = bool(memgui_metadata.get("requires_ui_memory"))
+        is_memgui_cross_app = bool(memgui_metadata.get("is_cross_app"))
+        golden_steps = memgui_metadata.get("golden_steps")
+        if isinstance(golden_steps, int) and golden_steps > 0:
+            total_memgui_step_ratio += step_count / golden_steps
+            memgui_step_ratio_count += 1
 
         # Count actions
         c_i = count_ask_user_actions(trajectory_steps)
@@ -567,6 +893,16 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
                 if is_success:
                     standard_success += 1
 
+            if suite_family == "memgui_bench":
+                if is_memgui_memory:
+                    memgui_memory_finished += 1
+                    if is_success:
+                        memgui_memory_success += 1
+                if is_memgui_cross_app:
+                    memgui_cross_app_finished += 1
+                    if is_success:
+                        memgui_cross_app_success += 1
+
         elif status == "Stale":
             stale_count += 1
         else:
@@ -578,6 +914,9 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
     registry = get_registry(suite_family)
     total_task_no = len(registry.list_tasks()) if registry else total
     success_rate = (success_count / total_task_no * 100) if total_task_no > 0 else 0.0
+    finished_success_rate = (
+        (success_count / finished_count * 100) if finished_count > 0 else 0.0
+    )
     avg_steps = (total_steps / total) if total > 0 else 0.0
 
     mcp_success_rate = (mcp_success / mcp_finished * 100) if mcp_finished > 0 else 0.0
@@ -601,6 +940,26 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
 
     # Ave. MCP Calls = (1/|I_MCP|) * sum(m_i for i in I_MCP)
     avg_mcp_calls = (total_mcp_calls / mcp_finished) if mcp_finished > 0 else 0.0
+    memgui_memory_success_rate = (
+        (memgui_memory_success / memgui_memory_finished * 100)
+        if memgui_memory_finished > 0
+        else 0.0
+    )
+    memgui_cross_app_success_rate = (
+        (memgui_cross_app_success / memgui_cross_app_finished * 100)
+        if memgui_cross_app_finished > 0
+        else 0.0
+    )
+    memgui_avg_step_ratio = (
+        total_memgui_step_ratio / memgui_step_ratio_count
+        if memgui_step_ratio_count > 0
+        else 0.0
+    )
+    memgui_eval_metrics = (
+        calculate_memgui_eval_metrics(log_root, total_task_no)
+        if suite_family == "memgui_bench"
+        else {}
+    )
 
     return {
         "total_task_no": total_task_no,
@@ -611,6 +970,7 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
         "success": success_count,
         "failed": failed_count,
         "success_rate": success_rate,
+        "finished_success_rate": finished_success_rate,
         "total_steps": total_steps,
         "avg_steps": avg_steps,
         "mcp_success": mcp_success,
@@ -625,4 +985,12 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
         "uiq": uiq,
         "avg_queries": avg_queries,
         "avg_mcp_calls": avg_mcp_calls,
+        "memgui_memory_success": memgui_memory_success,
+        "memgui_memory_finished": memgui_memory_finished,
+        "memgui_memory_success_rate": memgui_memory_success_rate,
+        "memgui_cross_app_success": memgui_cross_app_success,
+        "memgui_cross_app_finished": memgui_cross_app_finished,
+        "memgui_cross_app_success_rate": memgui_cross_app_success_rate,
+        "memgui_avg_step_ratio": memgui_avg_step_ratio,
+        "memgui_eval": memgui_eval_metrics,
     }

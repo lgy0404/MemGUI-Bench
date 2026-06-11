@@ -18,6 +18,8 @@ from mobile_world.core.log_viewer.utils import (
     get_latest_screenshot,
     get_latest_trajectory_action,
     get_log_root_state,
+    get_memgui_eval_info,
+    get_memgui_task_metadata,
     get_screenshots,
     get_task_folders,
     get_task_goal,
@@ -153,7 +155,100 @@ def register_routes(rt, base_path: str = "/"):
 
         return Div(*items, cls="pagination")
 
-    def _build_stats_ui(stats):
+    def _build_stats_ui(stats, suite_family: str = "memgui_bench"):
+        if suite_family == "memgui_bench":
+            memgui_eval = stats.get("memgui_eval") or {}
+            pass_rates = memgui_eval.get("pass_rates") or {}
+            pass_counts = memgui_eval.get("pass_counts") or {}
+            max_attempt = memgui_eval.get("max_attempt", 1) or 1
+            pass_cards = [
+                Div(
+                    Div(f"{pass_rates.get(k, 0.0):.1f}%", cls="stat-value success"),
+                    Div(
+                        f"pass@{k} ({pass_counts.get(k, 0)}/{stats.get('total_task_no', 0)})",
+                        cls="stat-label",
+                    ),
+                    cls="stat-card stat-card-wide",
+                )
+                for k in range(1, min(max_attempt, 3) + 1)
+            ]
+            return Div(
+                Div(
+                    Div(
+                        Div(stats.get("total_task_no", 0), cls="stat-value"),
+                        Div("Task Set", cls="stat-label"),
+                        cls="stat-card",
+                    ),
+                    Div(
+                        Div(stats["total"], cls="stat-value"),
+                        Div("Logged", cls="stat-label"),
+                        cls="stat-card",
+                    ),
+                    Div(
+                        Div(memgui_eval.get("evaluated_count", stats["finished"]), cls="stat-value"),
+                        Div("Evaluated", cls="stat-label"),
+                        cls="stat-card",
+                    ),
+                    Div(
+                        Div(stats["running"], cls="stat-value warning"),
+                        Div("Running", cls="stat-label"),
+                        cls="stat-card",
+                    ),
+                    Div(
+                        Div(stats["success"], cls="stat-value success"),
+                        Div("Success", cls="stat-label"),
+                        cls="stat-card",
+                    ),
+                    Div(
+                        Div(stats["failed"], cls="stat-value danger"),
+                        Div("Failed", cls="stat-label"),
+                        cls="stat-card",
+                    ),
+                    Div(
+                        Div(f"{stats['avg_steps']:.1f}", cls="stat-value"),
+                        Div("Avg Steps", cls="stat-label"),
+                        cls="stat-card",
+                    ),
+                    Div(
+                        Div(f"{stats.get('memgui_avg_step_ratio', 0.0):.2f}x", cls="stat-value"),
+                        Div("Step Ratio", cls="stat-label", title="Actual steps / golden steps"),
+                        cls="stat-card",
+                    ),
+                    cls="stats-grid",
+                ),
+                Div(
+                    *pass_cards,
+                    Div(
+                        Div(f"{memgui_eval.get('avg_irr', 0.0):.1f}%", cls="stat-value"),
+                        Div(
+                            f"IRR ({memgui_eval.get('irr_count', 0)}/{memgui_eval.get('memory_total', 0)} memory)",
+                            cls="stat-label",
+                            title="Information Retention Rate for memory-intensive tasks",
+                        ),
+                        cls="stat-card stat-card-wide",
+                    ),
+                    Div(
+                        Div(f"{memgui_eval.get('mtpr', 0.0):.3f}", cls="stat-value"),
+                        Div(
+                            "MTPR",
+                            cls="stat-label",
+                            title="Memory Task Performance Ratio: memory pass@1 / standard pass@1",
+                        ),
+                        cls="stat-card stat-card-wide",
+                    ),
+                    Div(
+                        Div(f"{memgui_eval.get('frr', 0.0):.1f}%", cls="stat-value"),
+                        Div(
+                            f"FRR ({memgui_eval.get('n_failed_1', 0)} failed@1)",
+                            cls="stat-label",
+                            title="Failure Recovery Rate across repeated attempts",
+                        ),
+                        cls="stat-card stat-card-wide",
+                    ),
+                    cls="stats-grid stats-grid-rates",
+                ),
+            )
+
         return Div(
             # Row 1: General stats
             Div(
@@ -256,6 +351,83 @@ def register_routes(rt, base_path: str = "/"):
             ),
         )
 
+    def _memgui_summary_cell(metadata: dict):
+        if not metadata:
+            return "-"
+        chips = []
+        apps = ", ".join(metadata.get("apps") or [])
+        if apps:
+            chips.append(Span(f"App: {apps}", cls="meta-chip"))
+        golden_steps = metadata.get("golden_steps")
+        if golden_steps:
+            chips.append(Span(f"Golden: {golden_steps}", cls="meta-chip"))
+        if metadata.get("requires_ui_memory"):
+            chips.append(Span("Memory", cls="meta-chip meta-chip-warning"))
+        if metadata.get("is_cross_app"):
+            chips.append(Span("Cross-App", cls="meta-chip meta-chip-info"))
+        categories = metadata.get("categories") or []
+        if categories:
+            chips.append(Span(categories[0], cls="meta-chip"))
+        return Div(*chips, cls="meta-chip-list") if chips else "-"
+
+    def _detail_meta_item(label: str, value, value_cls: str = "meta-value"):
+        return Div(Span(label, cls="meta-label"), Span(value, cls=value_cls), cls="meta-item")
+
+    def _pass_at_cell(memgui_eval_info: dict):
+        pass_at = memgui_eval_info.get("pass_at") or {}
+        if not pass_at:
+            return "-"
+        chips = []
+        for k in sorted(pass_at):
+            passed = pass_at[k]
+            chips.append(
+                Span(
+                    f"@{k} {'Pass' if passed else 'Fail'}",
+                    cls=f"meta-chip {'meta-chip-success' if passed else 'meta-chip-danger'}",
+                )
+            )
+        return Div(*chips, cls="meta-chip-list")
+
+    def _format_irr(memgui_eval_info: dict, metadata: dict) -> str:
+        latest = memgui_eval_info.get("latest") or {}
+        irr = latest.get("irr_percentage")
+        if irr is not None:
+            return f"{irr:.1f}%"
+        if metadata and not metadata.get("requires_ui_memory"):
+            return "Skipped"
+        return "N/A"
+
+    def _task_table_headers(suite_family: str):
+        if suite_family == "memgui_bench":
+            return [
+                Th("Screenshot"),
+                Th("Task Name"),
+                Th("Goal"),
+                Th("MemGUI"),
+                Th("Status"),
+                Th("Score"),
+                Th("pass@k"),
+                Th("IRR"),
+                Th("Failure Step"),
+                Th("Reason"),
+                Th("Last Action"),
+            ]
+        return [
+            Th("Screenshot"),
+            Th("Task Name"),
+            Th("Goal"),
+            Th("Tags"),
+            Th("Status"),
+            Th("Score"),
+            Th("Reason"),
+            Th("Step"),
+            Th("Action"),
+            Th("Prediction"),
+        ]
+
+    def _task_table_colspan(suite_family: str) -> int:
+        return len(_task_table_headers(suite_family))
+
     def _process_tasks_for_display(
         log_root, status_filter, score_filter, tag_filter, search_query="", suite_family="memgui_bench"
     ):
@@ -280,6 +452,14 @@ def register_routes(rt, base_path: str = "/"):
 
             status, score, reason = get_task_status(task_folder)
             task_tags = get_task_tags(task_name, suite_family=suite_family)
+            memgui_metadata = (
+                get_memgui_task_metadata(task_name) if suite_family == "memgui_bench" else {}
+            )
+            memgui_eval_info = (
+                get_memgui_eval_info(log_root, task_name)
+                if suite_family == "memgui_bench"
+                else {}
+            )
 
             # Filtering
             if status_filter != "all":
@@ -310,6 +490,7 @@ def register_routes(rt, base_path: str = "/"):
             latest_action = get_latest_trajectory_action(task_folder)
             task_goal = get_task_goal(task_folder)
             score_display = f"{score:.2f}" if score is not None else "N/A"
+            latest_eval = memgui_eval_info.get("latest") or {}
 
             screenshot_url = None
             if latest_screenshot:
@@ -318,56 +499,88 @@ def register_routes(rt, base_path: str = "/"):
                     f"static/screenshots/{task_name}/{subfolder}/{filename.replace('.png', '')}?log_root={quote(log_root)}"
                 )
 
-            task_rows.append(
-                Tr(
-                    Td(
-                        Img(
-                            src=screenshot_url,
-                            cls="thumb",
-                            alt="Latest screenshot",
-                        )
-                        if screenshot_url
-                        else Span("No screenshot", style="color: #666;"),
-                        cls="col-screenshot",
+            common_cells = [
+                Td(
+                    Img(
+                        src=screenshot_url,
+                        cls="thumb",
+                        alt="Latest screenshot",
+                    )
+                    if screenshot_url
+                    else Span("No screenshot", style="color: #666;"),
+                    cls="col-screenshot",
+                ),
+                Td(
+                    A(
+                        task_name,
+                        href=url(f"task/{task_name}?log_root={quote(log_root)}"),
+                        target="_blank",
                     ),
-                    Td(
-                        A(
-                            task_name,
-                            href=url(f"task/{task_name}?log_root={quote(log_root)}"),
-                            target="_blank",
-                        ),
-                        cls="task-name-col",
-                    ),
-                    Td(_truncated_goal(task_goal, task_name), cls="col-goal"),
-                    Td(
-                        ", ".join(sorted(task_tags)) if task_tags else "-",
-                        cls="col-tags",
-                    ),
-                    Td(_status_badge(status), cls="col-status"),
-                    Td(score_display, cls="col-score"),
-                    Td(reason if reason else "", cls="col-reason"),
-                    Td(
-                        str(latest_action["step"]) if latest_action else "N/A",
-                        cls="col-step",
-                    ),
-                    Td(
-                        latest_action["action_type"] if latest_action else "N/A",
-                        cls="col-action",
-                    ),
-                    Td(
-                        latest_action["prediction"][:100] + "..."
-                        if latest_action
-                        and latest_action.get("prediction")
-                        and len(latest_action["prediction"]) > 100
-                        else (
-                            latest_action["prediction"]
-                            if latest_action and latest_action.get("prediction")
-                            else ""
-                        ),
-                        cls="col-prediction",
-                    ),
+                    cls="task-name-col",
+                ),
+                Td(_truncated_goal(task_goal, task_name), cls="col-goal"),
+            ]
+
+            if suite_family == "memgui_bench":
+                failure_step = latest_eval.get("failure_step") or "-"
+                eval_reason = latest_eval.get("details") or reason or ""
+                badcase = latest_eval.get("badcase_category") or ""
+                reason_content = Div(
+                    Div(eval_reason, cls="col-reason-text"),
+                    Span(badcase, cls="meta-chip meta-chip-danger") if badcase else None,
+                    cls="col-reason-block",
                 )
-            )
+                task_rows.append(
+                    Tr(
+                        *common_cells,
+                        Td(_memgui_summary_cell(memgui_metadata), cls="col-tags"),
+                        Td(_status_badge(status), cls="col-status"),
+                        Td(score_display, cls="col-score"),
+                        Td(_pass_at_cell(memgui_eval_info), cls="col-pass"),
+                        Td(_format_irr(memgui_eval_info, memgui_metadata), cls="col-irr"),
+                        Td(str(failure_step), cls="col-step"),
+                        Td(reason_content, cls="col-reason"),
+                        Td(
+                            f"{latest_action['step']} · {latest_action['action_type']}"
+                            if latest_action
+                            else "N/A",
+                            cls="col-action",
+                        ),
+                    )
+                )
+            else:
+                task_rows.append(
+                    Tr(
+                        *common_cells,
+                        Td(
+                            ", ".join(sorted(task_tags)) if task_tags else "-",
+                            cls="col-tags",
+                        ),
+                        Td(_status_badge(status), cls="col-status"),
+                        Td(score_display, cls="col-score"),
+                        Td(reason if reason else "", cls="col-reason"),
+                        Td(
+                            str(latest_action["step"]) if latest_action else "N/A",
+                            cls="col-step",
+                        ),
+                        Td(
+                            latest_action["action_type"] if latest_action else "N/A",
+                            cls="col-action",
+                        ),
+                        Td(
+                            latest_action["prediction"][:100] + "..."
+                            if latest_action
+                            and latest_action.get("prediction")
+                            and len(latest_action["prediction"]) > 100
+                            else (
+                                latest_action["prediction"]
+                                if latest_action and latest_action.get("prediction")
+                                else ""
+                            ),
+                            cls="col-prediction",
+                        ),
+                    )
+                )
         return task_rows, filtered_count, total_count
 
     def _process_user_trajectories_for_display(log_root, search_query=""):
@@ -551,6 +764,7 @@ def register_routes(rt, base_path: str = "/"):
                 "index": i,
                 "step_num": step_num,
                 "action_type": action_type,
+                "action": action,
                 "prediction": prediction,
                 "screenshot_url": screenshot_url,
                 "ask_user_response": ask_user_response,
@@ -927,6 +1141,7 @@ def register_routes(rt, base_path: str = "/"):
                 "index": i,
                 "step_num": step_num,
                 "action_type": action_type,
+                "action": action,
                 "prediction": prediction,
                 "screenshot_url": screenshot_url,
                 "ask_user_response": ask_user_response,
@@ -956,6 +1171,102 @@ def register_routes(rt, base_path: str = "/"):
             )
 
         score_display = f"{task_info['score']:.2f}" if task_info["score"] is not None else "N/A"
+        is_memgui = suite_family == "memgui_bench"
+        memgui_metadata = task_info.get("memgui_metadata") or {}
+        memgui_eval_info = task_info.get("memgui_eval_info") or {}
+        latest_eval = memgui_eval_info.get("latest") or {}
+
+        detail_meta_items = [
+            _detail_meta_item("Suite", suite_family.replace("_", " ").title()),
+            Div(
+                Span("Status", cls="meta-label"),
+                _status_badge(task_info["status"]),
+                cls="meta-item",
+            ),
+            _detail_meta_item("Score", score_display),
+            _detail_meta_item("Goal", task_info.get("task_goal", "N/A")),
+        ]
+
+        if is_memgui:
+            apps = ", ".join(memgui_metadata.get("apps") or []) or "-"
+            categories = ", ".join(memgui_metadata.get("categories") or []) or "-"
+            detail_meta_items.extend(
+                [
+                    _detail_meta_item("Apps", apps),
+                    _detail_meta_item("Categories", categories),
+                    _detail_meta_item("Golden Steps", memgui_metadata.get("golden_steps") or "-"),
+                    _detail_meta_item("Difficulty", memgui_metadata.get("difficulty") or "-"),
+                    _detail_meta_item(
+                        "Memory",
+                        "Yes" if memgui_metadata.get("requires_ui_memory") else "No",
+                    ),
+                    _detail_meta_item(
+                        "Cross-App",
+                        "Yes" if memgui_metadata.get("is_cross_app") else "No",
+                    ),
+                    _detail_meta_item("Output Type", memgui_metadata.get("output_type") or "-"),
+                    Div(
+                        Span("pass@k", cls="meta-label"),
+                        _pass_at_cell(memgui_eval_info),
+                        cls="meta-item",
+                    ),
+                    _detail_meta_item("IRR", _format_irr(memgui_eval_info, memgui_metadata)),
+                    _detail_meta_item("Eval Method", latest_eval.get("method") or "-"),
+                    _detail_meta_item("Failure Step", latest_eval.get("failure_step") or "-"),
+                    _detail_meta_item(
+                        "Reason",
+                        latest_eval.get("details") or task_info.get("reason") or "-",
+                    ),
+                ]
+            )
+            if latest_eval.get("badcase_category"):
+                badcase_label = latest_eval["badcase_category"]
+                if latest_eval.get("badcase_confidence"):
+                    badcase_label += f" ({latest_eval['badcase_confidence']})"
+                detail_meta_items.append(_detail_meta_item("BadCase", badcase_label))
+            if latest_eval.get("badcase_key_failure_point"):
+                detail_meta_items.append(
+                    _detail_meta_item("Failure Point", latest_eval["badcase_key_failure_point"])
+                )
+            if latest_eval.get("badcase_suggested_improvement"):
+                detail_meta_items.append(
+                    _detail_meta_item(
+                        "Suggested Fix", latest_eval["badcase_suggested_improvement"]
+                    )
+                )
+        else:
+            detail_meta_items.extend(
+                [
+                    _detail_meta_item("Reason", task_info.get("reason", "-")),
+                    Div(
+                        Span("Tools", cls="meta-label"),
+                        A(
+                            f"{len(task_info.get('tools', []))} tools",
+                            href="#",
+                            cls="meta-value tools-link",
+                            onclick="document.getElementById('tools-modal').style.display='flex'; return false;",
+                        )
+                        if task_info.get("tools")
+                        else Span("-", cls="meta-value"),
+                        cls="meta-item",
+                    ),
+                ]
+            )
+
+        detail_meta_items.append(
+            Div(
+                Span("Token Usage", cls="meta-label"),
+                A(
+                    "View",
+                    href="#",
+                    cls="meta-value tools-link",
+                    onclick="document.getElementById('token-usage-modal').style.display='flex'; return false;",
+                )
+                if task_info.get("token_usage")
+                else Span("-", cls="meta-value"),
+                cls="meta-item",
+            )
+        )
 
         # Embed step data as JSON for JS
         # Escape </script> and <!-- to prevent breaking the script tag
@@ -1005,10 +1316,22 @@ def register_routes(rt, base_path: str = "/"):
                     </div>
                 `;
 
+                if (step.action && Object.keys(step.action).length > 0) {{
+                    const actionStr = typeof step.action === 'object'
+                        ? JSON.stringify(step.action, null, 2)
+                        : String(step.action);
+                    html += `
+                        <div class="detail-group">
+                            <label>Executed Action</label>
+                            <pre class="prediction-box font-mono">${{escapeHtml(actionStr)}}</pre>
+                        </div>
+                    `;
+                }}
+
                 if (step.prediction) {{
                     html += `
                         <div class="detail-group">
-                            <label>Prediction</label>
+                            <label>Model Prediction</label>
                             <div class="prediction-box">${{escapeHtml(step.prediction)}}</div>
                         </div>
                     `;
@@ -1084,55 +1407,7 @@ def register_routes(rt, base_path: str = "/"):
                     ),
                     H1(f"Task: {task_name}"),
                     Div(
-                        Div(
-                            Span("Suite", cls="meta-label"),
-                            Span(suite_family.replace("_", " ").title(), cls="meta-value"),
-                            cls="meta-item",
-                        ),
-                        Div(
-                            Span("Status", cls="meta-label"),
-                            _status_badge(task_info["status"]),
-                            cls="meta-item",
-                        ),
-                        Div(
-                            Span("Score", cls="meta-label"),
-                            Span(score_display, cls="meta-value"),
-                            cls="meta-item",
-                        ),
-                        Div(
-                            Span("Goal", cls="meta-label"),
-                            Span(task_info.get("task_goal", "N/A"), cls="meta-value"),
-                            cls="meta-item",
-                        ),
-                        Div(
-                            Span("Reason", cls="meta-label"),
-                            Span(task_info.get("reason", "-"), cls="meta-value"),
-                            cls="meta-item",
-                        ),
-                        Div(
-                            Span("Tools", cls="meta-label"),
-                            A(
-                                f"{len(task_info.get('tools', []))} tools",
-                                href="#",
-                                cls="meta-value tools-link",
-                                onclick="document.getElementById('tools-modal').style.display='flex'; return false;",
-                            )
-                            if task_info.get("tools")
-                            else Span("-", cls="meta-value"),
-                            cls="meta-item",
-                        ),
-                        Div(
-                            Span("Token Usage", cls="meta-label"),
-                            A(
-                                "View",
-                                href="#",
-                                cls="meta-value tools-link",
-                                onclick="document.getElementById('token-usage-modal').style.display='flex'; return false;",
-                            )
-                            if task_info.get("token_usage")
-                            else Span("-", cls="meta-value"),
-                            cls="meta-item",
-                        ),
+                        *detail_meta_items,
                         cls="detail-meta-grid",
                     ),
                     cls="detail-header",
@@ -1177,56 +1452,59 @@ def register_routes(rt, base_path: str = "/"):
                     ),
                     cls="detail-main",
                 ),
-                # Tools modal
-                Div(
+                (
                     Div(
                         Div(
-                            Span("Available Tools", cls="modal-title"),
-                            Button(
-                                "×",
-                                cls="modal-close",
-                                onclick="document.getElementById('tools-modal').style.display='none';",
+                            Div(
+                                Span("Available Tools", cls="modal-title"),
+                                Button(
+                                    "×",
+                                    cls="modal-close",
+                                    onclick="document.getElementById('tools-modal').style.display='none';",
+                                ),
+                                cls="modal-header",
                             ),
-                            cls="modal-header",
-                        ),
-                        Div(
-                            *[
-                                Div(
+                            Div(
+                                *[
                                     Div(
-                                        Span(tool.get("name", "Unknown"), cls="tool-name"),
-                                        cls="tool-header",
-                                    ),
-                                    Div(
-                                        tool.get("description", "No description"),
-                                        cls="tool-description",
-                                    ),
-                                    Div(
-                                        Pre(
-                                            json.dumps(
-                                                tool.get("inputSchema", {}),
-                                                indent=2,
-                                                ensure_ascii=False,
-                                            ),
-                                            cls="tool-schema",
+                                        Div(
+                                            Span(tool.get("name", "Unknown"), cls="tool-name"),
+                                            cls="tool-header",
                                         ),
-                                        cls="tool-schema-container",
+                                        Div(
+                                            tool.get("description", "No description"),
+                                            cls="tool-description",
+                                        ),
+                                        Div(
+                                            Pre(
+                                                json.dumps(
+                                                    tool.get("inputSchema", {}),
+                                                    indent=2,
+                                                    ensure_ascii=False,
+                                                ),
+                                                cls="tool-schema",
+                                            ),
+                                            cls="tool-schema-container",
+                                        )
+                                        if tool.get("inputSchema")
+                                        else None,
+                                        cls="tool-item",
                                     )
-                                    if tool.get("inputSchema")
-                                    else None,
-                                    cls="tool-item",
-                                )
-                                for tool in task_info.get("tools", [])
-                            ]
-                            if task_info.get("tools")
-                            else [Div("No tools available", cls="empty-state")],
-                            cls="modal-body",
+                                    for tool in task_info.get("tools", [])
+                                ]
+                                if task_info.get("tools")
+                                else [Div("No tools available", cls="empty-state")],
+                                cls="modal-body",
+                            ),
+                            cls="modal-content",
                         ),
-                        cls="modal-content",
-                    ),
-                    id="tools-modal",
-                    cls="modal-overlay",
-                    style="display: none;",
-                    onclick="if(event.target === this) this.style.display='none';",
+                        id="tools-modal",
+                        cls="modal-overlay",
+                        style="display: none;",
+                        onclick="if(event.target === this) this.style.display='none';",
+                    )
+                    if (not is_memgui) and task_info.get("tools")
+                    else None
                 ),
                 # Token Usage modal
                 Div(
@@ -1556,6 +1834,7 @@ def register_routes(rt, base_path: str = "/"):
                 "uiq": 0.0,
                 "avg_queries": 0.0,
                 "avg_mcp_calls": 0.0,
+                "memgui_eval": {},
             }
         )
 
@@ -1751,7 +2030,9 @@ def register_routes(rt, base_path: str = "/"):
                 ),
                 # Content (Stats + Table)
                 Div(
-                    _build_stats_ui(stats) if log_root and stats["total"] > 0 else None,
+                    _build_stats_ui(stats, suite_family=suite_family)
+                    if log_root and stats["total"] > 0
+                    else None,
                     Div(
                         H2(
                             f"Task Overview ({filtered_count}/{total_count}) - Page {current_page}/{total_pages}"
@@ -1760,20 +2041,7 @@ def register_routes(rt, base_path: str = "/"):
                         ),
                         Div(
                             Table(
-                                Thead(
-                                    Tr(
-                                        Th("Screenshot"),
-                                        Th("Task Name"),
-                                        Th("Goal"),
-                                        Th("Tags"),
-                                        Th("Status"),
-                                        Th("Score"),
-                                        Th("Reason"),
-                                        Th("Step"),
-                                        Th("Action"),
-                                        Th("Prediction"),
-                                    )
-                                ),
+                                Thead(Tr(*_task_table_headers(suite_family))),
                                 Tbody(
                                     *task_rows
                                     if task_rows
@@ -1781,7 +2049,7 @@ def register_routes(rt, base_path: str = "/"):
                                         Tr(
                                             Td(
                                                 "No tasks found matching criteria",
-                                                colspan=10,
+                                                colspan=_task_table_colspan(suite_family),
                                                 style="text-align: center; padding: 40px; color: var(--text-secondary);",
                                             )
                                         )
@@ -1893,7 +2161,7 @@ def register_routes(rt, base_path: str = "/"):
         task_rows = task_rows[start_idx:end_idx]
 
         return Div(
-            _build_stats_ui(stats) if stats["total"] > 0 else None,
+            _build_stats_ui(stats, suite_family=suite_family) if stats["total"] > 0 else None,
             Div(
                 H2(
                     f"Task Overview ({filtered_count}/{total_count}) - Page {current_page}/{total_pages}"

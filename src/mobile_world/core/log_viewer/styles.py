@@ -278,7 +278,7 @@ input[type="checkbox"] {
 
 .stats-grid-rates {
     margin-top: 16px;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 @media (max-width: 1200px) {
@@ -350,9 +350,58 @@ input[type="checkbox"] {
 .col-status { width: 100px; }
 .col-score { width: 80px; }
 .col-reason { width: 200px; white-space: normal; word-break: break-word; }
-.col-step { width: 70px; }
-.col-action { width: 120px; white-space: normal; word-break: break-word; }
+.col-step { width: 110px; }
+.col-action { width: 140px; white-space: normal; word-break: break-word; }
 .col-prediction { width: 250px; white-space: normal; word-break: break-word; }
+.col-pass { width: 150px; white-space: normal; }
+.col-irr { width: 90px; }
+.col-reason-block { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.col-reason-text { white-space: normal; word-break: break-word; }
+
+.meta-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.meta-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
+    white-space: normal;
+}
+
+.meta-chip-success {
+    color: var(--success-text);
+    background-color: var(--success-bg);
+    border-color: rgba(63, 185, 80, 0.3);
+}
+
+.meta-chip-danger {
+    color: var(--danger-text);
+    background-color: var(--danger-bg);
+    border-color: rgba(248, 81, 73, 0.3);
+}
+
+.meta-chip-warning {
+    color: var(--warning-text);
+    background-color: var(--warning-bg);
+    border-color: rgba(210, 153, 34, 0.3);
+}
+
+.meta-chip-info {
+    color: var(--accent-color);
+    background-color: rgba(88, 166, 255, 0.12);
+    border-color: rgba(88, 166, 255, 0.3);
+}
 
 
 /* Status Badges */
