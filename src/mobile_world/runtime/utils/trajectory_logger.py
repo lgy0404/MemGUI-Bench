@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 from datetime import datetime
 
 from loguru import logger
@@ -73,6 +74,27 @@ LOG_FILE_NAME = "traj.json"
 SCORE_FILE_NAME = "result.txt"
 
 
+def _permission_fix_hint(path: str) -> str:
+    return (
+        f"Log path '{path}' is not writable by the current user. "
+        "This commonly happens after running eval with sudo. "
+        "Fix it with: sudo chown -R $(id -u):$(id -g) "
+        f"{os.path.abspath(path)}"
+    )
+
+
+def ensure_log_root_writable(log_file_root: str) -> None:
+    """Create log root and fail early with an actionable permission message."""
+    try:
+        os.makedirs(log_file_root, exist_ok=True)
+        with tempfile.NamedTemporaryFile(prefix=".write-test-", dir=log_file_root, delete=True):
+            pass
+    except PermissionError as exc:
+        raise PermissionError(_permission_fix_hint(log_file_root)) from exc
+    except OSError as exc:
+        raise OSError(f"Failed to prepare log root '{log_file_root}': {exc}") from exc
+
+
 class TrajLogger:
     def __init__(self, log_file_root: str, task_name: str):
         self.log_file_dir = os.path.join(log_file_root, task_name)
@@ -89,7 +111,10 @@ class TrajLogger:
             backup_dir = f"{self.log_file_dir}_backup_{timestamp}"
 
             # Rename existing folder to backup
-            os.rename(self.log_file_dir, backup_dir)
+            try:
+                os.rename(self.log_file_dir, backup_dir)
+            except PermissionError as exc:
+                raise PermissionError(_permission_fix_hint(self.log_file_dir)) from exc
             logger.info(f"Existing folder renamed to: {backup_dir}")
 
         os.makedirs(self.log_file_dir, exist_ok=True)

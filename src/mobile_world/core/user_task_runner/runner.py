@@ -29,7 +29,7 @@ from mobile_world.runtime.utils.models import (
     UNKNOWN,
     Observation,
 )
-from mobile_world.runtime.utils.trajectory_logger import TrajLogger
+from mobile_world.runtime.utils.trajectory_logger import TrajLogger, ensure_log_root_writable
 
 from .prerequisite import env_cleanup, env_validation
 
@@ -316,6 +316,7 @@ def run_user_task(
     traj_logger = None
     log_handler_id = None
     if log_file_root:
+        ensure_log_root_writable(log_file_root)
         task_log_dir = os.path.join(log_file_root, "user_task")
         os.makedirs(task_log_dir, exist_ok=True)
 

@@ -28,7 +28,7 @@ from mobile_world.runtime.utils.models import (
     FINISHED,
     UNKNOWN,
 )
-from mobile_world.runtime.utils.trajectory_logger import TrajLogger
+from mobile_world.runtime.utils.trajectory_logger import TrajLogger, ensure_log_root_writable
 
 load_dotenv()
 
@@ -163,11 +163,9 @@ def _process_task_on_env(
     Returns:
         dict: Task result containing task_name, success, score, steps, duration_seconds
     """
-    # Create thread-specific log file
     thread_id = threading.current_thread().ident
-    thread_log_file = os.path.join(log_file_root, task_name, f"thread_{thread_id}.log")
-    os.makedirs(os.path.dirname(thread_log_file), exist_ok=True)
     traj_logger = TrajLogger(log_file_root, task_name)
+    thread_log_file = os.path.join(log_file_root, task_name, f"thread_{thread_id}.log")
 
     def thread_filter(record):
         return record["extra"].get("thread_id") == thread_id
@@ -309,8 +307,8 @@ def run_agent_with_evaluation(
         list[dict]: The evaluation results for each task, containing task_name, success, score, steps, duration_seconds, env_url
     """
 
-    # Write or validate metadata.json at log root for suite family identification
-    os.makedirs(log_file_root, exist_ok=True)
+    # Write or validate metadata.json at log root for suite family identification.
+    ensure_log_root_writable(log_file_root)
     metadata_path = os.path.join(log_file_root, "metadata.json")
     if os.path.exists(metadata_path):
         with open(metadata_path) as f:
