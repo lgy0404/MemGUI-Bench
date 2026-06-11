@@ -12,7 +12,7 @@ CONSOLE_PORT="${EMULATOR_CONSOLE_PORT:-5554}"
 ADB_PORT="${EMULATOR_ADB_PORT:-5555}"
 GRPC_PORT="${EMULATOR_GRPC_PORT:-8554}"
 MEMORY="${EMULATOR_MEMORY:-2048}"
-TIMEOUT="${EMULATOR_TIMEOUT:-600}"
+TIMEOUT="${EMULATOR_TIMEOUT:-1200}"
 BOOT_SNAPSHOT="${MEMGUI_BOOT_SNAPSHOT:-}"
 INIT_SNAPSHOT="${MEMGUI_INIT_SNAPSHOT:-}"
 DEVICE_ID="emulator-${CONSOLE_PORT}"
@@ -30,6 +30,23 @@ disable_avd_modem() {
       printf '\nhw.gsmModem = false\n' >> "${avd_file}"
     fi
   done
+}
+
+preauthorize_adb_key() {
+  local adb_public_key="${ADB_VENDOR_KEYS}.pub"
+  local adb_dir="${AVD_DIR}/data/misc/adb"
+  local adb_keys="${adb_dir}/adb_keys"
+
+  if [ ! -f "${adb_public_key}" ]; then
+    echo "ADB public key not found at ${adb_public_key}; falling back to UI authorization"
+    return
+  fi
+
+  mkdir -p "${adb_dir}"
+  cp "${adb_public_key}" "${adb_keys}"
+  chmod 700 "${adb_dir}" || true
+  chmod 640 "${adb_keys}" || true
+  echo "Pre-authorized ADB key at ${adb_keys}"
 }
 
 activate_adb_keyboard() {
@@ -51,6 +68,7 @@ adb devices | awk '/emulator/ {print $1}' | xargs -r -I {} adb -s "{}" emu kill 
 adb kill-server >/dev/null 2>&1 || true
 adb start-server >/dev/null
 disable_avd_modem
+preauthorize_adb_key
 
 options=(
   "@${EMULATOR_NAME}"

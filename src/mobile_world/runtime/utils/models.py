@@ -31,6 +31,9 @@ BASE_IMAGE = (
 )
 DEFAULT_IMAGE = "memgui-bench:mobileworld-runtime"
 DEFAULT_NAME_PREFIX = "memgui_bench_env"
+DEFAULT_EMULATOR_TIMEOUT = 1200
+DEFAULT_CONTAINER_READY_TIMEOUT = DEFAULT_EMULATOR_TIMEOUT
+DEFAULT_LAUNCH_INTERVAL = 30
 DEFAULT_CONTAINER_ENTRYPOINT = "/usr/local/bin/memgui-runtime-entrypoint.sh"
 DEFAULT_CONTAINER_COMMAND = (
     "tail",
@@ -525,6 +528,7 @@ class ContainerConfig(BaseModel):
     enable_viewer: bool = False
     env_file_path: Any | None = None  # Path
     dev_src_path: Any | None = None  # Path
+    emulator_timeout: int = DEFAULT_EMULATOR_TIMEOUT
     entrypoint: str | None = DEFAULT_CONTAINER_ENTRYPOINT
     command: list[str] = Field(default_factory=lambda: list(DEFAULT_CONTAINER_COMMAND))
 

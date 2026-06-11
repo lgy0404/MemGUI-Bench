@@ -147,6 +147,15 @@ runtime image. If the runtime image is missing, build it once:
 sudo uv run mg env build
 ```
 
+If PyPI is slow, pass a Python package mirror when building the runtime image:
+
+```bash
+sudo uv run mg env build --python-index-url https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+You can also put `PYTHON_PACKAGE_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple`
+in `.env`; `mg env build` reads it automatically.
+
 `mg env build` uses the pre-configured MemGUI image as its base and adds
 `/app/service`, `/app/docker`, the MobileWorld server, and the entrypoint needed
 for host-side orchestration, including automatic ADB authorization and host
@@ -155,17 +164,29 @@ port relay. It does not ask you to configure AVDs manually.
 ### 2. Launch Docker Containers
 
 ```bash
-sudo uv run mg env run --count 4 --launch-interval 20
+sudo uv run mg env run --count 2
 ```
 
-This launches 4 ready MemGUI backend containers with:
-- `--count 4`: Number of parallel containers
-- `--launch-interval 20`: Wait 20 seconds between container launches
+If you have a pre-warmed runtime image, use it to avoid repeated cold AVD boot:
+
+```bash
+sudo uv run mg env run \
+  --count 2 \
+  --image memgui-bench:mobileworld-runtime-ready
+```
+
+This launches 2 ready MemGUI backend containers with:
+- `--count 2`: Number of parallel containers
+- `--launch-interval 30`: Default wait time between container launches
+- `--emulator-timeout 1200`: Default timeout for MemGUI AVD cold start
 
 Each backend runs one Android emulator. Backend ports start at
 `http://localhost:6800`, viewer ports start at `http://localhost:7860`, ADB
 ports start at `5556`. Trajectory logs are written by the host-side `mg eval`
 process into local `traj_logs/`.
+
+For a larger run, launch more containers and match `mg eval --max-concurrency`
+to the number of healthy backends, for example `--count 4 --max-concurrency 4`.
 
 ### 3. Run Evaluation
 
@@ -175,10 +196,10 @@ sudo uv run mg eval \
   --model-name qwen3-vl-8b \
   --task ALL \
   --log-file-root traj_logs/memgui-qwen3vl \
-  --max-concurrency 4
+  --max-concurrency 2
 ```
 
-`mg eval --max-concurrency 4` discovers four MemGUI backend containers and feeds
+`mg eval --max-concurrency 2` discovers two MemGUI backend containers and feeds
 the selected tasks through MobileWorld's environment queue. Each backend runs
 exactly one Android emulator and writes MobileWorld-format trajectories into
 the local `traj_logs/` directory.

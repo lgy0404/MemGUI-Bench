@@ -65,6 +65,30 @@ def _tap(stub, touch_event_cls, touch_cls, x: int, y: int) -> None:
     )
 
 
+def _png_size(image: bytes) -> tuple[int, int] | None:
+    if len(image) < 24 or not image.startswith(b"\x89PNG\r\n\x1a\n"):
+        return None
+    return int.from_bytes(image[16:20], "big"), int.from_bytes(image[20:24], "big")
+
+
+def _tap_ratio(
+    stub,
+    touch_event_cls,
+    touch_cls,
+    image: bytes,
+    x_ratio: float,
+    y_ratio: float,
+) -> tuple[int, int] | None:
+    size = _png_size(image)
+    if size is None:
+        return None
+    width, height = size
+    x = max(0, min(width - 1, round(width * x_ratio)))
+    y = max(0, min(height - 1, round(height * y_ratio)))
+    _tap(stub, touch_event_cls, touch_cls, x, y)
+    return x, y
+
+
 def _wait_for_authorized(device: str, timeout: float) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -89,6 +113,7 @@ def authorize(args: argparse.Namespace) -> int:
     stub = stub_cls(grpc.insecure_channel(f"127.0.0.1:{args.grpc_port}"))
     deadline = time.time() + args.timeout
     checkbox_tapped = False
+    blocker_dismissed = False
 
     while time.time() < deadline:
         adb_output = _adb_devices()
@@ -110,6 +135,28 @@ def authorize(args: argparse.Namespace) -> int:
             continue
 
         if _is_device_unauthorized(args.device, adb_output):
+            if args.dismiss_startup_blockers and not blocker_dismissed:
+                tapped = _tap_ratio(
+                    stub,
+                    touch_event_cls,
+                    touch_cls,
+                    image.image,
+                    args.blocker_wait_x_ratio,
+                    args.blocker_wait_y_ratio,
+                )
+                blocker_dismissed = True
+                if tapped is not None:
+                    print(
+                        "Tapped possible startup blocker "
+                        f"at ({tapped[0]}, {tapped[1]})",
+                        flush=True,
+                    )
+                time.sleep(args.blocker_post_tap_delay)
+                if _wait_for_authorized(args.device, args.post_blocker_timeout):
+                    print(f"ADB authorization accepted for {args.device}", flush=True)
+                    return 0
+                continue
+
             if args.tap_always_allow and not checkbox_tapped:
                 _tap(stub, touch_event_cls, touch_cls, args.checkbox_x, args.checkbox_y)
                 checkbox_tapped = True
@@ -141,6 +188,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkbox-y", type=int, default=1295)
     parser.add_argument("--allow-x", type=int, default=900)
     parser.add_argument("--allow-y", type=int, default=1450)
+    parser.add_argument(
+        "--dismiss-startup-blockers",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument("--blocker-wait-x-ratio", type=float, default=0.31)
+    parser.add_argument("--blocker-wait-y-ratio", type=float, default=0.627)
+    parser.add_argument("--blocker-post-tap-delay", type=float, default=1.0)
+    parser.add_argument("--post-blocker-timeout", type=float, default=15)
     return parser.parse_args()
 
 

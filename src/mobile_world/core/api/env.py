@@ -26,7 +26,10 @@ from mobile_world.runtime.utils.docker import (
 )
 from mobile_world.runtime.utils.models import (
     BASE_IMAGE,
+    DEFAULT_CONTAINER_READY_TIMEOUT,
+    DEFAULT_EMULATOR_TIMEOUT,
     DEFAULT_IMAGE,
+    DEFAULT_LAUNCH_INTERVAL,
     DEFAULT_NAME_PREFIX,
     ContainerConfig,
     ContainerInfo,
@@ -181,6 +184,7 @@ def build_container_config(
     enable_viewer: bool = False,
     env_file_path: Path | None = None,
     dev_src_path: Path | None = None,
+    emulator_timeout: int = DEFAULT_EMULATOR_TIMEOUT,
     index: int | None = None,
 ) -> ContainerConfig:
     """Build a container configuration.
@@ -215,6 +219,7 @@ def build_container_config(
         enable_viewer=enable_viewer,
         env_file_path=env_file_path,
         dev_src_path=dev_src_path,
+        emulator_timeout=emulator_timeout,
     )
 
 
@@ -222,7 +227,7 @@ def launch_container(
     config: ContainerConfig,
     detach: bool = True,
     wait_ready: bool = True,
-    ready_timeout: int = 600,
+    ready_timeout: int = DEFAULT_CONTAINER_READY_TIMEOUT,
 ) -> LaunchResult:
     """Launch a single Docker container.
 
@@ -248,6 +253,7 @@ def launch_container(
         envs["ENABLE_VIEWER"] = "true"  # dev mode implies the viewer
     if config.enable_viewer:
         envs["ENABLE_VIEWER"] = "true"
+    envs["EMULATOR_TIMEOUT"] = str(config.emulator_timeout)
 
     volumes: list[tuple[str, str]] = []
     entrypoint = config.entrypoint
@@ -313,9 +319,10 @@ def launch_containers(
     enable_viewer: bool = False,
     env_file_path: Path | None = None,
     dev_src_path: Path | None = None,
-    launch_interval: int = 10,
+    launch_interval: int = DEFAULT_LAUNCH_INTERVAL,
     wait_ready: bool = True,
-    ready_timeout: int = 600,
+    ready_timeout: int = DEFAULT_CONTAINER_READY_TIMEOUT,
+    emulator_timeout: int = DEFAULT_EMULATOR_TIMEOUT,
 ) -> list[LaunchResult]:
     """Launch multiple Docker containers.
 
@@ -362,6 +369,7 @@ def launch_containers(
             enable_viewer=enable_viewer,
             env_file_path=env_file_path,
             dev_src_path=dev_src_path,
+            emulator_timeout=emulator_timeout,
         )
 
         result = launch_container(
@@ -870,18 +878,14 @@ def check_image_status(image: str = DEFAULT_IMAGE) -> ImageStatus:
 
     try:
         result = subprocess.run(
-            ["docker", "manifest", "inspect", image],
+            ["docker", "manifest", "inspect", "--verbose", image],
             capture_output=True,
             text=True,
         )
         if result.returncode == 0:
             try:
                 manifest = json.loads(result.stdout)
-                if "config" in manifest and "digest" in manifest["config"]:
-                    remote_digest = manifest["config"]["digest"]
-                    if remote_digest.startswith("sha256:"):
-                        status.remote_digest = remote_digest[7:]
-                elif "Descriptor" in manifest and "digest" in manifest["Descriptor"]:
+                if "Descriptor" in manifest and "digest" in manifest["Descriptor"]:
                     remote_digest = manifest["Descriptor"]["digest"]
                     if remote_digest.startswith("sha256:"):
                         status.remote_digest = remote_digest[7:]
@@ -927,6 +931,9 @@ def build_runtime_image(
     context_dir: str | Path | None = None,
     dockerfile: str | Path | None = None,
     no_cache: bool = False,
+    uv_default_index: str | None = None,
+    uv_index_url: str | None = None,
+    pip_index_url: str | None = None,
 ) -> tuple[bool, str]:
     """Build the local MobileWorld-compatible runtime image from the MemGUI base image."""
     context_path = Path(context_dir).resolve() if context_dir else find_project_root()
@@ -947,6 +954,14 @@ def build_runtime_image(
         "-t",
         tag,
     ]
+    build_args = {
+        "UV_DEFAULT_INDEX": uv_default_index,
+        "UV_INDEX_URL": uv_index_url,
+        "PIP_INDEX_URL": pip_index_url,
+    }
+    for name, value in build_args.items():
+        if value:
+            cmd.extend(["--build-arg", f"{name}={value}"])
     if no_cache:
         cmd.append("--no-cache")
     cmd.append(str(context_path))

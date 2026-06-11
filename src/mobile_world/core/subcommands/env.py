@@ -17,7 +17,10 @@ from rich.table import Table
 from dotenv import dotenv_values
 from mobile_world.core.api.env import (
     BASE_IMAGE,
+    DEFAULT_CONTAINER_READY_TIMEOUT,
+    DEFAULT_EMULATOR_TIMEOUT,
     DEFAULT_IMAGE,
+    DEFAULT_LAUNCH_INTERVAL,
     DEFAULT_NAME_PREFIX,
     build_runtime_image,
     ContainerConfig,
@@ -187,8 +190,33 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
         "--launch_interval",
         dest="launch_interval",
         type=int,
-        default=10,
-        help="Seconds to wait between launching each container (default: 10)",
+        default=DEFAULT_LAUNCH_INTERVAL,
+        help=(
+            "Seconds to wait between launching each container "
+            f"(default: {DEFAULT_LAUNCH_INTERVAL})"
+        ),
+    )
+    launch_parser.add_argument(
+        "--emulator-timeout",
+        "--emulator_timeout",
+        dest="emulator_timeout",
+        type=int,
+        default=DEFAULT_EMULATOR_TIMEOUT,
+        help=(
+            "Seconds to wait for the Android emulator inside each container "
+            f"(default: {DEFAULT_EMULATOR_TIMEOUT})"
+        ),
+    )
+    launch_parser.add_argument(
+        "--ready-timeout",
+        "--ready_timeout",
+        dest="ready_timeout",
+        type=int,
+        default=DEFAULT_CONTAINER_READY_TIMEOUT,
+        help=(
+            "Seconds to wait for container backend readiness "
+            f"(default: {DEFAULT_CONTAINER_READY_TIMEOUT})"
+        ),
     )
 
     # Build subcommand
@@ -224,6 +252,18 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
         dest="no_cache",
         action="store_true",
         help="Build without Docker layer cache",
+    )
+    build_parser.add_argument(
+        "--python-index-url",
+        "--python_index_url",
+        "--uv-default-index",
+        dest="python_index_url",
+        default=None,
+        help=(
+            "Python package index used by uv while building the runtime image "
+            "(also read from .env: UV_DEFAULT_INDEX, PYTHON_PACKAGE_INDEX_URL, "
+            "UV_INDEX_URL, or PIP_INDEX_URL)"
+        ),
     )
 
     # Destroy subcommand
@@ -511,6 +551,7 @@ def _launch_containers(args: argparse.Namespace) -> None:
             enable_viewer=args.viewer or args.dev,
             env_file_path=env_file_path,
             dev_src_path=dev_src_path,
+            emulator_timeout=args.emulator_timeout,
         )
         container_configs.append(config)
 
@@ -551,6 +592,7 @@ def _launch_containers(args: argparse.Namespace) -> None:
                 envs["ENABLE_VIEWER"] = "true"
             if config.enable_viewer:
                 envs["ENABLE_VIEWER"] = "true"
+            envs["EMULATOR_TIMEOUT"] = str(config.emulator_timeout)
 
             volumes: list[tuple[str, str]] = []
             entrypoint = config.entrypoint
@@ -671,7 +713,7 @@ def _launch_containers(args: argparse.Namespace) -> None:
         for container in launched:
             console.print(f"\n[dim]Checking container '{container['name']}'...[/dim]")
             if _wait_for_container_ready_with_progress(
-                container["backend_port"], timeout=600, start_time=start_time
+                container["backend_port"], timeout=args.ready_timeout, start_time=start_time
             ):
                 container["ready"] = True
                 console.print(f"[green]✓ Container '{container['name']}' is ready[/green]")
@@ -1361,11 +1403,17 @@ def _offer_image_pull(image: str) -> None:
 
 def _build_runtime_image(args: argparse.Namespace) -> None:
     """Build the local runtime image."""
+    python_index_url = _resolve_python_index_url(getattr(args, "python_index_url", None))
     console.print(
         Panel(
             f"[cyan]Building MemGUI runtime image...[/cyan]\n"
             f"[dim]Tag:[/dim] {args.tag}\n"
-            f"[dim]Base:[/dim] {args.base_image}",
+            f"[dim]Base:[/dim] {args.base_image}"
+            + (
+                f"\n[dim]Python index:[/dim] {python_index_url}"
+                if python_index_url
+                else "\n[dim]Python index:[/dim] default PyPI"
+            ),
             title="[bold cyan]🐳 Build Runtime Image[/bold cyan]",
             border_style="cyan",
         )
@@ -1376,6 +1424,8 @@ def _build_runtime_image(args: argparse.Namespace) -> None:
         context_dir=args.context,
         dockerfile=args.dockerfile,
         no_cache=args.no_cache,
+        uv_default_index=python_index_url,
+        pip_index_url=python_index_url,
     )
     if success:
         console.print(
@@ -1396,6 +1446,20 @@ def _build_runtime_image(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _resolve_python_index_url(cli_value: str | None) -> str | None:
+    """Resolve the optional Python package index for Docker image builds."""
+    if cli_value:
+        return cli_value
+
+    env_path = Path.cwd() / ".env"
+    env_values = dotenv_values(env_path) if env_path.exists() else {}
+    for key in ("UV_DEFAULT_INDEX", "PYTHON_PACKAGE_INDEX_URL", "UV_INDEX_URL", "PIP_INDEX_URL"):
+        value = env_values.get(key)
+        if value:
+            return str(value)
+    return None
+
+
 def _offer_runtime_build(tag: str, base_image: str) -> None:
     """Offer to build the runtime image interactively."""
     console.print()
@@ -1408,6 +1472,7 @@ def _offer_runtime_build(tag: str, base_image: str) -> None:
                 context=None,
                 dockerfile=None,
                 no_cache=False,
+                python_index_url=None,
             )
             _build_runtime_image(args)
         else:
