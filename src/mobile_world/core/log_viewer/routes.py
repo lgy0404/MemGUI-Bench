@@ -170,7 +170,7 @@ def register_routes(rt, base_path: str = "/"):
                     ),
                     cls="stat-card stat-card-wide",
                 )
-                for k in range(1, min(max_attempt, 3) + 1)
+                for k in range(1, max_attempt + 1)
             ]
             return Div(
                 Div(

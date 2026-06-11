@@ -471,7 +471,8 @@ def get_task_folders(log_root: str) -> list[str]:
     task_folders = []
     for item in os.listdir(log_root):
         item_path = os.path.join(log_root, item)
-        if os.path.isdir(item_path) and "_backup_" not in item:
+        traj_file = os.path.join(item_path, "traj.json")
+        if os.path.isdir(item_path) and "_backup_" not in item and os.path.exists(traj_file):
             task_folders.append(item)
 
     return sorted(task_folders)

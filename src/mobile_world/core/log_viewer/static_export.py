@@ -278,7 +278,7 @@ def _build_index_stats_html(stats: dict, suite_family: str) -> str:
         max_attempt = memgui_eval.get("max_attempt", 1) or 1
         total_task_no = stats.get("total_task_no", 0)
         pass_cards = []
-        for k in range(1, min(max_attempt, 3) + 1):
+        for k in range(1, max_attempt + 1):
             pass_cards.append(f"""
         <div class="stat-card stat-card-wide">
             <div class="stat-value success">{pass_rates.get(k, 0.0):.1f}%</div>

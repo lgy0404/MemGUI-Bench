@@ -29,7 +29,11 @@ from mobile_world.runtime.utils.models import (
     FINISHED,
     UNKNOWN,
 )
-from mobile_world.runtime.utils.trajectory_logger import TrajLogger, ensure_log_root_writable
+from mobile_world.runtime.utils.trajectory_logger import (
+    SCORE_FILE_NAME,
+    TrajLogger,
+    ensure_log_root_writable,
+)
 
 load_dotenv()
 
@@ -75,6 +79,52 @@ def _resolve_task_max_step(
     return -1
 
 
+def _create_attempt_traj_logger(
+    log_file_root: str,
+    task_name: str,
+    attempt_num: int,
+    pass_at_k: int,
+) -> TrajLogger:
+    """Create a trajectory logger for one pass@k attempt."""
+    if pass_at_k <= 1 or attempt_num == 1:
+        return TrajLogger(log_file_root, task_name)
+
+    attempt_root = os.path.join(log_file_root, "_attempt_trajs", task_name)
+    return TrajLogger(attempt_root, f"attempt_{attempt_num}")
+
+
+def _write_pass_at_k_result(
+    log_file_root: str,
+    task_name: str,
+    pass_at_k: int,
+    attempt_results: list[dict],
+) -> tuple[float, str]:
+    """Write the aggregate pass@k result to the canonical task folder."""
+    best_score = max((float(result["score"]) for result in attempt_results), default=0.0)
+    successful_attempts = [
+        int(result["attempt"]) for result in attempt_results if float(result["score"]) > 0.99
+    ]
+    best_attempt = successful_attempts[0] if successful_attempts else None
+    latest_reason = attempt_results[-1].get("reason", "") if attempt_results else ""
+
+    if best_attempt is not None:
+        reason = (
+            f"pass@{pass_at_k}: success at attempt {best_attempt}; "
+            f"successful_attempts={successful_attempts}"
+        )
+    else:
+        reason = f"pass@{pass_at_k}: all {len(attempt_results)} attempts failed"
+    if latest_reason:
+        reason = f"{reason}; latest_reason={latest_reason}"
+
+    task_dir = os.path.join(log_file_root, task_name)
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, SCORE_FILE_NAME), "w") as f:
+        f.write(f"score: {best_score}\nreason: {reason}")
+
+    return best_score, reason
+
+
 def _execute_single_task(
     env: AndroidEnvClient,
     agent: BaseAgent,
@@ -85,7 +135,8 @@ def _execute_single_task(
     suite_family: str = "memgui_bench",
     log_file_root: str | None = None,
     agent_name: str | None = None,
-) -> tuple[int, float]:
+    attempt_num: int = 1,
+) -> tuple[int, float, str]:
     """Execute a single task and return the number of steps and score.
 
     Returns:
@@ -162,6 +213,7 @@ def _execute_single_task(
             task_name=task_name,
             task_traj_dir=traj_logger.log_file_dir,
             agent_name=agent_name or agent.__class__.__name__,
+            attempt_num=attempt_num,
         )
     else:
         score, reason = env.get_task_score(task_type=task_name)
@@ -172,7 +224,7 @@ def _execute_single_task(
     agent.done()
     logger.debug(f"tear_down_task response: {res}")
 
-    return step, score
+    return step, score, reason
 
 
 def _process_task_on_env(
@@ -187,6 +239,7 @@ def _process_task_on_env(
     retry_on_device_unhealthy: int = 2,
     enable_mcp: bool = False,
     suite_family: str = "memgui_bench",
+    pass_at_k: int = 1,
     **kwargs,
 ) -> dict:
     """Process a single task on a specific environment.
@@ -206,8 +259,9 @@ def _process_task_on_env(
         dict: Task result containing task_name, success, score, steps, duration_seconds
     """
     thread_id = threading.current_thread().ident
-    traj_logger = TrajLogger(log_file_root, task_name)
-    thread_log_file = os.path.join(log_file_root, task_name, f"thread_{thread_id}.log")
+    thread_logs_dir = os.path.join(log_file_root, "_thread_logs")
+    os.makedirs(thread_logs_dir, exist_ok=True)
+    thread_log_file = os.path.join(thread_logs_dir, f"{task_name}_{thread_id}.log")
 
     def thread_filter(record):
         return record["extra"].get("thread_id") == thread_id
@@ -223,62 +277,100 @@ def _process_task_on_env(
 
     try:
         with logger.contextualize(thread_id=thread_id, container_name=container_name):
-            logger.info("Processing task '{}' on environment {}", task_name, env.base_url)
-            if enable_mcp:
-                assert isinstance(env, AndroidMCPEnvClient), (
-                    f"env must be a AndroidMCPEnvClient, but got {type(env)}"
-                )
-                try:
-                    env.reset_tools(task_type=task_name)
-                except Exception as e:
-                    logger.exception(f"Error resetting tools for task {task_name}: {e}")
-                    return None
-
-            agent = create_agent(agent_type, model_name, llm_base_url, api_key, env=env, **kwargs)
-            task_max_step = _resolve_task_max_step(suite_family, task_name, max_step)
-
+            attempt_results = []
             task_start_time = time.time()
-            while True:
-                try:
-                    task_steps, task_score = _execute_single_task(
-                        env,
-                        agent,
-                        task_name,
-                        task_max_step,
-                        traj_logger=traj_logger,
-                        enable_mcp=enable_mcp,
-                        suite_family=suite_family,
-                        log_file_root=log_file_root,
-                        agent_name=agent_type,
+            task_max_step = _resolve_task_max_step(suite_family, task_name, max_step)
+            for attempt_num in range(1, pass_at_k + 1):
+                logger.info(
+                    "Processing task '{}' attempt {}/{} on environment {}",
+                    task_name,
+                    attempt_num,
+                    pass_at_k,
+                    env.base_url,
+                )
+                if enable_mcp:
+                    assert isinstance(env, AndroidMCPEnvClient), (
+                        f"env must be a AndroidMCPEnvClient, but got {type(env)}"
                     )
-                    break
-                except Exception as e:
-                    if "Device is not healthy" in str(e) and retry_on_device_unhealthy > 0:
-                        logger.warning("Device is not healthy, retrying...")
-                        time.sleep(20)
-                        retry_on_device_unhealthy -= 1
-                        traj_logger.reset_traj()
-                        continue
-                    else:
-                        logger.exception(f"Error executing task {task_name}")
+                    try:
+                        env.reset_tools(task_type=task_name)
+                    except Exception as e:
+                        logger.exception(f"Error resetting tools for task {task_name}: {e}")
                         return None
 
+                agent = create_agent(
+                    agent_type, model_name, llm_base_url, api_key, env=env, **kwargs
+                )
+                traj_logger = _create_attempt_traj_logger(
+                    log_file_root, task_name, attempt_num, pass_at_k
+                )
+                remaining_health_retries = retry_on_device_unhealthy
+                while True:
+                    try:
+                        task_steps, task_score, task_reason = _execute_single_task(
+                            env,
+                            agent,
+                            task_name,
+                            task_max_step,
+                            traj_logger=traj_logger,
+                            enable_mcp=enable_mcp,
+                            suite_family=suite_family,
+                            log_file_root=log_file_root,
+                            agent_name=agent_type,
+                            attempt_num=attempt_num,
+                        )
+                        break
+                    except Exception as e:
+                        if (
+                            "Device is not healthy" in str(e)
+                            and remaining_health_retries > 0
+                        ):
+                            logger.warning("Device is not healthy, retrying...")
+                            time.sleep(20)
+                            remaining_health_retries -= 1
+                            traj_logger.reset_traj()
+                            continue
+                        logger.exception(
+                            f"Error executing task {task_name} attempt {attempt_num}"
+                        )
+                        return None
+
+                attempt_results.append(
+                    {
+                        "attempt": attempt_num,
+                        "score": task_score,
+                        "steps": task_steps,
+                        "reason": task_reason,
+                        "trajectory_dir": traj_logger.log_file_dir,
+                    }
+                )
+
             task_duration = time.time() - task_start_time
+            if pass_at_k > 1:
+                task_score, task_reason = _write_pass_at_k_result(
+                    log_file_root, task_name, pass_at_k, attempt_results
+                )
+            else:
+                task_score = float(attempt_results[0]["score"]) if attempt_results else 0.0
+                task_reason = attempt_results[0].get("reason", "") if attempt_results else ""
             task_success = task_score > 0.0
 
             logger.info(
-                "Task '{}' completed on {}: success={}, score={}, steps={}, duration={:.1f}s",
+                "Task '{}' completed on {}: success={}, score={}, attempts={}, duration={:.1f}s",
                 task_name,
                 env.base_url,
                 task_success,
                 task_score,
-                task_steps,
+                len(attempt_results),
                 task_duration,
             )
 
             return {
                 "task_name": task_name,
                 "score": task_score,
+                "reason": task_reason,
+                "pass_at_k": pass_at_k,
+                "attempts": attempt_results,
             }
     finally:
         # Remove the thread-specific handler
@@ -328,6 +420,7 @@ def run_agent_with_evaluation(
     enable_user_interaction: bool = False,
     max_concurrency: int | None = None,
     shuffle_tasks: bool = False,
+    pass_at_k: int = 1,
     **kwargs,
 ) -> list[dict]:
     """Run the agent and return the evaluation results.
@@ -368,6 +461,7 @@ def run_agent_with_evaluation(
             "seed": seed,
             "agent_type": agent_type,
             "model_name": model_name,
+            "pass_at_k": pass_at_k,
             "timestamp": datetime.now().isoformat(),
         }
         with open(metadata_path, "w") as f:
@@ -410,7 +504,11 @@ def run_agent_with_evaluation(
 
     logger.info("Task list: {} ({} tasks)", task_list, len(task_list))
 
-    finished_task_list, finished_scores = scan_finished_tasks(log_file_root, task_list)
+    if pass_at_k > 1:
+        finished_task_list, finished_scores = [], []
+        logger.info("pass@{} enabled; skipping result.txt based task skip", pass_at_k)
+    else:
+        finished_task_list, finished_scores = scan_finished_tasks(log_file_root, task_list)
     logger.info("Finished task list: {} ({} tasks)", finished_task_list, len(finished_task_list))
 
     task_list = [task for task in task_list if task not in finished_task_list]
@@ -457,6 +555,7 @@ def run_agent_with_evaluation(
                 max_step=max_step,
                 enable_mcp=enable_mcp,
                 suite_family=suite_family,
+                pass_at_k=pass_at_k,
                 **kwargs,
             )
             for task_name in task_list

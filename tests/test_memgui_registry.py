@@ -47,11 +47,14 @@ def test_eval_parser_accepts_task_file_and_difficulty():
             "data/memgui-tasks-40.csv",
             "--difficulty",
             "hard",
+            "--pass-at-k",
+            "3",
         ]
     )
 
     assert args.task_file == "data/memgui-tasks-40.csv"
     assert args.difficulty == "hard"
+    assert args.pass_at_k == 3
 
 
 def test_resolve_memgui_task_selection_filters_task_file_by_difficulty():

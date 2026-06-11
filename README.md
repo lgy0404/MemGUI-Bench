@@ -237,6 +237,7 @@ uv run mg eval \
 | `--task` / `--tasks` | all when omitted | Task id(s), comma-separated, or `ALL` |
 | `--task-file` / `--task-csv` | none | MemGUI CSV subset to run, e.g. `data/memgui-tasks-40.csv` |
 | `--difficulty` / `--task-difficulty` | none | MemGUI difficulty filter: `easy`/`medium`/`hard`, `1`/`2`/`3`, or `简单`/`中等`/`困难`; comma-separated values are supported |
+| `--pass-at-k` / `--attempts` | `1` | Run each MemGUI task K times and aggregate pass@K |
 | `--suite-family` | `memgui_bench` | Benchmark suite family |
 | `--log-file-root` | `./traj_logs` | Local root for MobileWorld trajectory logs |
 | `--aw-host` | auto | Comma-separated backend URL(s); auto-discovered when omitted |
@@ -262,6 +263,9 @@ uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --difficulty hard -
 
 # Run medium + hard tasks from the 40-task subset
 uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task-file data/memgui-tasks-40.csv --difficulty medium,hard --log-file-root traj_logs/qwen3vl-40-medium-hard
+
+# Run pass@3 on the 40-task subset
+uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task-file data/memgui-tasks-40.csv --pass-at-k 3 --log-file-root traj_logs/qwen3vl-40-pass3
 
 # Use explicit backends
 uv run mg eval --agent-type qwen3vl --task ALL --aw-host http://localhost:6800,http://localhost:6801

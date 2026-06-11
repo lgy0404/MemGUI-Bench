@@ -282,6 +282,17 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
         help="MemGUI difficulty filter: easy/medium/hard, 1/2/3, or 简单/中等/困难. Comma-separated values are supported.",
     )
     eval_parser.add_argument(
+        "--pass-at-k",
+        "--pass_at_k",
+        "--attempts",
+        "--num-attempts",
+        "--num_attempts",
+        dest="pass_at_k",
+        type=int,
+        default=1,
+        help="Run each MemGUI task K times and aggregate pass@K (default: 1).",
+    )
+    eval_parser.add_argument(
         "--max-retries",
         "--max_rounds",
         dest="max_retries",
@@ -330,6 +341,10 @@ async def execute(args: argparse.Namespace) -> None:
     uses_memgui_filters = bool(args.task_file or args.difficulty)
     if uses_memgui_filters and args.suite_family != "memgui_bench":
         raise ValueError("--task-file and --difficulty are only supported with memgui_bench")
+    if args.pass_at_k < 1:
+        raise ValueError("--pass-at-k must be >= 1")
+    if args.pass_at_k > 1 and args.suite_family != "memgui_bench":
+        raise ValueError("--pass-at-k > 1 is only supported with memgui_bench")
 
     if args.suite_family == "memgui_bench":
         final_tasks, run_task_set = _resolve_memgui_task_selection(
@@ -371,6 +386,7 @@ async def execute(args: argparse.Namespace) -> None:
         enable_user_interaction=args.enable_user_interaction,
         max_concurrency=args.max_concurrency,
         shuffle_tasks=args.shuffle_tasks,
+        pass_at_k=args.pass_at_k,
         scale_factor=getattr(args, "scale_factor", 1000),
     )
     if run_task_set and task_results:
@@ -397,6 +413,7 @@ async def execute(args: argparse.Namespace) -> None:
                 "seed": getattr(args, "seed", None),
                 "task_file": args.task_file,
                 "difficulty": args.difficulty,
+                "pass_at_k": args.pass_at_k,
                 "timestamp": datetime.now().isoformat(),
                 "log_file_root": log_file_root,
             },
