@@ -235,6 +235,8 @@ uv run mg eval \
 | `--llm-base-url` | `.env`/agent default | OpenAI-compatible base URL |
 | `--api-key` | `API_KEY` | Agent API key |
 | `--task` / `--tasks` | all when omitted | Task id(s), comma-separated, or `ALL` |
+| `--task-file` / `--task-csv` | none | MemGUI CSV subset to run, e.g. `data/memgui-tasks-40.csv` |
+| `--difficulty` / `--task-difficulty` | none | MemGUI difficulty filter: `easy`/`medium`/`hard`, `1`/`2`/`3`, or `简单`/`中等`/`困难`; comma-separated values are supported |
 | `--suite-family` | `memgui_bench` | Benchmark suite family |
 | `--log-file-root` | `./traj_logs` | Local root for MobileWorld trajectory logs |
 | `--aw-host` | auto | Comma-separated backend URL(s); auto-discovered when omitted |
@@ -251,6 +253,15 @@ uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task ALL --log-fi
 
 # Run specific task
 uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task 001-FindProductAndFilter --log-file-root traj_logs/debug
+
+# Run the 40-task subset
+uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task-file data/memgui-tasks-40.csv --log-file-root traj_logs/qwen3vl-40
+
+# Run only hard MemGUI tasks
+uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --difficulty hard --log-file-root traj_logs/qwen3vl-hard
+
+# Run medium + hard tasks from the 40-task subset
+uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task-file data/memgui-tasks-40.csv --difficulty medium,hard --log-file-root traj_logs/qwen3vl-40-medium-hard
 
 # Use explicit backends
 uv run mg eval --agent-type qwen3vl --task ALL --aw-host http://localhost:6800,http://localhost:6801

@@ -17,6 +17,110 @@ from mobile_world.runtime.utils.models import DEFAULT_IMAGE, DEFAULT_NAME_PREFIX
 
 from ..runner import run_agent_with_evaluation
 
+DIFFICULTY_ALIASES = {
+    "1": "1",
+    "easy": "1",
+    "simple": "1",
+    "low": "1",
+    "简单": "1",
+    "2": "2",
+    "medium": "2",
+    "middle": "2",
+    "normal": "2",
+    "中等": "2",
+    "3": "3",
+    "hard": "3",
+    "difficult": "3",
+    "high": "3",
+    "困难": "3",
+}
+
+
+def _split_comma_separated(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _normalize_difficulties(value: str | None) -> set[str]:
+    difficulties: set[str] = set()
+    for raw_item in _split_comma_separated(value):
+        item = raw_item.lower()
+        if item not in DIFFICULTY_ALIASES:
+            raise ValueError(
+                f"Unsupported difficulty '{raw_item}'. "
+                "Use easy/medium/hard, simple/medium/difficult, 1/2/3, or 简单/中等/困难."
+            )
+        difficulties.add(DIFFICULTY_ALIASES[item])
+    return difficulties
+
+
+def _load_memgui_registry(task_file: str | None = None):
+    from mobile_world.tasks.memgui_registry import MemGUITaskRegistry
+
+    return MemGUITaskRegistry(dataset_path=task_file)
+
+
+def _resolve_memgui_task_selection(
+    task_arg: str | None,
+    task_file: str | None,
+    difficulty: str | None,
+) -> tuple[list[str], bool]:
+    """Resolve MemGUI task filters into a concrete task list.
+
+    Returns:
+        (tasks, is_task_set_run). Empty tasks means the runner should keep its
+        existing "run all tasks from backend" behavior.
+    """
+    explicit_all = bool(task_arg and task_arg.upper() == "ALL")
+    explicit_tasks = [] if explicit_all else _split_comma_separated(task_arg)
+    difficulties = _normalize_difficulties(difficulty)
+
+    file_registry = _load_memgui_registry(task_file) if task_file else None
+    file_tasks = file_registry.list_tasks() if file_registry else None
+
+    if explicit_tasks:
+        selected_tasks = explicit_tasks
+    elif file_tasks is not None:
+        selected_tasks = file_tasks
+    elif difficulties:
+        selected_tasks = _load_memgui_registry().list_tasks()
+    else:
+        return [], explicit_all
+
+    if file_tasks is not None and explicit_tasks:
+        file_task_set = set(file_tasks)
+        missing_from_file = [task for task in explicit_tasks if task not in file_task_set]
+        if missing_from_file:
+            raise ValueError(
+                "The following --task id(s) are not present in --task-file "
+                f"'{task_file}': {', '.join(missing_from_file)}"
+            )
+
+    if difficulties:
+        metadata_registry = file_registry or _load_memgui_registry()
+        filtered_tasks = []
+        unknown_tasks = []
+        for task_id in selected_tasks:
+            if not metadata_registry.has_task(task_id):
+                unknown_tasks.append(task_id)
+                continue
+            task = metadata_registry.get_task(task_id)
+            if task.record.task_difficulty.strip() in difficulties:
+                filtered_tasks.append(task_id)
+
+        if unknown_tasks:
+            raise ValueError(
+                "The following task id(s) are not present in the MemGUI registry used for "
+                f"difficulty filtering: {', '.join(unknown_tasks)}"
+            )
+        selected_tasks = filtered_tasks
+
+    if not selected_tasks:
+        raise ValueError("No MemGUI tasks selected. Check --task-file and --difficulty filters.")
+
+    return selected_tasks, explicit_all or bool(task_file or difficulties)
+
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     """Add common arguments shared between eval and test commands."""
@@ -163,6 +267,21 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
         help='Specific task(s) to run (comma-separated) or "ALL" to run all tasks and generate statistics',
     )
     eval_parser.add_argument(
+        "--task-file",
+        "--task_file",
+        "--task-csv",
+        "--task_csv",
+        dest="task_file",
+        help="MemGUI task CSV to select tasks from, e.g. data/memgui-tasks-40.csv",
+    )
+    eval_parser.add_argument(
+        "--difficulty",
+        "--task-difficulty",
+        "--task_difficulty",
+        dest="difficulty",
+        help="MemGUI difficulty filter: easy/medium/hard, 1/2/3, or 简单/中等/困难. Comma-separated values are supported.",
+    )
+    eval_parser.add_argument(
         "--max-retries",
         "--max_rounds",
         dest="max_retries",
@@ -208,15 +327,23 @@ async def execute(args: argparse.Namespace) -> None:
     if getattr(args, "seed", None) is not None and args.suite_family != "android_world":
         raise ValueError("--seed is only supported with --suite-family android_world")
 
-    # Check if running all tasks
-    run_all_tasks = args.task and args.task.upper() == "ALL"
-    if run_all_tasks:
-        final_tasks = []
-        logger.info("Running ALL tasks with statistics generation")
-    else:
-        final_tasks = args.task.split(",") if args.task else []
+    uses_memgui_filters = bool(args.task_file or args.difficulty)
+    if uses_memgui_filters and args.suite_family != "memgui_bench":
+        raise ValueError("--task-file and --difficulty are only supported with memgui_bench")
 
-    start_time = time.time() if run_all_tasks else None
+    if args.suite_family == "memgui_bench":
+        final_tasks, run_task_set = _resolve_memgui_task_selection(
+            args.task, args.task_file, args.difficulty
+        )
+        if run_task_set and final_tasks:
+            logger.info("Running selected MemGUI task set: {} ({} tasks)", final_tasks, len(final_tasks))
+        elif run_task_set:
+            logger.info("Running ALL MemGUI tasks with statistics generation")
+    else:
+        run_task_set = bool(args.task and args.task.upper() == "ALL")
+        final_tasks = [] if run_task_set else _split_comma_separated(args.task)
+
+    start_time = time.time() if run_task_set else None
 
     # Parse aw_host URLs - if None, will auto-discover; if provided, split by comma
     aw_urls = None if args.aw_host is None else args.aw_host.split(",")
@@ -246,7 +373,7 @@ async def execute(args: argparse.Namespace) -> None:
         shuffle_tasks=args.shuffle_tasks,
         scale_factor=getattr(args, "scale_factor", 1000),
     )
-    if run_all_tasks and task_results:
+    if run_task_set and task_results:
         total_duration = time.time() - start_time
 
         total_tasks = len(task_results)
@@ -268,6 +395,8 @@ async def execute(args: argparse.Namespace) -> None:
                 "model_name": args.model_name,
                 "suite_family": args.suite_family,
                 "seed": getattr(args, "seed", None),
+                "task_file": args.task_file,
+                "difficulty": args.difficulty,
                 "timestamp": datetime.now().isoformat(),
                 "log_file_root": log_file_root,
             },
