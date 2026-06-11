@@ -238,7 +238,7 @@ uv run mg eval \
 | `--suite-family` | `memgui_bench` | Benchmark suite family |
 | `--log-file-root` | `./traj_logs` | Local root for MobileWorld trajectory logs |
 | `--aw-host` | auto | Comma-separated backend URL(s); auto-discovered when omitted |
-| `--max-round` / `--max-step` | `-1` | Maximum agent steps per task |
+| `--max-round` / `--max-step` | MemGUI task budget | Maximum agent steps per task; omitted uses `int(golden_steps * 2.5 + 1)`, `-1` means unlimited |
 | `--max-concurrency` | number of containers | Maximum concurrent tasks |
 | `--shuffle-tasks` | false | Shuffle task order before scheduling |
 | `--dry-run` | false | Resolve tasks/backends without execution |

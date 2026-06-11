@@ -4,6 +4,7 @@ import random
 import threading
 import time
 from datetime import datetime
+from functools import lru_cache
 from queue import Queue
 
 from dotenv import load_dotenv
@@ -31,6 +32,47 @@ from mobile_world.runtime.utils.models import (
 from mobile_world.runtime.utils.trajectory_logger import TrajLogger, ensure_log_root_writable
 
 load_dotenv()
+
+MEMGUI_MAX_STEP_MULTIPLIER = 2.5
+MEMGUI_DEFAULT_MAX_STEP_FALLBACK = 15
+
+
+@lru_cache(maxsize=1)
+def _get_memgui_task_max_steps() -> dict[str, int]:
+    """Load MemGUI's original per-task step budgets from the benchmark CSV."""
+    from mobile_world.tasks.memgui_registry import MemGUITaskRegistry
+
+    task_max_steps: dict[str, int] = {}
+    registry = MemGUITaskRegistry()
+    for task_name, task in registry.tasks.items():
+        try:
+            golden_steps = float(task.record.golden_steps)
+        except ValueError:
+            task_max_steps[task_name] = MEMGUI_DEFAULT_MAX_STEP_FALLBACK
+        else:
+            task_max_steps[task_name] = max(1, int(golden_steps * MEMGUI_MAX_STEP_MULTIPLIER + 1))
+    return task_max_steps
+
+
+def _resolve_task_max_step(
+    suite_family: str,
+    task_name: str,
+    requested_max_step: int | None,
+) -> int:
+    """Resolve the effective max step for a task.
+
+    A positive CLI value always wins. For MemGUI-Bench, omitting the value keeps
+    the original benchmark behavior: golden_steps * 2.5 + 1. Negative values
+    keep the MobileWorld convention of unlimited steps.
+    """
+    if requested_max_step is not None:
+        return requested_max_step
+
+    if suite_family == "memgui_bench":
+        max_steps = _get_memgui_task_max_steps()
+        return max_steps.get(task_name, MEMGUI_DEFAULT_MAX_STEP_FALLBACK)
+
+    return -1
 
 
 def _execute_single_task(
@@ -108,7 +150,7 @@ def _execute_single_task(
         if terminate:
             break
 
-        if step >= max_step:
+        if max_step > 0 and step >= max_step:
             logger.debug("task steps reach max step, terminate")
             break
 
@@ -141,7 +183,7 @@ def _process_task_on_env(
     llm_base_url: str,
     api_key: str | None,
     log_file_root: str,
-    max_step: int,
+    max_step: int | None,
     retry_on_device_unhealthy: int = 2,
     enable_mcp: bool = False,
     suite_family: str = "memgui_bench",
@@ -193,6 +235,7 @@ def _process_task_on_env(
                     return None
 
             agent = create_agent(agent_type, model_name, llm_base_url, api_key, env=env, **kwargs)
+            task_max_step = _resolve_task_max_step(suite_family, task_name, max_step)
 
             task_start_time = time.time()
             while True:
@@ -201,7 +244,7 @@ def _process_task_on_env(
                         env,
                         agent,
                         task_name,
-                        max_step,
+                        task_max_step,
                         traj_logger=traj_logger,
                         enable_mcp=enable_mcp,
                         suite_family=suite_family,
@@ -271,7 +314,7 @@ def run_agent_with_evaluation(
     llm_base_url: str,
     log_file_root: str,
     tasks: list[str],
-    max_step: int = -1,
+    max_step: int | None = None,
     aw_urls: list[str] | None = None,
     api_key: str | None = None,
     device: str = "emulator-5554",

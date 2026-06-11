@@ -227,7 +227,7 @@ async def execute(args: argparse.Namespace) -> None:
         llm_base_url=args.llm_base_url or os.getenv("BASE_URL"),
         log_file_root=log_file_root,
         tasks=final_tasks,
-        max_step=args.max_round or -1,
+        max_step=args.max_round,
         aw_urls=aw_urls,
         api_key=args.api_key or os.getenv("API_KEY"),
         executor_llm_base_url=args.executor_llm_base_url or os.getenv("BASE_URL"),
