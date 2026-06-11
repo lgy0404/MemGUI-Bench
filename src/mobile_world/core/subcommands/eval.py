@@ -385,3 +385,6 @@ async def execute(args: argparse.Namespace) -> None:
         )
 
         console.print(files_panel)
+
+    if task_list_with_no_results:
+        raise SystemExit(1)

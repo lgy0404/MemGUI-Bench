@@ -13,16 +13,33 @@ ADB_PORT="${EMULATOR_ADB_PORT:-5555}"
 GRPC_PORT="${EMULATOR_GRPC_PORT:-8554}"
 MEMORY="${EMULATOR_MEMORY:-2048}"
 TIMEOUT="${EMULATOR_TIMEOUT:-600}"
+BOOT_SNAPSHOT="${MEMGUI_BOOT_SNAPSHOT:-}"
+INIT_SNAPSHOT="${MEMGUI_INIT_SNAPSHOT:-}"
 DEVICE_ID="emulator-${CONSOLE_PORT}"
+AVD_DIR="${ANDROID_SDK_ROOT}/avd/${AVD_NAME}.avd"
+
+disable_avd_modem() {
+  local avd_file
+  for avd_file in "${AVD_DIR}/config.ini" "${AVD_DIR}/hardware-qemu.ini"; do
+    if [ ! -f "${avd_file}" ]; then
+      continue
+    fi
+    if grep -q '^hw\.gsmModem' "${avd_file}"; then
+      sed -i 's/^hw\.gsmModem.*/hw.gsmModem = false/' "${avd_file}"
+    else
+      printf '\nhw.gsmModem = false\n' >> "${avd_file}"
+    fi
+  done
+}
 
 adb devices | awk '/emulator/ {print $1}' | xargs -r -I {} adb -s "{}" emu kill || true
 adb kill-server >/dev/null 2>&1 || true
 adb start-server >/dev/null
+disable_avd_modem
 
 options=(
   "@${EMULATOR_NAME}"
   -no-window
-  -no-snapshot
   -no-boot-anim
   -no-audio
   -no-metrics
@@ -32,6 +49,12 @@ options=(
   -skip-adb-auth
   -gpu swiftshader_indirect
 )
+
+if [ -n "${BOOT_SNAPSHOT}" ] && [ "${BOOT_SNAPSHOT}" != "none" ] && [ "${BOOT_SNAPSHOT}" != "false" ]; then
+  options+=(-snapshot "${BOOT_SNAPSHOT}" -no-snapshot-save)
+else
+  options+=(-no-snapshot-load -no-snapshot-save)
+fi
 
 if grep -E -q '(vmx|svm)' /proc/cpuinfo; then
   options+=(-accel on)
@@ -68,6 +91,11 @@ while true; do
     adb -s "${DEVICE_ID}" shell "settings put global animator_duration_scale 0.0" || true
     adb -s "${DEVICE_ID}" shell "settings put global hidden_api_policy_pre_p_apps 1; settings put global hidden_api_policy_p_apps 1; settings put global hidden_api_policy 1" || true
     adb -s "${DEVICE_ID}" root || true
+    if [ -n "${INIT_SNAPSHOT}" ] && [ "${INIT_SNAPSHOT}" != "none" ] && [ "${INIT_SNAPSHOT}" != "false" ]; then
+      echo "Saving MemGUI init snapshot: ${INIT_SNAPSHOT}"
+      adb -s "${DEVICE_ID}" emu avd snapshot delete "${INIT_SNAPSHOT}" >/dev/null 2>&1 || true
+      adb -s "${DEVICE_ID}" emu avd snapshot save "${INIT_SNAPSHOT}"
+    fi
     adb devices -l
     exit 0
   fi

@@ -396,6 +396,7 @@ def _launch_containers(args: argparse.Namespace) -> None:
 
     # Handle dev mode - find project root
     dev_src_path = None
+    dev_docker_path = None
     if args.dev or args.mount_src:
         project_root = None
         for parent in [current_path] + list(current_path.parents):
@@ -415,9 +416,14 @@ def _launch_containers(args: argparse.Namespace) -> None:
                 )
                 dev_src_path = None
             else:
+                dev_docker_path = project_root / "docker"
+                mount_lines = [f"{dev_src_path} → /app/service/src"]
+                if dev_docker_path.exists():
+                    mount_lines.append(f"{dev_docker_path} → /app/docker")
                 console.print(
                     Panel(
-                        f"[green]Dev mode enabled[/green]\n[cyan]Mounting:[/cyan] {dev_src_path} → /app/service/src",
+                        "[green]Dev mode enabled[/green]\n"
+                        f"[cyan]Mounting:[/cyan] {'; '.join(mount_lines)}",
                         title="[green]🔧 Dev Mode[/green]",
                         border_style="green",
                     )
@@ -547,8 +553,16 @@ def _launch_containers(args: argparse.Namespace) -> None:
                 envs["ENABLE_VIEWER"] = "true"
 
             volumes: list[tuple[str, str]] = []
+            entrypoint = config.entrypoint
+            command = config.command
             if config.dev_src_path:
-                volumes.append((str(config.dev_src_path), "/app/service/src"))
+                config_dev_src_path = Path(config.dev_src_path)
+                volumes.append((str(config_dev_src_path), "/app/service/src"))
+                config_dev_docker_path = config_dev_src_path.parent / "docker"
+                if config_dev_docker_path.exists():
+                    volumes.append((str(config_dev_docker_path), "/app/docker"))
+                    entrypoint = "/bin/bash"
+                    command = ["/app/docker/compat_entrypoint.sh", *config.command]
             if config.env_file_path:
                 volumes.append((str(config.env_file_path.resolve()), "/app/service/.env"))
 
@@ -562,8 +576,8 @@ def _launch_containers(args: argparse.Namespace) -> None:
                 ],
                 env_vars=envs,
                 volumes=volumes,
-                entrypoint=config.entrypoint,
-                command=config.command,
+                entrypoint=entrypoint,
+                command=command,
                 detach=args.detach,
                 privileged=True,
                 remove=True,

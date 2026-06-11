@@ -1,8 +1,10 @@
 import base64
 import os
 import shlex
+import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
 from loguru import logger
 
@@ -56,7 +58,7 @@ class AndroidController:
         # try the stealth API first, otherwise screenshot
         # may trigger events in some apps
         stealth_command = f"adb -s {self.device} exec-out screencap -p > {local_path}"
-        stealth_result = execute_adb(stealth_command)
+        stealth_result = execute_adb(stealth_command, timeout=20)
         if stealth_result.success:
             return AdbResponse(success=True, output=local_path, command=stealth_command)
 
@@ -64,23 +66,61 @@ class AndroidController:
         pull_command = f"adb -s {self.device} pull {remote_path} {local_path}"
         rm_command = f"adb -s {self.device} shell rm {remote_path}"
 
-        cap_result = execute_adb(cap_command)
+        cap_result = execute_adb(cap_command, timeout=20)
         if cap_result.success:
-            result = execute_adb(pull_command)
+            result = execute_adb(pull_command, timeout=20)
 
             if not result.success and try_times > 0:
                 # occasionally the pull command fails at file not found, so we try again, likely due to file not finished being written yet
                 time.sleep(1)
                 return self.get_screenshot(prefix, save_dir, try_times - 1)
             elif not result.success and try_times <= 0:
-                execute_adb(rm_command, output=False)
+                execute_adb(rm_command, output=False, timeout=10)
                 return AdbResponse(
                     success=False, error=result.error + cap_result.output, command=pull_command
                 )
             else:
-                execute_adb(rm_command, output=False)
+                execute_adb(rm_command, output=False, timeout=10)
                 return AdbResponse(success=True, output=local_path, command=pull_command)
+        grpc_result = self._get_grpc_screenshot(local_path)
+        if grpc_result.success:
+            return grpc_result
         return cap_result
+
+    def _get_grpc_screenshot(self, local_path: str) -> AdbResponse:
+        try:
+            import grpc
+
+            proto_dir = Path(os.getenv("EMULATOR_PROTO_DIR", "/app/service/_emulator_proto"))
+            if str(proto_dir) not in sys.path:
+                sys.path.insert(0, str(proto_dir))
+
+            from emulator_controller_pb2 import ImageFormat
+            from emulator_controller_pb2_grpc import EmulatorControllerStub
+
+            grpc_port = int(os.getenv("EMULATOR_GRPC_PORT", "8554"))
+            stub = EmulatorControllerStub(grpc.insecure_channel(f"127.0.0.1:{grpc_port}"))
+            image = stub.getScreenshot(ImageFormat(format=ImageFormat.PNG), timeout=10)
+            if not image.image:
+                return AdbResponse(
+                    success=False,
+                    error="gRPC screenshot returned an empty image",
+                    command=f"grpc://127.0.0.1:{grpc_port}/getScreenshot",
+                )
+            with open(local_path, "wb") as f:
+                f.write(image.image)
+            return AdbResponse(
+                success=True,
+                output=local_path,
+                command=f"grpc://127.0.0.1:{grpc_port}/getScreenshot",
+            )
+        except Exception as e:
+            logger.error(f"Failed to capture screenshot via emulator gRPC: {e}")
+            return AdbResponse(
+                success=False,
+                error=str(e),
+                command="grpc://emulator/getScreenshot",
+            )
 
     def get_xml(self, prefix, save_dir):
         remote_path = os.path.join(self.xml_dir, prefix + ".xml").replace(self.backslash, "/")
@@ -387,13 +427,11 @@ class AndroidController:
         """Load a snapshot with the given tag"""
         try:
             adb_command = f"adb -s {self.device} emu avd snapshot load {tag}"
-            result = execute_adb(adb_command)
+            result = execute_adb(adb_command, timeout=120)
 
             if result.success and "OK" in result.output:
                 logger.info(f"Successfully loaded snapshot: {tag}")
-                # Wait a moment for the snapshot to fully load
-                time.sleep(3)
-                return True
+                return self._wait_after_snapshot_load(tag)
             else:
                 logger.error(
                     f"Failed to load snapshot {tag}: {result.error if not result.success else result.output}"
@@ -402,6 +440,26 @@ class AndroidController:
         except Exception as e:
             logger.error(f"Failed to load snapshot {tag}: {e}")
             return False
+
+    def _wait_after_snapshot_load(self, tag: str, timeout: int = 60) -> bool:
+        """Wait until ADB is usable again after restoring an emulator snapshot."""
+        deadline = time.time() + timeout
+        wait_command = f"adb -s {self.device} wait-for-device"
+        execute_adb(wait_command, output=False, timeout=min(30, timeout))
+
+        while time.time() < deadline:
+            boot_result = execute_adb(
+                f"adb -s {self.device} shell getprop sys.boot_completed",
+                output=False,
+                timeout=5,
+            )
+            if boot_result.success and boot_result.output.strip() == "1":
+                time.sleep(2)
+                return True
+            time.sleep(1)
+
+        logger.error(f"Timed out waiting for device after loading snapshot: {tag}")
+        return False
 
     def activate_adb_keyboard(self):
         execute_adb("adb shell ime set com.android.adbkeyboard/.AdbIME")

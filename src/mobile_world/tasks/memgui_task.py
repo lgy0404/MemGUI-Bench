@@ -70,7 +70,10 @@ class MemGUITask:
 
     @property
     def snapshot_tag(self) -> str | None:
-        return os.getenv("MEMGUI_SNAPSHOT_TAG", "init_state")
+        tag = os.getenv("MEMGUI_SNAPSHOT_TAG", "").strip()
+        if tag.lower() in {"", "none", "false", "0"}:
+            return None
+        return tag
 
     @property
     def task_tags(self) -> set[str]:

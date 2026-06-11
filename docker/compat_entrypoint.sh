@@ -24,7 +24,7 @@ if [ "${ENABLE_VIEWER:-false}" = "true" ] || [ "${ENABLE_VIEWER:-false}" = "1" ]
         >> /var/log/viewer.log 2>&1 &
 fi
 
-/app/docker/start_memgui_emulator.sh >> /var/log/emulator.log 2>&1
+bash /app/docker/start_memgui_emulator.sh >> /var/log/emulator.log 2>&1
 
 python3 /app/docker/adb_tcp_relay.py \
     --listen-host 0.0.0.0 --listen-port 5556 \

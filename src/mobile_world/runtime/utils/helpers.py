@@ -98,7 +98,12 @@ def pretty_print_messages(messages: list[dict], max_messages: int = 2) -> None:
     logger.info(final_str)
 
 
-def execute_adb(adb_command: str, output: bool = True, root_required=False) -> AdbResponse:
+def execute_adb(
+    adb_command: str,
+    output: bool = True,
+    root_required=False,
+    timeout: float | None = 60,
+) -> AdbResponse:
     if not adb_command.startswith("adb "):
         adb_command = "adb " + adb_command
     env = os.environ.copy()
@@ -110,6 +115,7 @@ def execute_adb(adb_command: str, output: bool = True, root_required=False) -> A
             capture_output=True,
             text=True,
             env=env,
+            timeout=timeout,
         )
         if whoami_check.returncode == 0 and whoami_check.stdout.strip() != "root":
             root_attempt = subprocess.run(
@@ -118,6 +124,7 @@ def execute_adb(adb_command: str, output: bool = True, root_required=False) -> A
                 capture_output=True,
                 text=True,
                 env=env,
+                timeout=timeout,
             )
             if root_attempt.returncode != 0:
                 if output:
@@ -136,6 +143,7 @@ def execute_adb(adb_command: str, output: bool = True, root_required=False) -> A
                 capture_output=True,
                 text=True,
                 env=env,
+                timeout=timeout,
             )
             if verify_check.returncode != 0 or verify_check.stdout.strip() != "root":
                 if output:
@@ -147,13 +155,25 @@ def execute_adb(adb_command: str, output: bool = True, root_required=False) -> A
                     command=adb_command,
                 )
 
-    result = subprocess.run(
-        adb_command,
-        shell=True,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    try:
+        result = subprocess.run(
+            adb_command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        if output:
+            logger.error(f"Command timed out after {timeout}s: {adb_command}")
+        return AdbResponse(
+            success=False,
+            error=f"Command timed out after {timeout}s",
+            return_code=124,
+            command=adb_command,
+            output=(exc.stdout or "").strip() if isinstance(exc.stdout, str) else "",
+        )
     if result.returncode == 0:
         return AdbResponse(
             success=True,

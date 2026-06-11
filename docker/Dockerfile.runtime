@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 ARG MEMGUI_BASE_IMAGE=crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/memgui/memgui-bench:26020301
 FROM ${MEMGUI_BASE_IMAGE}
 
@@ -11,13 +12,18 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app/service
 
-COPY pyproject.toml uv.lock README.md config_loader.py .env.example /app/service/
+COPY pyproject.toml uv.lock README.md /app/service/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project
+
+COPY config_loader.py .env.example /app/service/
 COPY src /app/service/src
 COPY data /app/service/data
 COPY memgui_eval /app/service/memgui_eval
 COPY memgui_bench /app/service/memgui_bench
 
-RUN uv sync --locked --no-cache
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked
 
 RUN mkdir -p /app/service/_emulator_proto && \
     uv run python -m grpc_tools.protoc \

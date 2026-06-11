@@ -49,10 +49,10 @@ AVD_MAPPING: dict[str, str] = {
     "android_world": "Pixel_8_API_34_x86_64",
     "memgui_bench": "Pixel_8_API_34_x86_64",
 }
-SNAPSHOT_MAPPING: dict[str, str] = {
+SNAPSHOT_MAPPING: dict[str, str | None] = {
     "mobile_world": "init_state",
     "android_world": "aw_init_state",
-    "memgui_bench": "init_state",
+    "memgui_bench": None,
 }
 
 
@@ -678,8 +678,9 @@ def switch_suite_family(
             # Same AVD — just swap snapshots, no emulator restart
             logger.info("[SUITE_FAMILY_SWITCH] Same AVD, swapping snapshot only")
             target_snapshot = SNAPSHOT_MAPPING[target_family]
-            for device_id, controller in CONTROLLERS.items():
-                controller.load_snapshot(target_snapshot)
+            if target_snapshot is not None:
+                for device_id, controller in CONTROLLERS.items():
+                    controller.load_snapshot(target_snapshot)
             device_id = list(CONTROLLERS.keys())[0] if CONTROLLERS else None
         else:
             # Different AVD — full restart

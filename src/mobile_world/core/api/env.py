@@ -250,8 +250,16 @@ def launch_container(
         envs["ENABLE_VIEWER"] = "true"
 
     volumes: list[tuple[str, str]] = []
+    entrypoint = config.entrypoint
+    command = config.command
     if config.dev_src_path:
-        volumes.append((str(config.dev_src_path), "/app/service/src"))
+        dev_src_path = Path(config.dev_src_path)
+        volumes.append((str(dev_src_path), "/app/service/src"))
+        dev_docker_path = dev_src_path.parent / "docker"
+        if dev_docker_path.exists():
+            volumes.append((str(dev_docker_path), "/app/docker"))
+            entrypoint = "/bin/bash"
+            command = ["/app/docker/compat_entrypoint.sh", *config.command]
     if config.env_file_path:
         volumes.append((str(config.env_file_path.resolve()), "/app/service/.env"))
 
@@ -265,8 +273,8 @@ def launch_container(
         ],
         env_vars=envs,
         volumes=volumes,
-        entrypoint=config.entrypoint,
-        command=config.command,
+        entrypoint=entrypoint,
+        command=command,
         detach=detach,
         privileged=True,
         remove=True,
