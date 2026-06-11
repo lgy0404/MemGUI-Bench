@@ -65,9 +65,10 @@
 - Permission to run privileged Docker containers
 - Python 3.12 and `uv` on the host
 
-The Docker image already includes the Android SDK, ADB, emulator binaries,
-MemGUI-AVD snapshot, Python dependencies, and benchmark code. Users do not need
-to install Android Studio, download AVD snapshots, or configure emulator paths.
+The base Docker image already includes the Android SDK, ADB, emulator binaries,
+and MemGUI-AVD snapshot. `mg env build` adds the current MobileWorld-compatible
+MemGUI-Bench runtime on top of that base image. Users do not need to install
+Android Studio, download AVD snapshots, or configure emulator paths.
 
 ### Quick Install
 
@@ -133,14 +134,23 @@ to reduce cost or latency.
 
 ## 🚀 Quick Start
 
-### 1. Check Environment & Pull Docker Image
+### 1. Check Environment & Prepare Docker Images
 
 ```bash
 sudo uv run mg env check
 ```
 
-This verifies Docker, KVM support, and pulls the pre-configured MemGUI-Bench
-image after confirmation if it is missing.
+This verifies Docker, KVM support, `.env`, the MemGUI base image, and the local
+runtime image. If the runtime image is missing, build it once:
+
+```bash
+sudo uv run mg env build
+```
+
+`mg env build` uses the pre-configured MemGUI image as its base and adds
+`/app/service`, `/app/docker`, the MobileWorld server, and the entrypoint needed
+for host-side orchestration, including automatic ADB authorization and host
+port relay. It does not ask you to configure AVDs manually.
 
 ### 2. Launch Docker Containers
 
@@ -200,7 +210,8 @@ uv run mg eval \
 
 | Command | Description |
 | ------- | ----------- |
-| `sudo uv run mg env check` | Check Docker/KVM/.env and prompt to pull the configured image if needed |
+| `sudo uv run mg env check` | Check Docker/KVM/.env, base image, and local runtime image |
+| `sudo uv run mg env build` | Build the local MobileWorld-compatible runtime image from the MemGUI base image |
 | `sudo uv run mg env run` | Launch backend container(s) with local `.env` mounted |
 | `sudo uv run mg env list` | List MemGUI-Bench containers |
 | `sudo uv run mg env exec` | Open a shell or run a command in a container for debugging |

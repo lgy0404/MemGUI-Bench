@@ -13,6 +13,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from mobile_world.runtime.utils.models import DEFAULT_IMAGE, DEFAULT_NAME_PREFIX
+
 from ..runner import run_agent_with_evaluation
 
 
@@ -108,18 +110,15 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         "--env-prefix",
         "--env_prefix",
         dest="env_name_prefix",
-        default="memgui_bench_env",
-        help="Name prefix for containers (default: memgui_bench_env)",
+        default=DEFAULT_NAME_PREFIX,
+        help=f"Name prefix for containers (default: {DEFAULT_NAME_PREFIX})",
     )
     parser.add_argument(
         "--env-image",
         "--env_image",
         dest="env_image",
-        default=(
-            "crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/"
-            "memgui/memgui-bench:26020301"
-        ),
-        help="Image name for containers (default: MemGUI-Bench image)",
+        default=DEFAULT_IMAGE,
+        help=f"Image name for containers (default: {DEFAULT_IMAGE})",
     )
     parser.add_argument(
         "--enable-mcp",

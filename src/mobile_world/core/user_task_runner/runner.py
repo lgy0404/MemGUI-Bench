@@ -22,6 +22,8 @@ from mobile_world.runtime.client import AndroidEnvClient, AndroidMCPEnvClient
 from mobile_world.runtime.utils.models import (
     ANSWER,
     ASK_USER,
+    DEFAULT_IMAGE,
+    DEFAULT_NAME_PREFIX,
     ENV_FAIL,
     FINISHED,
     UNKNOWN,
@@ -267,11 +269,8 @@ def run_user_task(
     device: str = "emulator-5554",
     step_wait_time: float = 1.0,
     suite_family: str = "memgui_bench",
-    env_name_prefix: str = "memgui_bench_env",
-    env_image: str = (
-        "crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/"
-        "memgui/memgui-bench:26020301"
-    ),
+    env_name_prefix: str = DEFAULT_NAME_PREFIX,
+    env_image: str = DEFAULT_IMAGE,
     enable_mcp: bool = False,
     log_verbose: bool = False,
     **kwargs,

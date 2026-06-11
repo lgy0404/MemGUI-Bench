@@ -6,12 +6,14 @@ from importlib import import_module
 from typing import Any
 
 _EXPORT_MODULES = {
+    "BASE_IMAGE": "mobile_world.core.api.env",
     "DEFAULT_IMAGE": "mobile_world.core.api.env",
     "DEFAULT_NAME_PREFIX": "mobile_world.core.api.env",
     "ContainerConfig": "mobile_world.core.api.env",
     "ContainerInfo": "mobile_world.core.api.env",
     "LaunchResult": "mobile_world.core.api.env",
     "build_container_config": "mobile_world.core.api.env",
+    "build_runtime_image": "mobile_world.core.api.env",
     "find_available_ports": "mobile_world.core.api.env",
     "find_next_container_index": "mobile_world.core.api.env",
     "get_container_info": "mobile_world.core.api.env",

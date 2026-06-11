@@ -3,7 +3,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 # Action type constants
 ANSWER = "answer"
@@ -25,11 +25,20 @@ DRAG = "drag"
 ASK_USER = "ask_user"
 MCP = "mcp"
 ENV_FAIL = "error_env"
-DEFAULT_IMAGE = (
+BASE_IMAGE = (
     "crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/"
     "memgui/memgui-bench:26020301"
 )
+DEFAULT_IMAGE = "memgui-bench:mobileworld-runtime"
 DEFAULT_NAME_PREFIX = "memgui_bench_env"
+DEFAULT_CONTAINER_ENTRYPOINT = "/usr/local/bin/memgui-runtime-entrypoint.sh"
+DEFAULT_CONTAINER_COMMAND = (
+    "tail",
+    "-f",
+    "/var/log/emulator.log",
+    "/var/log/server.log",
+    "/var/log/dockerd.err.log",
+)
 _ACTION_TYPES = (
     CLICK,
     DOUBLE_TAP,
@@ -516,6 +525,8 @@ class ContainerConfig(BaseModel):
     enable_viewer: bool = False
     env_file_path: Any | None = None  # Path
     dev_src_path: Any | None = None  # Path
+    entrypoint: str | None = DEFAULT_CONTAINER_ENTRYPOINT
+    command: list[str] = Field(default_factory=lambda: list(DEFAULT_CONTAINER_COMMAND))
 
 
 class LaunchResult(BaseModel):

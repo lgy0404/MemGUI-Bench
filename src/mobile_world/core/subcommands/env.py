@@ -16,8 +16,10 @@ from rich.table import Table
 
 from dotenv import dotenv_values
 from mobile_world.core.api.env import (
+    BASE_IMAGE,
     DEFAULT_IMAGE,
     DEFAULT_NAME_PREFIX,
+    build_runtime_image,
     ContainerConfig,
     check_image_status,
     check_prerequisites,
@@ -187,6 +189,41 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         default=10,
         help="Seconds to wait between launching each container (default: 10)",
+    )
+
+    # Build subcommand
+    build_parser = env_subparsers.add_parser(
+        "build",
+        help="Build the local MobileWorld-compatible runtime image from the MemGUI base image",
+    )
+    build_parser.add_argument(
+        "--tag",
+        default=DEFAULT_IMAGE,
+        help=f"Runtime image tag to build (default: {DEFAULT_IMAGE})",
+    )
+    build_parser.add_argument(
+        "--base-image",
+        "--base_image",
+        dest="base_image",
+        default=BASE_IMAGE,
+        help=f"Base MemGUI image to extend (default: {BASE_IMAGE})",
+    )
+    build_parser.add_argument(
+        "--context",
+        default=None,
+        help="Docker build context (default: project root)",
+    )
+    build_parser.add_argument(
+        "--dockerfile",
+        default=None,
+        help="Runtime Dockerfile path (default: docker/Dockerfile.runtime)",
+    )
+    build_parser.add_argument(
+        "--no-cache",
+        "--no_cache",
+        dest="no_cache",
+        action="store_true",
+        help="Build without Docker layer cache",
     )
 
     # Destroy subcommand
@@ -525,6 +562,8 @@ def _launch_containers(args: argparse.Namespace) -> None:
                 ],
                 env_vars=envs,
                 volumes=volumes,
+                entrypoint=config.entrypoint,
+                command=config.command,
                 detach=args.detach,
                 privileged=True,
                 remove=True,
@@ -1175,43 +1214,72 @@ def _check_prerequisites(args: argparse.Namespace) -> None:
             )
         )
 
-        # Check Docker image status
+        # Check base Docker image status
         console.print()
         console.print(
             Panel(
-                f"[cyan]Checking Docker image status...[/cyan]\n[dim]{DEFAULT_IMAGE}[/dim]",
-                title="[bold cyan]🐳 Image Check[/bold cyan]",
+                f"[cyan]Checking MemGUI base image status...[/cyan]\n[dim]{BASE_IMAGE}[/dim]",
+                title="[bold cyan]🐳 Base Image Check[/bold cyan]",
                 border_style="cyan",
             )
         )
 
-        image_status = check_image_status(DEFAULT_IMAGE)
+        base_status = check_image_status(BASE_IMAGE)
 
-        if not image_status.exists_locally:
+        if not base_status.exists_locally:
             console.print(
                 Panel(
-                    f"[yellow]Docker image not found locally[/yellow]\n[dim]{DEFAULT_IMAGE}[/dim]",
-                    title="[yellow]⚠ Image Missing[/yellow]",
+                    f"[yellow]MemGUI base image not found locally[/yellow]\n[dim]{BASE_IMAGE}[/dim]",
+                    title="[yellow]⚠ Base Image Missing[/yellow]",
                     border_style="yellow",
                 )
             )
-            _offer_image_pull(DEFAULT_IMAGE)
-        elif image_status.needs_update:
+            _offer_image_pull(BASE_IMAGE)
+        elif base_status.needs_update:
             console.print(
                 Panel(
-                    "[yellow]A newer version of the Docker image is available[/yellow]\n"
-                    f"[dim]Local:  {image_status.local_digest[:12] if image_status.local_digest else 'unknown'}...[/dim]\n"
-                    f"[dim]Remote: {image_status.remote_digest[:12] if image_status.remote_digest else 'unknown'}...[/dim]",
-                    title="[yellow]⚠ Update Available[/yellow]",
+                    "[yellow]A newer version of the MemGUI base image is available[/yellow]\n"
+                    f"[dim]Local:  {base_status.local_digest[:12] if base_status.local_digest else 'unknown'}...[/dim]\n"
+                    f"[dim]Remote: {base_status.remote_digest[:12] if base_status.remote_digest else 'unknown'}...[/dim]",
+                    title="[yellow]⚠ Base Image Update Available[/yellow]",
                     border_style="yellow",
                 )
             )
-            _offer_image_pull(DEFAULT_IMAGE)
+            _offer_image_pull(BASE_IMAGE)
         else:
             console.print(
                 Panel(
-                    f"[green]✓ Docker image is up-to-date[/green]\n[dim]{DEFAULT_IMAGE}[/dim]",
-                    title="[bold green]✓ Image Ready[/bold green]",
+                    f"[green]✓ MemGUI base image is ready[/green]\n[dim]{BASE_IMAGE}[/dim]",
+                    title="[bold green]✓ Base Image Ready[/bold green]",
+                    border_style="green",
+                )
+            )
+
+        console.print()
+        console.print(
+            Panel(
+                f"[cyan]Checking MemGUI runtime image status...[/cyan]\n[dim]{DEFAULT_IMAGE}[/dim]",
+                title="[bold cyan]🐳 Runtime Image Check[/bold cyan]",
+                border_style="cyan",
+            )
+        )
+
+        runtime_status = check_image_status(DEFAULT_IMAGE)
+        if not runtime_status.exists_locally:
+            console.print(
+                Panel(
+                    f"[yellow]Runtime image not found locally[/yellow]\n[dim]{DEFAULT_IMAGE}[/dim]\n"
+                    "[dim]This image adds /app/service and the MobileWorld server on top of the base MemGUI AVD image.[/dim]",
+                    title="[yellow]⚠ Runtime Image Missing[/yellow]",
+                    border_style="yellow",
+                )
+            )
+            _offer_runtime_build(DEFAULT_IMAGE, BASE_IMAGE)
+        else:
+            console.print(
+                Panel(
+                    f"[green]✓ Runtime image is ready[/green]\n[dim]{DEFAULT_IMAGE}[/dim]",
+                    title="[bold green]✓ Runtime Image Ready[/bold green]",
                     border_style="green",
                 )
             )
@@ -1277,10 +1345,75 @@ def _offer_image_pull(image: str) -> None:
         console.print("\n[dim]Cancelled.[/dim]")
 
 
+def _build_runtime_image(args: argparse.Namespace) -> None:
+    """Build the local runtime image."""
+    console.print(
+        Panel(
+            f"[cyan]Building MemGUI runtime image...[/cyan]\n"
+            f"[dim]Tag:[/dim] {args.tag}\n"
+            f"[dim]Base:[/dim] {args.base_image}",
+            title="[bold cyan]🐳 Build Runtime Image[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+    success, message = build_runtime_image(
+        tag=args.tag,
+        base_image=args.base_image,
+        context_dir=args.context,
+        dockerfile=args.dockerfile,
+        no_cache=args.no_cache,
+    )
+    if success:
+        console.print(
+            Panel(
+                f"[green]✓ {message}[/green]",
+                title="[bold green]✓ Build Complete[/bold green]",
+                border_style="green",
+            )
+        )
+    else:
+        console.print(
+            Panel(
+                f"[red]✗ {message}[/red]",
+                title="[bold red]✗ Build Failed[/bold red]",
+                border_style="red",
+            )
+        )
+        sys.exit(1)
+
+
+def _offer_runtime_build(tag: str, base_image: str) -> None:
+    """Offer to build the runtime image interactively."""
+    console.print()
+    try:
+        response = console.input("[cyan]Would you like to build the runtime image now? [y/N]: [/cyan]")
+        if response.lower() in ("y", "yes"):
+            args = argparse.Namespace(
+                tag=tag,
+                base_image=base_image,
+                context=None,
+                dockerfile=None,
+                no_cache=False,
+            )
+            _build_runtime_image(args)
+        else:
+            console.print(
+                Panel(
+                    f"[dim]Skipping runtime build. Run 'sudo uv run mg env build' before 'mg env run'.[/dim]\n"
+                    f"[dim]Runtime tag: {tag}[/dim]",
+                    title="[dim]ℹ Skipped[/dim]",
+                    border_style="dim",
+                )
+            )
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[dim]Cancelled.[/dim]")
+
+
 async def execute(args: argparse.Namespace) -> None:
     """Execute the env command."""
     action_map: dict[str, Callable] = {
         "init": _init_environment,
+        "build": _build_runtime_image,
         "run": _launch_containers,
         "rm": _destroy_containers,
         "list": _list_containers,

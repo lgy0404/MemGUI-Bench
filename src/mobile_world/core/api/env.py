@@ -25,6 +25,7 @@ from mobile_world.runtime.utils.docker import (
     run_command,
 )
 from mobile_world.runtime.utils.models import (
+    BASE_IMAGE,
     DEFAULT_IMAGE,
     DEFAULT_NAME_PREFIX,
     ContainerConfig,
@@ -34,6 +35,15 @@ from mobile_world.runtime.utils.models import (
     PrerequisiteCheckResult,
     PrerequisiteCheckResults,
 )
+
+
+def find_project_root(start: Path | None = None) -> Path:
+    """Find the nearest project root containing pyproject.toml and docker assets."""
+    current = (start or Path.cwd()).resolve()
+    for candidate in [current] + list(current.parents):
+        if (candidate / "pyproject.toml").exists() and (candidate / "docker").exists():
+            return candidate
+    return current
 
 
 def is_port_available(port: int, host: str = "0.0.0.0") -> bool:
@@ -255,6 +265,8 @@ def launch_container(
         ],
         env_vars=envs,
         volumes=volumes,
+        entrypoint=config.entrypoint,
+        command=config.command,
         detach=detach,
         privileged=True,
         remove=True,
@@ -830,16 +842,20 @@ def check_image_status(image: str = DEFAULT_IMAGE) -> ImageStatus:
 
     try:
         result = subprocess.run(
-            ["docker", "image", "inspect", image, "--format", "{{index .RepoDigests 0}}"],
+            ["docker", "image", "inspect", image],
             capture_output=True,
             text=True,
         )
 
         if result.returncode == 0:
             status.exists_locally = True
-            output = result.stdout.strip()
-            if "@sha256:" in output:
-                status.local_digest = output.split("@sha256:")[-1]
+            try:
+                image_data = json.loads(result.stdout or "[]")
+                repo_digests = image_data[0].get("RepoDigests", []) if image_data else []
+                if repo_digests and "@sha256:" in repo_digests[0]:
+                    status.local_digest = repo_digests[0].split("@sha256:")[-1]
+            except json.JSONDecodeError:
+                pass
     except Exception as e:
         status.error = f"Failed to check local image: {e}"
         return status
@@ -895,3 +911,43 @@ def pull_image(image: str = DEFAULT_IMAGE) -> tuple[bool, str]:
             return False, f"Failed to pull {image}"
     except Exception as e:
         return False, f"Error pulling image: {e}"
+
+
+def build_runtime_image(
+    tag: str = DEFAULT_IMAGE,
+    base_image: str = BASE_IMAGE,
+    context_dir: str | Path | None = None,
+    dockerfile: str | Path | None = None,
+    no_cache: bool = False,
+) -> tuple[bool, str]:
+    """Build the local MobileWorld-compatible runtime image from the MemGUI base image."""
+    context_path = Path(context_dir).resolve() if context_dir else find_project_root()
+    dockerfile_path = (
+        Path(dockerfile).resolve() if dockerfile else context_path / "docker" / "Dockerfile.runtime"
+    )
+
+    if not dockerfile_path.exists():
+        return False, f"Runtime Dockerfile not found: {dockerfile_path}"
+
+    cmd = [
+        "docker",
+        "build",
+        "-f",
+        str(dockerfile_path),
+        "--build-arg",
+        f"MEMGUI_BASE_IMAGE={base_image}",
+        "-t",
+        tag,
+    ]
+    if no_cache:
+        cmd.append("--no-cache")
+    cmd.append(str(context_path))
+
+    try:
+        result = subprocess.run(cmd, capture_output=False, text=True)
+    except Exception as e:
+        return False, f"Error building runtime image: {e}"
+
+    if result.returncode == 0:
+        return True, f"Successfully built {tag} from {base_image}"
+    return False, f"Failed to build {tag} from {base_image}"

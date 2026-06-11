@@ -20,7 +20,14 @@ from mobile_world.runtime.client import (
 from mobile_world.runtime.utils.docker import (
     discover_backends,
 )
-from mobile_world.runtime.utils.models import ANSWER, ENV_FAIL, FINISHED, UNKNOWN
+from mobile_world.runtime.utils.models import (
+    ANSWER,
+    DEFAULT_IMAGE,
+    DEFAULT_NAME_PREFIX,
+    ENV_FAIL,
+    FINISHED,
+    UNKNOWN,
+)
 from mobile_world.runtime.utils.trajectory_logger import TrajLogger
 
 load_dotenv()
@@ -273,11 +280,8 @@ def run_agent_with_evaluation(
     step_wait_time: float = 1.0,
     suite_family: str = "memgui_bench",
     seed: int = None,
-    env_name_prefix: str = "memgui_bench_env",
-    env_image: str = (
-        "crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/"
-        "memgui/memgui-bench:26020301"
-    ),
+    env_name_prefix: str = DEFAULT_NAME_PREFIX,
+    env_image: str = DEFAULT_IMAGE,
     dry_run: bool = False,
     enable_mcp: bool = False,
     enable_user_interaction: bool = False,

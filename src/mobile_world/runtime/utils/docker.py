@@ -15,6 +15,8 @@ from typing import Any
 
 from loguru import logger
 
+from mobile_world.runtime.utils.models import DEFAULT_IMAGE, DEFAULT_NAME_PREFIX
+
 
 def run_command(
     cmd: list[str],
@@ -136,6 +138,8 @@ def build_run_command(
     port_mappings: Iterable[tuple[int, int]] | None = None,  # (host, container)
     env_vars: dict[str, str] | None = None,
     volumes: Iterable[tuple[str, str]] | None = None,  # (host, container)
+    entrypoint: str | None = None,
+    command: Iterable[str] | None = None,
     detach: bool = True,
     privileged: bool = True,
     remove: bool = True,
@@ -160,10 +164,14 @@ def build_run_command(
     for key, value in (env_vars or {}).items():
         cmd.extend(["-e", f"{key}={value}"])
 
+    if entrypoint:
+        cmd.extend(["--entrypoint", entrypoint])
+
     if detach:
         cmd.append("-d")
 
     cmd.append(image)
+    cmd.extend(command or [])
     return cmd
 
 
@@ -207,16 +215,13 @@ def docker_exec_replace(container_name: str, command: str, *, interactive: bool 
 
 
 def discover_backends(
-    image_filter: str = (
-        "crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/"
-        "memgui/memgui-bench:26020301"
-    ),
-    prefix: str = "memgui_bench_env",
+    image_filter: str = DEFAULT_IMAGE,
+    prefix: str = DEFAULT_NAME_PREFIX,
 ) -> tuple[list[str], list[str]]:
     """Discover backend URLs from running containers.
 
     Args:
-        image_filter: Image name substring to filter containers (default: MemGUI-Bench image)
+        image_filter: Image name substring to filter containers (default: MemGUI-Bench runtime image)
 
     Returns:
         list[str]: List of backend URLs in format http://localhost:PORT
