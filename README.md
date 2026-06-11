@@ -47,7 +47,7 @@
 ---
 
 ## 📢 Updates
-- **2026-06-11**: 🚀 Merged [PR #3](https://github.com/lgy0404/MemGUI-Bench/pull/3), refactoring MemGUI-Bench to a MobileWorld-style runtime and trajectory viewer. The new workflow includes prebuilt Docker runtime setup, `.env` configuration, parallel evaluation, host-side trajectory logs, task subset/difficulty filters, custom pass@k, and a cleaner viewer. We will release more frontier model evaluation results on MemGUI-Bench soon!
+- **2026-06-11**: 🚀 Merged [PR #3](https://github.com/lgy0404/MemGUI-Bench/pull/3), refactoring MemGUI-Bench to a [MobileWorld](https://github.com/Tongyi-MAI/MobileWorld)-style runtime and trajectory viewer. We will release more frontier model evaluation results on MemGUI-Bench soon!
 - **2026-02-15**: 🎉 MemGUI-Bench adopted by [Mobile-Agent-v3.5](https://github.com/X-PLUG/MobileAgent)! Congrats to the Tongyi Lab team for achieving **27.1%** on Easy tasks with GUI-Owl-1.5-32B. We welcome more agents to challenge the full benchmark! 🚀
 - **2026-02-09**: 🗂️ Benchmark tasks now available on HuggingFace: [lgy0404/MemGUI-Bench](https://huggingface.co/datasets/lgy0404/MemGUI-Bench) 
 - **2026-02-09**: 📄 Paper released on arXiv! Check out our paper: [arXiv:2602.06075](https://arxiv.org/abs/2602.06075) 
