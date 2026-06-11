@@ -65,10 +65,10 @@
 - Permission to run privileged Docker containers
 - Python 3.12 and `uv` on the host
 
-The base Docker image already includes the Android SDK, ADB, emulator binaries,
-and MemGUI-AVD snapshot. `mg env build` adds the current MobileWorld-compatible
-MemGUI-Bench runtime on top of that base image. Users do not need to install
-Android Studio, download AVD snapshots, or configure emulator paths.
+The default Docker runtime image already includes the Android SDK, ADB,
+emulator binaries, MemGUI-AVD snapshot, and MobileWorld-compatible
+MemGUI-Bench runtime. Users do not need to install Android Studio, download AVD
+snapshots, build a local runtime image, or configure emulator paths.
 
 ### Quick Install
 
@@ -140,39 +140,10 @@ to reduce cost or latency.
 sudo uv run mg env check
 ```
 
-This verifies Docker, KVM support, `.env`, the MemGUI base image, and the local
-runtime image. If the runtime image is missing, build it once:
-
-```bash
-sudo uv run mg env build
-```
-
-If PyPI is slow, pass a Python package mirror when building the runtime image:
-
-```bash
-sudo uv run mg env build --python-index-url https://pypi.tuna.tsinghua.edu.cn/simple
-```
-
-You can also put `PYTHON_PACKAGE_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple`
-in `.env`; `mg env build` reads it automatically.
-
-`mg env build` uses the pre-configured MemGUI image as its base and adds
-`/app/service`, `/app/docker`, the MobileWorld server, and the entrypoint needed
-for host-side orchestration, including automatic ADB authorization and host
-port relay. It does not ask you to configure AVDs manually.
-
 ### 2. Launch Docker Containers
 
 ```bash
 sudo uv run mg env run --count 2
-```
-
-If you have a pre-warmed runtime image, use it to avoid repeated cold AVD boot:
-
-```bash
-sudo uv run mg env run \
-  --count 2 \
-  --image memgui-bench:mobileworld-runtime-ready
 ```
 
 This launches 2 ready MemGUI backend containers with:
@@ -231,8 +202,8 @@ uv run mg eval \
 
 | Command | Description |
 | ------- | ----------- |
-| `sudo uv run mg env check` | Check Docker/KVM/.env, base image, and local runtime image |
-| `sudo uv run mg env build` | Build the local MobileWorld-compatible runtime image from the MemGUI base image |
+| `sudo uv run mg env check` | Check Docker/KVM/.env and pull the default prebuilt runtime image |
+| `sudo uv run mg env build` | Optional: build a local MobileWorld-compatible runtime image from the MemGUI base image |
 | `sudo uv run mg env run` | Launch backend container(s) with local `.env` mounted |
 | `sudo uv run mg env list` | List MemGUI-Bench containers |
 | `sudo uv run mg env exec` | Open a shell or run a command in a container for debugging |

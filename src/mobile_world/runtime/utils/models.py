@@ -29,7 +29,10 @@ BASE_IMAGE = (
     "crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/"
     "memgui/memgui-bench:26020301"
 )
-DEFAULT_IMAGE = "memgui-bench:mobileworld-runtime"
+DEFAULT_IMAGE = (
+    "crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/"
+    "memgui/memgui-bench:26061101"
+)
 DEFAULT_NAME_PREFIX = "memgui_bench_env"
 DEFAULT_EMULATOR_TIMEOUT = 1200
 DEFAULT_CONTAINER_READY_TIMEOUT = DEFAULT_EMULATOR_TIMEOUT

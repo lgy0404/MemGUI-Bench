@@ -1270,47 +1270,6 @@ def _check_prerequisites(args: argparse.Namespace) -> None:
             )
         )
 
-        # Check base Docker image status
-        console.print()
-        console.print(
-            Panel(
-                f"[cyan]Checking MemGUI base image status...[/cyan]\n[dim]{BASE_IMAGE}[/dim]",
-                title="[bold cyan]🐳 Base Image Check[/bold cyan]",
-                border_style="cyan",
-            )
-        )
-
-        base_status = check_image_status(BASE_IMAGE)
-
-        if not base_status.exists_locally:
-            console.print(
-                Panel(
-                    f"[yellow]MemGUI base image not found locally[/yellow]\n[dim]{BASE_IMAGE}[/dim]",
-                    title="[yellow]⚠ Base Image Missing[/yellow]",
-                    border_style="yellow",
-                )
-            )
-            _offer_image_pull(BASE_IMAGE)
-        elif base_status.needs_update:
-            console.print(
-                Panel(
-                    "[yellow]A newer version of the MemGUI base image is available[/yellow]\n"
-                    f"[dim]Local:  {base_status.local_digest[:12] if base_status.local_digest else 'unknown'}...[/dim]\n"
-                    f"[dim]Remote: {base_status.remote_digest[:12] if base_status.remote_digest else 'unknown'}...[/dim]",
-                    title="[yellow]⚠ Base Image Update Available[/yellow]",
-                    border_style="yellow",
-                )
-            )
-            _offer_image_pull(BASE_IMAGE)
-        else:
-            console.print(
-                Panel(
-                    f"[green]✓ MemGUI base image is ready[/green]\n[dim]{BASE_IMAGE}[/dim]",
-                    title="[bold green]✓ Base Image Ready[/bold green]",
-                    border_style="green",
-                )
-            )
-
         console.print()
         console.print(
             Panel(
@@ -1325,12 +1284,24 @@ def _check_prerequisites(args: argparse.Namespace) -> None:
             console.print(
                 Panel(
                     f"[yellow]Runtime image not found locally[/yellow]\n[dim]{DEFAULT_IMAGE}[/dim]\n"
-                    "[dim]This image adds /app/service and the MobileWorld server on top of the base MemGUI AVD image.[/dim]",
+                    "[dim]MemGUI-Bench will pull the prebuilt runtime image automatically.[/dim]",
                     title="[yellow]⚠ Runtime Image Missing[/yellow]",
                     border_style="yellow",
                 )
             )
-            _offer_runtime_build(DEFAULT_IMAGE, BASE_IMAGE)
+            _pull_runtime_image_or_exit(DEFAULT_IMAGE)
+        elif runtime_status.needs_update:
+            console.print(
+                Panel(
+                    "[yellow]A newer MemGUI runtime image is available[/yellow]\n"
+                    f"[dim]Local:  {runtime_status.local_digest[:12] if runtime_status.local_digest else 'unknown'}...[/dim]\n"
+                    f"[dim]Remote: {runtime_status.remote_digest[:12] if runtime_status.remote_digest else 'unknown'}...[/dim]\n"
+                    "[dim]MemGUI-Bench will pull the latest runtime image automatically.[/dim]",
+                    title="[yellow]⚠ Runtime Image Update Available[/yellow]",
+                    border_style="yellow",
+                )
+            )
+            _pull_runtime_image_or_exit(DEFAULT_IMAGE)
         else:
             console.print(
                 Panel(
@@ -1349,6 +1320,40 @@ def _check_prerequisites(args: argparse.Namespace) -> None:
             )
         )
         sys.exit(1)
+
+
+def _pull_runtime_image_or_exit(image: str) -> None:
+    """Pull the default runtime image during env check."""
+    console.print()
+    console.print(
+        Panel(
+            f"[cyan]Pulling MemGUI runtime image...[/cyan]\n[dim]{image}[/dim]",
+            title="[bold cyan]⬇️  Pulling Runtime Image[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+    console.print()
+    success, message = pull_image(image)
+    console.print()
+    if success:
+        console.print(
+            Panel(
+                f"[green]✓ {message}[/green]",
+                title="[bold green]✓ Runtime Image Ready[/bold green]",
+                border_style="green",
+            )
+        )
+        return
+
+    console.print(
+        Panel(
+            f"[red]✗ {message}[/red]\n"
+            f"[yellow]Please verify registry access, then run:[/yellow]\n[dim]sudo docker pull {image}[/dim]",
+            title="[bold red]✗ Runtime Image Pull Failed[/bold red]",
+            border_style="red",
+        )
+    )
+    sys.exit(1)
 
 
 def _offer_image_pull(image: str) -> None:
