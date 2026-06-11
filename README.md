@@ -34,9 +34,8 @@
 
 ## 📋 Table of Contents
 
-- [🐳 Environment Setup](#-environment-setup)
-- [⚙️ Configuration](#️-configuration)
-- [🚀 Usage](#-usage)
+- [💾 Installation](#-installation)
+- [🚀 Quick Start](#-quick-start)
 - [📁 Benchmark Session](#-benchmark-session)
 - [📊 Metrics](#-metrics)
 - [🤖 Adding a New Agent](#-adding-a-new-agent)
@@ -54,193 +53,254 @@
 - **2026-02-03**: Initial release of MemGUI-Bench benchmark. Check out our [website](https://lgy0404.github.io/MemGUI-Bench/).
 
 
-## 🐳 Environment Setup
+## 💾 Installation
 
 <div align="center">
   <img src="assets/unified-architecture.drawio.png" alt="Task Distribution" width="100%" />
 </div>
 
+### System Requirements
 
-### Option 1: Docker (Recommended)
+- **Linux host** with Docker and KVM acceleration
+- Permission to run privileged Docker containers
+- Python 3.12 and `uv` on the host
 
-Use our pre-configured Docker image with all dependencies installed:
+The default Docker runtime image already includes the Android SDK, ADB,
+emulator binaries, MemGUI-AVD snapshot, and MobileWorld-compatible
+MemGUI-Bench runtime. Users do not need to install Android Studio, download AVD
+snapshots, build a local runtime image, or configure emulator paths.
 
-```bash
-# Pull the image (public, no login required)
-sudo docker pull \
-  crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/memgui/memgui-bench:26020301
-
-# Run container
-sudo docker run -it --privileged \
-  --name memgui-bench \
-  -w /root/MemGUI-Bench \
-  crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/memgui/memgui-bench:26020301 \
-  bash
-
-# Inside container, you're already in /root/MemGUI-Bench
-python run.py
-```
-
-> **Note**: The `--privileged` flag is required for Android emulator support.
-
-The Docker image includes:
-
-- Pre-configured Android emulator with MemGUI-AVD
-- All required conda environments
-- ADB and Android SDK tools
-
-### Option 2: Local Setup
-
-For developers who prefer local installation:
-
-<details>
-<summary><b>Click to expand local setup instructions</b></summary>
-
-#### Prerequisites
-
-1. **Conda**: Install from [conda.io](https://conda.io/projects/conda/en/latest/user-guide/install/index.html)
-2. **Android Debug Bridge (ADB)**: Install from [Android Developer](https://developer.android.com/tools/adb) and add to PATH
-3. **Android Studio & AVD**:
-   - Download and install [Android Studio](https://developer.android.com/studio)
-   - Download the pre-configured MemGUI-AVD emulator snapshot:
-     - **Download**: [Baidu Netdisk](https://pan.baidu.com/s/11MhISCYTV5JJPjf9FALy2g?pwd=tfnb) (Code: `tfnb`)
-     - **File**: `MemGUI-AVD-250704-base.zip`
-   - Extract to your AVD directory:
-     - **Windows**: `C:\Users\[Username]\.android\avd\`
-     - **macOS**: `~/Library/Android/avd/`
-     - **Linux**: `~/.android/avd/`
-   - Launch Android Studio → Device Manager → Start MemGUI-AVD
-
-#### Repository Setup
+### Quick Install
 
 ```bash
-# Clone repository with submodules
-git clone --recursive https://github.com/lgy0404/MemGUI-Bench.git
-cd MemGUI-Bench
+# Install dependencies with uv
+uv sync
 
-# If already cloned without --recursive, init submodules manually:
-# git submodule update --init --recursive
-
-# Run setup script
-./setup.sh
-
-# Configure
-cp config.yaml.example.opensource config.yaml
-# Edit config.yaml with your paths
+# Create local .env from the example
+uv run mg env init
 ```
 
-</details>
+### Environment Configuration
+
+`uv run mg env init` creates `.env` from `.env.example`. If you prefer to create
+the environment file manually:
+
+```bash
+cp .env.example .env
+```
+
+Edit the `.env` file and configure the following parameters.
+
+**Required for Agent Evaluation:**
+- `BASE_URL`: OpenAI-compatible base URL for the agent model
+- `API_KEY`: API key for the agent model
+
+**Required for MemGUI-Eval:**
+- `MEMGUI_API_KEY`: API key for MemGUI-Eval
+- `MEMGUI_STEP_DESC_MODEL`: Step-description model
+- `MEMGUI_STEP_DESC_BASE_URL`: Optional step-description endpoint; leave empty to use `BASE_URL`
+- `MEMGUI_FINAL_DECISION_MODEL`: Final-decision model
+- `MEMGUI_FINAL_DECISION_BASE_URL`: Optional final-decision endpoint; leave empty to use `BASE_URL`
+
+**Example `.env` file:**
+
+```bash
+# Agent model configuration
+BASE_URL=https://openrouter.fans/v1
+API_KEY=YOUR_API_KEY_HERE
+
+# MemGUI-Eval configuration
+MEMGUI_API_KEY=YOUR_API_KEY_HERE
+
+# Step description model
+MEMGUI_STEP_DESC_MODEL=google/gemini-2.5-flash
+MEMGUI_STEP_DESC_BASE_URL=
+
+# Final decision model
+MEMGUI_FINAL_DECISION_MODEL=google/gemini-2.5-pro
+MEMGUI_FINAL_DECISION_BASE_URL=
+```
+
+For leaderboard submissions, we use `MEMGUI_STEP_DESC_MODEL=google/gemini-2.5-flash`
+and `MEMGUI_FINAL_DECISION_MODEL=google/gemini-2.5-pro` to keep evaluation
+fair across submissions. During debugging, you may use other compatible models
+to reduce cost or latency.
+
+> **Note**:
+> - `mg env run` mounts local `.env` into each container. `mg eval` runs on the
+>   host and writes trajectories directly into local `traj_logs/`.
 
 ---
 
-## ⚙️ Configuration
+## 🚀 Quick Start
 
-Edit `config.yaml` to match your environment:
-
-```yaml
-# Environment Mode
-ENVIRONMENT_MODE: "local"  # "local" or "docker"
-
-# Experiment Settings
-AGENT_NAME: "Qwen3VL"
-DATASET_PATH: "./data/memgui-tasks-all.csv"
-SESSION_ID_SUFFIX: "my-experiment"
-
-# API & Parallelism
-BASE_URL: "https://api.openai.com/v1"
-NUM_OF_EMULATOR: 4
-MAX_EVAL_SUBPROCESS: 8
-
-# Model API Keys
-QWEN_API_KEY: "your-api-key"
-QWEN_MODEL: "qwen3-vl-8b"
-```
-
-<details>
-<summary><b>Full configuration example (for local mode)</b></summary>
-
-```yaml
-# Part 1: Environment Mode
-ENVIRONMENT_MODE: "local"  # "local" or "docker"
-
-# Part 2: Experiment Settings
-AGENT_NAME: "Qwen3VL"
-DATASET_PATH: "./data/memgui-tasks-all.csv"
-SESSION_ID_SUFFIX: "my-experiment"
-
-# Part 3: API & Parallelism
-BASE_URL: "https://api.openai.com/v1"
-NUM_OF_EMULATOR: 4
-MAX_EVAL_SUBPROCESS: 8
-
-# Part 4: Model API Keys
-QWEN_API_KEY: "your-api-key"
-QWEN_MODEL: "qwen3-vl-8b"
-
-# Part 5: Paths (for local mode)
-_MODE_PRESETS:
-  environment:
-    local:
-      _CONDA_PATH: "/path/to/miniconda3"
-      _EMULATOR_PATH: "/path/to/android-sdk/emulator/emulator"
-      _ANDROID_SDK_PATH: "/path/to/android-sdk"
-      _SYS_AVD_HOME: "/path/to/.android/avd"
-      _SOURCE_AVD_HOME: "/path/to/.android/avd"
-```
-
-</details>
-
----
-
-## 🚀 Usage
-
-### Running the Benchmark
+### 1. Check Environment & Prepare Docker Images
 
 ```bash
-conda activate MemGUI
-python run.py
+sudo uv run mg env check
 ```
 
-### Command-line Arguments
+### 2. Launch Docker Containers
+
+```bash
+sudo uv run mg env run --count 2
+```
+
+This launches 2 ready MemGUI backend containers with:
+- `--count 2`: Number of parallel containers
+- `--launch-interval 30`: Default wait time between container launches
+- `--emulator-timeout 1200`: Default timeout for MemGUI AVD cold start
+
+Each backend runs one Android emulator. Backend ports start at
+`http://localhost:6800`, viewer ports start at `http://localhost:7860`, ADB
+ports start at `5556`. Trajectory logs are written by the host-side `mg eval`
+process into local `traj_logs/`.
+
+For a larger run, launch more containers and match `mg eval --max-concurrency`
+to the number of healthy backends, for example `--count 4 --max-concurrency 4`.
+
+### 3. Run Evaluation
+
+```bash
+sudo uv run mg eval \
+  --agent-type qwen3vl \
+  --model-name qwen3-vl-8b \
+  --task ALL \
+  --log-file-root traj_logs/memgui-qwen3vl \
+  --max-concurrency 2
+```
+
+`mg eval --max-concurrency 2` discovers two MemGUI backend containers and feeds
+the selected tasks through MobileWorld's environment queue. Each backend runs
+exactly one Android emulator and writes MobileWorld-format trajectories into
+the local `traj_logs/` directory.
+
+### 4. View Results
+
+```bash
+uv run mg logs view --log-dir traj_logs/memgui-qwen3vl
+```
+
+The viewer opens a local web UI with task-level status, screenshots, action
+traces, model predictions, and `result.txt` scores in the MobileWorld layout.
+
+### Debug in a Container
+
+For a single-container debug shell:
+
+```bash
+sudo uv run mg env exec 0
+uv run mg eval \
+  --agent-type qwen3vl \
+  --model-name qwen3-vl-8b \
+  --task 001-FindProductAndFilter \
+  --aw-host http://localhost:6800 \
+  --log-file-root traj_logs/debug
+```
+
+### Available Commands
+
+| Command | Description |
+| ------- | ----------- |
+| `sudo uv run mg env check` | Check Docker/KVM/.env and pull the default prebuilt runtime image |
+| `sudo uv run mg env build` | Optional: build a local MobileWorld-compatible runtime image from the MemGUI base image |
+| `sudo uv run mg env run` | Launch backend container(s) with local `.env` mounted |
+| `sudo uv run mg env list` | List MemGUI-Bench containers |
+| `sudo uv run mg env exec` | Open a shell or run a command in a container for debugging |
+| `sudo uv run mg env rm` | Remove MemGUI-Bench containers |
+| `uv run mg env init` | Create `.env` from `.env.example` |
+| `uv run mg server` | Run the backend service inside a container; normally started by `mg env run` |
+| `sudo uv run mg eval` | Run execution/evaluation across MemGUI containers |
+| `uv run mg info task` | List or filter benchmark tasks |
+| `uv run mg info agent` | List configured agents |
+| `uv run mg info app` | Show app-level task counts |
+| `uv run mg logs view` | Launch the interactive trajectory viewer |
+| `uv run mg logs results` | Print a compact session summary table |
+| `uv run mg logs export` | Export a static HTML trajectory site |
+
+### `mg eval` Arguments
 
 | Argument            | Default  | Description                                |
 | ------------------- | -------- | ------------------------------------------ |
-| `--agents`        | config   | Agent name(s), comma-separated             |
-| `--mode`          | `full` | `full` (exec+eval) / `exec` / `eval` |
-| `--session_id`    | config   | Session identifier for results             |
-| `--task_id`       | None     | Run specific task only                     |
-| `--max_attempts`  | 3        | Max attempts per task                      |
-| `--overwrite`     | False    | Overwrite existing results                 |
-| `--no_concurrent` | False    | Disable parallel evaluation                |
+| `--agent-type` | required | Registered MobileWorld agent name or custom agent path |
+| `--model-name` | `.env`/agent default | Agent model name |
+| `--llm-base-url` | `.env`/agent default | OpenAI-compatible base URL |
+| `--api-key` | `API_KEY` | Agent API key |
+| `--task` / `--tasks` | all when omitted | Task id(s), comma-separated, or `ALL` |
+| `--task-file` / `--task-csv` | none | MemGUI CSV subset to run, e.g. `data/memgui-tasks-40.csv` |
+| `--difficulty` / `--task-difficulty` | none | MemGUI difficulty filter: `easy`/`medium`/`hard`, `1`/`2`/`3`, or `简单`/`中等`/`困难`; comma-separated values are supported |
+| `--pass-at-k` / `--attempts` | `1` | Run each MemGUI task until one attempt succeeds or K attempts are exhausted, then aggregate pass@K |
+| `--suite-family` | `memgui_bench` | Benchmark suite family |
+| `--log-file-root` | `./traj_logs` | Local root for MobileWorld trajectory logs |
+| `--aw-host` | auto | Comma-separated backend URL(s); auto-discovered when omitted |
+| `--max-round` / `--max-step` | MemGUI task budget | Maximum agent steps per task; omitted uses `int(golden_steps * 2.5 + 1)`, `-1` means unlimited |
+| `--step-wait-time` | `3.0` | Seconds to wait after each action before the next screenshot for MemGUI-Bench |
+| `--max-concurrency` | number of containers | Maximum concurrent tasks |
+| `--shuffle-tasks` | false | Shuffle task order before scheduling |
+| `--dry-run` | false | Resolve tasks/backends without execution |
 
 ### Examples
 
 ```bash
 # Full benchmark (execution + evaluation)
-python run.py
+uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task ALL --log-file-root traj_logs/qwen3vl-full
 
 # Run specific task
-python run.py --task_id 001-FindProductAndFilter
+uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task 001-FindProductAndFilter --log-file-root traj_logs/debug
 
-# Evaluation only (on existing trajectories)
-python run.py --mode eval --session_id my-experiment
+# Run the 40-task subset
+uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task-file data/memgui-tasks-40.csv --log-file-root traj_logs/qwen3vl-40
 
-# Multiple attempts
-python run.py --max_attempts 5
+# Run only hard MemGUI tasks
+uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --difficulty hard --log-file-root traj_logs/qwen3vl-hard
 
-# Disable parallel execution
-python run.py --no_concurrent
+# Run medium + hard tasks from the 40-task subset
+uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task-file data/memgui-tasks-40.csv --difficulty medium,hard --log-file-root traj_logs/qwen3vl-40-medium-hard
+
+# Run pass@3 on the 40-task subset
+uv run mg eval --agent-type qwen3vl --model-name qwen3-vl-8b --task-file data/memgui-tasks-40.csv --pass-at-k 3 --log-file-root traj_logs/qwen3vl-40-pass3
+
+# Use explicit backends
+uv run mg eval --agent-type qwen3vl --task ALL --aw-host http://localhost:6800,http://localhost:6801
+
+# Limit concurrency
+uv run mg eval --agent-type qwen3vl --task ALL --max-concurrency 2
+
+# Dry run
+uv run mg eval --agent-type qwen3vl --task 001-FindProductAndFilter --dry-run
 ```
+
+### Viewing and Exporting Results
+
+```bash
+# Interactive web viewer
+uv run mg logs view --log-dir traj_logs/qwen3vl-full --port 8760
+
+# Terminal summary
+uv run mg logs results traj_logs/qwen3vl-full
+
+# Static HTML export for sharing or archiving
+uv run mg logs export \
+  --log-dir traj_logs/qwen3vl-full \
+  --output exported-sites/qwen3vl-full
+```
+
+For pass@K runs, the task detail page includes attempt tabs. Attempt 1 is stored
+in the canonical task folder; later attempts are stored under `_attempt_trajs/`
+and can be opened from the same viewer page.
 
 ---
 
 ## 📁 Benchmark Session
 
-Each `session_id` creates an isolated benchmark folder in `./results/`.
+Each run creates an isolated benchmark folder under local `traj_logs/`. The
+host-side `mg eval` process writes these files directly, so they are not trapped
+inside Docker containers.
 
-- The dataset is copied to `results.csv` to track progress
-- Re-running the same session resumes from incomplete tasks
-- Results accumulate across runs
+- Each task has a MobileWorld `traj.json`, screenshots, marked screenshots, and `result.txt`
+- Re-running the same log root skips tasks that already succeeded; pass@K runs
+  also skip tasks that already have a completed pass@K aggregate result
+- MemGUI-Eval receives a generated compatibility workspace under `_memgui_eval/`
 
 ### Output Structure
 
@@ -248,37 +308,31 @@ Each `session_id` creates an isolated benchmark folder in `./results/`.
 <summary><b>Click to expand output directory structure</b></summary>
 
 ```
-results/session-{session_id}/
-├── results.csv                    # Aggregated execution & evaluation metrics
-├── results.csv.lock               # File lock for concurrent access
-├── metrics_summary.json           # Computed benchmark metrics
-├── {agent_name}.json              # Leaderboard format (for submission)
-├── config.yaml                    # Config snapshot for reproducibility
-│
-└── {task_id}/
-    └── {agent_name}/
-        └── attempt_{n}/
-            ├── log.json                    # Execution log with actions
-            ├── 0.png, 1.png, ...          # Raw screenshots per step
-            ├── stdout.txt, stderr.txt     # Process output logs
-            ├── error.json                 # Error info (if any)
-            │
-            ├── visualize_actions/         # Action visualization images
-            │   └── step_1.png, step_2.png, ...
-            │
-            ├── single_actions/            # Individual action screenshots
-            │   └── step_1.png, step_2.png, ...
-            │
-            ├── puzzle/                    # Evaluation puzzle images
-            │   ├── puzzle.png
-            │   ├── pre_eval_puzzle.png
-            │   └── supplemental_puzzle.png (if needed)
-            │
-            ├── evaluation_summary.json    # Detailed evaluation results
-            ├── final_decision.json        # Final evaluation decision
-            ├── irr_analysis.json          # IRR evaluation results
-            ├── badcase_analysis.json      # BadCase classification
-            └── step_*_description.json    # Step-by-step analysis
+traj_logs/qwen3vl-full/
+├── metadata.json
+├── 001-FindProductAndFilter/
+│   ├── traj.json
+│   ├── result.txt
+│   ├── thread_<id>.log
+│   ├── screenshots/
+│   │   └── 001-FindProductAndFilter-0-1.png
+│   └── marked_screenshots/
+│       └── marked-001-FindProductAndFilter-0-1.png
+├── _attempt_trajs/
+│   └── 001-FindProductAndFilter/
+│       └── attempt_2/
+│           ├── traj.json
+│           ├── result.txt
+│           └── screenshots/
+└── _memgui_eval/
+    ├── results.csv
+    └── 001-FindProductAndFilter/
+        └── qwen3vl/
+            └── attempt_1/
+                ├── log.json
+                ├── 0.png, 1.png, ...
+                ├── final_decision.json
+                └── evaluation_summary.json
 ```
 
 </details>
@@ -299,45 +353,20 @@ The benchmark automatically computes:
 | **Time/Step**  | Average execution time per step              |
 | **Cost/Step**  | API cost per step (if applicable)            |
 
-Results are saved to `metrics_summary.json` and `{agent_name}.json` (leaderboard format).
+MemGUI-Eval details are saved under `_memgui_eval/`; MobileWorld-facing scores are
+written to each task's `result.txt`.
 
 ---
 
 ## 🤖 Adding a New Agent
 
-### Step 1: Add Config
+MemGUI-Bench now uses MobileWorld's agent interface. Add or reuse an agent under
+`src/mobile_world/agents/implementations/`, then register it in
+`src/mobile_world/agents/registry.py`.
 
-Add your agent to `config.yaml`:
-
-```yaml
-AGENTS:
-  - NAME: "MyAgent"
-    REPO_PATH: "./framework/models/MyAgent"
-    ENV_NAME: "my_agent_env"
-```
-
-### Step 2: Implement Agent Class
-
-Create your agent class in `framework/agents.py`:
-
-```python
-class MyAgent(AndroidWorldAgent):
-    agent_name = "MyAgent"
-  
-    def construct_command(self, task, full_task_description, output_dir, device):
-        script = "run.py"
-        args = f'--task "{full_task_description}" --output {output_dir} --device {device["serial"]}'
-        return script, args
-```
-
-### Step 3: Output Format
-
-Your agent must output:
-
-- Screenshots: `0.png`, `1.png`, ... (one per step)
-- Log file: `log.json` with execution summary
-
-The benchmark handles evaluation automatically.
+Agents receive MobileWorld observations and return a prediction string plus a
+`JSONAction`. Android action execution, screenshots, trajectory logging, and
+parallel scheduling are handled by the shared MobileWorld runtime.
 
 ---
 
@@ -347,7 +376,7 @@ After running the benchmark:
 
 ### 1. Submit Results JSON (Required)
 
-Find `{agent_name}.json` in your session folder and fill in metadata:
+Create or update a metadata JSON under `docs/data/agents/`:
 
 ```json
 {
@@ -370,8 +399,8 @@ Submit via Pull Request to [lgy0404/MemGUI-Bench](https://github.com/lgy0404/Mem
 Compress and submit via PR to [lgy0404/memgui-bench-trajs](https://huggingface.co/datasets/lgy0404/memgui-bench-trajs):
 
 ```bash
-# Compress session folder
-cd results && zip -r your-agent-name.zip session-{id}
+# Compress MobileWorld trajectory folder
+cd traj_logs && zip -r your-agent-name.zip memgui-run-name
 
 # Upload via HuggingFace Web UI:
 # 1. Go to https://huggingface.co/datasets/lgy0404/memgui-bench-trajs

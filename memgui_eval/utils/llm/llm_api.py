@@ -6,6 +6,7 @@ import json
 import base64
 import time
 from openai import OpenAI
+from dotenv import dotenv_values
 
 # Add project root to path for config_loader import
 _project_root = os.path.join(os.path.dirname(__file__), "../../..")
@@ -13,6 +14,19 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 from config_loader import get_config
+
+
+def _normalize_optional(value):
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip().lower() in {"", "none", "null"}:
+        return None
+    return value
+
+
+def _load_env_values():
+    file_values = dotenv_values(os.path.join(os.getcwd(), ".env"))
+    return {**file_values, **os.environ}
 
 
 try:
@@ -26,23 +40,29 @@ try:
     MEMGUI_FINAL_DECISION_BASE_URL = _config.get("MEMGUI_FINAL_DECISION_BASE_URL")
     MEMGUI_FINAL_DECISION_MODEL = _config.get("MEMGUI_FINAL_DECISION_MODEL")
 except Exception as e:
-    # 如果读取配置失败，fallback到环境变量（仅通用变量，无默认 URL）
+    # 如果读取配置失败，fallback到 .env / 环境变量（仅通用变量，无默认 URL）
     print(
-        f"Warning: Failed to load config.yaml, falling back to environment variables: {e}"
+        f"Warning: Failed to load optional config file, falling back to environment variables: {e}"
     )
-    MEMGUI_API_KEY = os.environ.get("MEMGUI_API_KEY")
-    MEMGUI_STEP_DESC_BASE_URL = os.environ.get("MEMGUI_STEP_DESC_BASE_URL")
-    MEMGUI_STEP_DESC_MODEL = os.environ.get("MEMGUI_STEP_DESC_MODEL")
-    MEMGUI_FINAL_DECISION_BASE_URL = os.environ.get("MEMGUI_FINAL_DECISION_BASE_URL")
-    MEMGUI_FINAL_DECISION_MODEL = os.environ.get("MEMGUI_FINAL_DECISION_MODEL")
+    _env_values = _load_env_values()
+    MEMGUI_API_KEY = _env_values.get("MEMGUI_API_KEY")
+    MEMGUI_STEP_DESC_BASE_URL = _env_values.get("MEMGUI_STEP_DESC_BASE_URL")
+    MEMGUI_STEP_DESC_MODEL = _env_values.get("MEMGUI_STEP_DESC_MODEL")
+    MEMGUI_FINAL_DECISION_BASE_URL = _env_values.get("MEMGUI_FINAL_DECISION_BASE_URL")
+    MEMGUI_FINAL_DECISION_MODEL = _env_values.get("MEMGUI_FINAL_DECISION_MODEL")
+
+BASE_URL = _normalize_optional(_load_env_values().get("BASE_URL"))
+MEMGUI_STEP_DESC_BASE_URL = _normalize_optional(MEMGUI_STEP_DESC_BASE_URL) or BASE_URL
+MEMGUI_FINAL_DECISION_BASE_URL = _normalize_optional(MEMGUI_FINAL_DECISION_BASE_URL) or BASE_URL
 
 if not MEMGUI_API_KEY:
     raise ValueError(
-        "MEMGUI_API_KEY not found in config.yaml or MEMGUI_API_KEY not set in environment"
+        "MEMGUI_API_KEY not found in .env or environment variables"
     )
 if not MEMGUI_FINAL_DECISION_BASE_URL:
     raise ValueError(
-        "MEMGUI_FINAL_DECISION_BASE_URL not set in config.yaml or environment"
+        "MEMGUI_FINAL_DECISION_BASE_URL is not set in .env or environment variables, "
+        "and BASE_URL is also empty"
     )
 
 # 客户端缓存，避免重复创建
@@ -93,6 +113,43 @@ DEFAULT_RETRY_DELAY = 2
 DEFAULT_MODEL = MEMGUI_FINAL_DECISION_MODEL
 # max_tokens is intentionally not set - let the model use its default
 DEFAULT_TEMPERATURE = 0.01
+
+
+def _is_non_retryable_api_error(error):
+    status_code = getattr(error, "status_code", None)
+    if status_code is None:
+        response = getattr(error, "response", None)
+        status_code = getattr(response, "status_code", None)
+    return status_code is not None and 400 <= int(status_code) < 500
+
+
+def _retry_or_raise(error, retry_count, max_retries, retry_delay):
+    print(f"发生异常: {str(error)}")
+    if _is_non_retryable_api_error(error):
+        raise RuntimeError(
+            "MemGUI-Eval request failed with a non-retryable HTTP 4xx error. "
+            "Please check MEMGUI_*_MODEL and MEMGUI_*_BASE_URL in .env."
+        ) from error
+
+    retry_count += 1
+    if retry_count >= max_retries:
+        raise RuntimeError(
+            f"MemGUI-Eval request failed after {max_retries} retries"
+        ) from error
+
+    print(f"请求异常，{retry_delay}秒后进行第{retry_count}次重试...")
+    time.sleep(retry_delay)
+    return retry_count
+
+
+def _retry_empty_or_raise(retry_count, max_retries, retry_delay):
+    print("响应内容为空")
+    retry_count += 1
+    if retry_count >= max_retries:
+        raise RuntimeError(f"MemGUI-Eval returned empty responses after {max_retries} retries")
+    print(f"将在{retry_delay}秒后进行第{retry_count}次重试...")
+    time.sleep(retry_delay)
+    return retry_count
 
 
 def extract_token_usage(usage_info):
@@ -209,17 +266,13 @@ def inference_chat_gemini_2_image(
 
                 return result
             else:
-                print("响应内容为空")
-                retry_count += 1
-                print(f"将在{retry_delay}秒后进行第{retry_count}次重试...")
-                time.sleep(retry_delay)
+                retry_count = _retry_empty_or_raise(
+                    retry_count, max_retries, retry_delay
+                )
                 continue
 
         except Exception as e:
-            print(f"发生异常: {str(e)}")
-            retry_count += 1
-            print(f"请求异常，{retry_delay}秒后进行第{retry_count}次重试...")
-            time.sleep(retry_delay)
+            retry_count = _retry_or_raise(e, retry_count, max_retries, retry_delay)
             continue
 
 
@@ -304,17 +357,13 @@ def inference_chat_gemini_1_image(
 
                 return result
             else:
-                print("响应内容为空")
-                retry_count += 1
-                print(f"将在{retry_delay}秒后进行第{retry_count}次重试...")
-                time.sleep(retry_delay)
+                retry_count = _retry_empty_or_raise(
+                    retry_count, max_retries, retry_delay
+                )
                 continue
 
         except Exception as e:
-            print(f"发生异常: {str(e)}")
-            retry_count += 1
-            print(f"请求异常，{retry_delay}秒后进行第{retry_count}次重试...")
-            time.sleep(retry_delay)
+            retry_count = _retry_or_raise(e, retry_count, max_retries, retry_delay)
             continue
 
 
@@ -374,15 +423,11 @@ def inference_chat_gemini_wo_image(
 
                 return result
             else:
-                print("响应内容为空")
-                retry_count += 1
-                print(f"将在{retry_delay}秒后进行第{retry_count}次重试...")
-                time.sleep(retry_delay)
+                retry_count = _retry_empty_or_raise(
+                    retry_count, max_retries, retry_delay
+                )
                 continue
 
         except Exception as e:
-            print(f"发生异常: {str(e)}")
-            retry_count += 1
-            print(f"请求异常，{retry_delay}秒后进行第{retry_count}次重试...")
-            time.sleep(retry_delay)
+            retry_count = _retry_or_raise(e, retry_count, max_retries, retry_delay)
             continue

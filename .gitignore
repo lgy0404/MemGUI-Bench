@@ -1,126 +1,76 @@
+# Compiled python modules.
+*.pyc
 __pycache__/
-framework/models/AppAgent/tasks/
-framework/models/MobileAgent/Mobile-Agent/screenshot*
-framework/models/MobileAgent/Mobile-Agent/temp*
-framework/models/MobileAgent/Mobile-Agent-v2/screenshot*
-framework/models/MobileAgent/Mobile-Agent-v2/temp*
-framework/models/groundingdino_swint_ogc.pth
-screenshot
-results
-config.yaml
-tmp
-tmp.ipynb
-screenlog*
-* copy*
-.ruff_cache
-screenshot_*
-temp_*
-*test*
-swift
-flagged
-framework/avd/
+_pycache__/
+.cache/
 
-
-# Created by .ignore support plugin (hsz.mobi)
-### Python template
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Distribution / packaging
-.Python
-
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
+# Python packaging artifacts.
+/*.egg-info
 .eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
+build/
+dist/
+poetry.lock
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+# Virtual environments.
+.venv/
+.venv-*/
+venv/
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
+# Tests, lint, and type checking.
+.pytest_cache/
+.pytype/
+.ruff_cache/
 htmlcov/
 .tox/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
 coverage.xml
-*,cover
+nosetests.xml
 
-# Translations
-*.mo
-*.pot
+# Editors and OS files.
+.idea/
+.vscode/
+.cursor/
+*.DS_Store
 
-# Django stuff:
+# Local configuration and secrets.
+.env
+config.yaml
+*.sesskey
+
+# Runtime outputs.
+traj_logs/
+logs/
+results/
+screenshots/
+screenlog*
+test_logs/
+test_logs_2/
+nohup.out
+task_nohup.out
 *.log
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-.idea
-droidbot_output
-_site
-Gemfile.lock
-.DS_Store
-documents
-temp
-venv
-apks/
+*.out
+tmp/
+temp/
 output/
 debug.py
-.env
-eval_compare_results/
-eval_task_fliter_results/*
-evaluator_compare/logs*
 
+# Android and app artifacts.
+*.avd/
+*.avd*/
+apks/
+!docker/apks/
+*.tar
+unpackage/
+artifacts/
 
+# MobileWorld task/agent local assets.
+src/mobile_world/agents/implementations/assets/
+src/mobile_world/tasks/definitions/native/compress_year_images_ask_user.py
+src/mobile_world/tasks/definitions/native/delete_low_res_screenshots_ask_user.py
+tests/unit/tasks/test_compress_year_images_ask_user.py
+tests/unit/tasks/test_delete_low_res_screenshots_ask_user.py
+task_backups/
 
-# androidworld
-# Compiled python modules.
-*.pyc
-
-# Byte-compiled
-framework/models/AndroidWorld/_pycache__/
-framework/models/AndroidWorld/.cache/
-
-# Poetry, setuptools, PyPI distribution artifacts.
-/*.egg-info
-.eggs/
-framework/models/AndroidWorld/build/
-framework/models/AndroidWorld/dist/
-framework/models/AndroidWorld/poetry.lock
-
-# Tests
-framework/models/AndroidWorld/.pytest_cache/
-
-# Type checking
-framework/models/AndroidWorld/.pytype/
-
-# Other
-framework/models/AndroidWorld/*.DS_Store
-
-# PyCharm
-framework/models/AndroidWorld/.idea
-data_process/processed_data
-data_process/dump_from_training_json/conversation_visualizations/conversation_viewer.html
+# Preserve text fixtures required by MobileWorld.
+!src/mobile_world/tasks/definitions/mastodon/assets/newFilter/filter_BCS.txt

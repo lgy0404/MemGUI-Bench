@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1.7
+ARG MEMGUI_BASE_IMAGE=crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/memgui/memgui-bench:26020301
+FROM ${MEMGUI_BASE_IMAGE}
+
+ARG UV_DEFAULT_INDEX=
+ARG UV_INDEX_URL=
+ARG PIP_INDEX_URL=
+
+ENV PYTHONUNBUFFERED=1 \
+    ANDROID_SDK_ROOT=/root/.android \
+    ANDROID_HOME=/root/.android \
+    AVD_NAME=MemGUI-AVD-250704 \
+    EMULATOR_NAME=MemGUI-AVD-250704 \
+    UV_LINK_MODE=copy \
+    PATH="/root/.local/bin:/root/.android/emulator:/root/.android/tools:/root/.android/tools/bin:/root/.android/platform-tools:${PATH}"
+
+WORKDIR /app/service
+
+COPY pyproject.toml uv.lock /app/service/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    touch README.md; \
+    if [ -n "${UV_DEFAULT_INDEX}" ]; then export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX}"; fi; \
+    if [ -n "${UV_INDEX_URL}" ]; then export UV_INDEX_URL="${UV_INDEX_URL}"; fi; \
+    if [ -n "${PIP_INDEX_URL}" ]; then export PIP_INDEX_URL="${PIP_INDEX_URL}"; fi; \
+    if [ -n "${UV_DEFAULT_INDEX}${UV_INDEX_URL}" ]; then uv lock; fi; \
+    uv sync --frozen --no-install-project
+
+COPY README.md config_loader.py .env.example /app/service/
+COPY src /app/service/src
+COPY data /app/service/data
+COPY memgui_eval /app/service/memgui_eval
+COPY memgui_bench /app/service/memgui_bench
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    if [ -n "${UV_DEFAULT_INDEX}" ]; then export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX}"; fi; \
+    if [ -n "${UV_INDEX_URL}" ]; then export UV_INDEX_URL="${UV_INDEX_URL}"; fi; \
+    if [ -n "${PIP_INDEX_URL}" ]; then export PIP_INDEX_URL="${PIP_INDEX_URL}"; fi; \
+    uv sync --frozen
+
+RUN mkdir -p /app/service/_emulator_proto && \
+    uv run python -m grpc_tools.protoc \
+        -I/root/.android/emulator/lib \
+        --python_out=/app/service/_emulator_proto \
+        --grpc_python_out=/app/service/_emulator_proto \
+        /root/.android/emulator/lib/emulator_controller.proto
+
+COPY docker/adbkey docker/adbkey.pub /root/.android/
+COPY docker/compat_entrypoint.sh /usr/local/bin/memgui-runtime-entrypoint.sh
+COPY docker/start_memgui_emulator.sh /app/docker/start_memgui_emulator.sh
+COPY docker/adb_tcp_relay.py /app/docker/adb_tcp_relay.py
+COPY docker/authorize_adb_grpc.py /app/docker/authorize_adb_grpc.py
+COPY docker/ws_adb_proxy.py /app/docker/ws_adb_proxy.py
+COPY docker/web-scrcpy /app/web-scrcpy
+
+RUN chmod 600 /root/.android/adbkey && \
+    chmod 644 /root/.android/adbkey.pub && \
+    chmod +x \
+    /usr/local/bin/memgui-runtime-entrypoint.sh \
+    /app/docker/start_memgui_emulator.sh \
+    /app/docker/authorize_adb_grpc.py
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:6800/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/memgui-runtime-entrypoint.sh"]
+CMD ["tail", "-f", "/var/log/emulator.log", "/var/log/server.log", "/var/log/dockerd.err.log"]

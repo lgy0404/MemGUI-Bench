@@ -1,0 +1,39 @@
+FROM ghcr.io/tongyi-mai/mobile_world:latest
+
+# Install socat (added after initial release for ADB port relay)
+RUN apt-get update && apt-get install -y --no-install-recommends socat && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Copy updated source code
+COPY src/ /app/service/src/
+
+# Copy updated entrypoint (adds socat ADB relay)
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Copy AndroidWorld submodule
+COPY resources/android_world/ /app/service/resources/android_world/
+
+# Patch AndroidWorld files for emulator compatibility (swiftshader GPU)
+COPY docker/patches/aw_browser.py /app/service/resources/android_world/android_world/task_evals/single/browser.py
+COPY docker/patches/aw_audio_recorder.py /app/service/resources/android_world/android_world/task_evals/single/audio_recorder.py
+COPY docker/patches/aw_expense.py /app/service/resources/android_world/android_world/task_evals/single/expense.py
+COPY docker/patches/aw_actuation.py /app/service/resources/android_world/android_world/env/actuation.py
+
+# Patched Clipper APK (original targets SDK 0, incompatible with API 34)
+COPY docker/apks/clipper.apk /app/docker/apks/clipper.apk
+# A11y forwarder APK (AccessibilityService → gRPC, replaces UIAutomator dump)
+COPY docker/apks/accessibility_forwarder.apk /app/docker/apks/accessibility_forwarder.apk
+
+# Install AndroidWorld as editable package into the service venv
+RUN uv pip install setuptools --python /app/service/.venv/bin/python && \
+    cd /app/service/resources/android_world && \
+    uv pip install -e . --no-deps --no-build-isolation --python /app/service/.venv/bin/python
+
+# Copy setup scripts for AndroidWorld app installation
+COPY docker/setup_android_world_apps.sh /app/docker/setup_android_world_apps.sh
+COPY docker/setup_aw_apps.py /app/docker/setup_aw_apps.py
+RUN chmod +x /app/docker/setup_android_world_apps.sh
+
+# Update CMD to also tail dockerd log
+CMD tail -f /var/log/emulator.log /var/log/server.log /var/log/dockerd.err.log

@@ -1,8 +1,0 @@
-pyyaml
-pandas
-python-dotenv
-paddlepaddle
-paddleocr>=2.0.1
-openai
-faiss-cpu
-openpyxl

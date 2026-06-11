@@ -1,6 +1,9 @@
 # MemGUI-Bench GitHub Pages
 
 This is the official project page for **MemGUI-Bench: Benchmarking Memory of Mobile GUI Agents in Dynamic Environments**.
+The root landing page uses the MobileWorld-style Bulma layout shared with
+`site/`, while the detailed leaderboard and submission pages remain available as
+supporting pages.
 
 ## 🚀 Quick Start
 
@@ -22,28 +25,26 @@ This site is designed for GitHub Pages. Simply:
 ## 📁 Project Structure
 
 ```
-memgui-bench-gh-page/
-├── index.html              # Main landing page
-├── leaderboard.html        # Results leaderboard
+docs/
+├── index.html              # MobileWorld-style landing page
+├── style.css               # MobileWorld-style landing page styles
+├── leaderboard.json        # Landing page leaderboard data
+├── leaderboard.html        # Detailed leaderboard page
 ├── submission.html         # Submission guidelines
-├── css/
-│   ├── style.css           # Global styles
-│   ├── leaderboard.css     # Leaderboard-specific styles
-│   └── submission.css      # Submission page styles
-├── js/
-│   └── leaderboard.js      # Leaderboard functionality
-├── data/
-│   └── results.json        # Leaderboard data
-├── assets/
-│   └── favicon.png         # Site favicon
-└── README.md
+├── eval-pipeline.html      # Evaluation details
+├── failure-analysis.html   # Failure analysis details
+├── assets/                 # Landing page assets
+├── css/                    # Supporting page styles
+├── js/                     # Supporting page scripts
+├── data/                   # Supporting page data
+└── images/                 # Paper figures
 ```
 
 ## 📊 Leaderboard Management
 
 ### Adding New Results
 
-1. Edit `data/results.json`
+1. Edit `leaderboard.json` for the landing page, or `data/index.json` for the detailed pages
 2. Add a new agent entry following the existing format:
 
 ```json
@@ -95,7 +96,8 @@ memgui-bench-gh-page/
 
 ### Changing Colors
 
-Edit CSS variables in `css/style.css`:
+Edit CSS variables in `style.css` for the landing page. Supporting pages use
+their files under `css/`.
 
 ```css
 :root {
@@ -108,9 +110,8 @@ Edit CSS variables in `css/style.css`:
 
 ## 📧 Contact
 
-For questions about the benchmark or leaderboard submissions, please contact: memgui-bench@example.com
+For questions about the benchmark or leaderboard submissions, please contact: **guangyiliu@zju.edu.cn**.
 
 ## 📜 License
 
 MIT License - See LICENSE file for details.
-

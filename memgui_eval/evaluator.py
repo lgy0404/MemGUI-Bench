@@ -10,7 +10,7 @@ import logging
 # Add project root to Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)))
 
-from framework import utils
+from memgui_eval.utils import results
 from memgui_eval.utils.data import get_dataset
 from memgui_eval.utils.visualize_actions import (
     visualize_and_save_actions,
@@ -218,7 +218,7 @@ def evaluate_irr(
 
     try:
         # Check if this task requires UI memory (only evaluate IRR for memory-intensive tasks)
-        dataset = get_dataset(utils.get_results_csv_path(output_dir))  # Use output_dir
+        dataset = get_dataset(results.get_results_csv_path(output_dir))
         requires_memory = dataset.loc[task_identifier].get("requires_ui_memory", "N")
 
         if requires_memory != "Y":
@@ -308,7 +308,7 @@ def evaluate_irr(
         logging.info(f"[{task_identifier}] IRR analysis saved to {irr_json_path}")
 
         # Update CSV with IRR results
-        utils.save_irr_result(
+        results.save_irr_result(
             output_dir=output_dir,  # Use the renamed parameter
             task_identifier=task_identifier,
             agent=agent,
@@ -395,7 +395,7 @@ def evaluate_badcase(
             )
 
             # Save to results CSV
-            utils.save_badcase_result(
+            results.save_badcase_result(
                 output_dir=output_dir,  # Use the renamed parameter
                 task_identifier=task_identifier,
                 agent=agent,
@@ -553,7 +553,7 @@ def evaluate_badcase(
 
     # Save to CSV
     try:
-        utils.save_badcase_result(
+        results.save_badcase_result(
             output_dir=output_dir,  # Use the renamed parameter
             task_identifier=task_identifier,
             agent=agent,
@@ -594,7 +594,7 @@ def memgui_evaluator(
         reasoning_mode: Reasoning mode used
         action_mode: Action mode used
     """
-    dataset = get_dataset(utils.get_results_csv_path(result_dir))
+    dataset = get_dataset(results.get_results_csv_path(result_dir))
     task_description = dataset.loc[task_identifier]["task_description"]
 
     # The path should always include the agent if it's provided, regardless of mode.
@@ -612,7 +612,7 @@ def memgui_evaluator(
     if not os.path.isdir(target_dir):
         logging.error(f"Target directory not found: {target_dir}")
         # Save error at the task level if attempt dir doesn't exist
-        utils.save_result__completed_evaluation(
+        results.save_result__completed_evaluation(
             result_dir,
             task_identifier,
             agent,
@@ -638,7 +638,7 @@ def memgui_evaluator(
     except Exception as e:
         print(f"Error during visualization for {task_identifier}: {e}")
         evaluation_detail["visualization"] = f"Failed: {e}"
-        utils.save_result__completed_evaluation(
+        results.save_result__completed_evaluation(
             result_dir,
             task_identifier,
             agent,
@@ -670,7 +670,7 @@ def memgui_evaluator(
         logging.error(
             f"[{task_identifier}] log_data is None, cannot proceed with evaluation."
         )
-        utils.save_result__completed_evaluation(
+        results.save_result__completed_evaluation(
             result_dir,
             task_identifier,
             agent,
@@ -1057,7 +1057,7 @@ def memgui_evaluator(
 
     # Save results with separated usage information
     reason_for_csv = reason
-    utils.save_result__completed_evaluation(
+    results.save_result__completed_evaluation(
         result_dir,
         task_identifier,
         agent,
@@ -1181,8 +1181,8 @@ if __name__ == "__main__":
         "--result_dir",
         type=str,
         required=False,
-        default="results/session-memgui-v26010305-debug",
-        help="The directory where the results are stored.",
+        default="traj_logs/memgui-debug/_memgui_eval",
+        help="The MemGUI-Eval compatibility directory containing results.csv.",
     )
     parser.add_argument(
         "--mode",
