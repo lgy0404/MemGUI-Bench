@@ -16,6 +16,7 @@ from mobile_world.core.log_viewer.utils import (
     get_all_trajectory_steps,
     get_latest_screenshot,
     get_latest_trajectory_action,
+    get_memgui_attempt_statuses,
     get_memgui_eval_info,
     get_memgui_task_metadata,
     get_screenshots,
@@ -66,13 +67,22 @@ def _memgui_summary_html(metadata: dict) -> str:
     return f'<div class="meta-chip-list">{"".join(chips)}</div>' if chips else "-"
 
 
-def _pass_at_html(memgui_eval_info: dict) -> str:
-    pass_at = memgui_eval_info.get("pass_at") or {}
-    if not pass_at:
+def _attempt_status_html(memgui_eval_info: dict) -> str:
+    statuses = get_memgui_attempt_statuses(memgui_eval_info)
+    if not statuses:
         return "-"
+    cls_by_state = {
+        "success": "meta-chip-success",
+        "danger": "meta-chip-danger",
+        "info": "meta-chip-info",
+        "pending": "",
+    }
     chips = [
-        _html_chip(f"@{k} {'Pass' if passed else 'Fail'}", "meta-chip-success" if passed else "meta-chip-danger")
-        for k, passed in sorted(pass_at.items())
+        _html_chip(
+            f"Attempt {item['attempt']} · {item['label']}",
+            cls_by_state.get(item["state"], ""),
+        )
+        for item in statuses
     ]
     return f'<div class="meta-chip-list">{"".join(chips)}</div>'
 
@@ -453,7 +463,7 @@ def _generate_index_page(
             <td class="col-tags">{_memgui_summary_html(memgui_metadata)}</td>
             <td class="col-status"><span class="badge {status_class}">{task["status"]}</span></td>
             <td class="col-score">{score_display}</td>
-            <td class="col-pass">{_pass_at_html(memgui_eval_info)}</td>
+            <td class="col-pass">{_attempt_status_html(memgui_eval_info)}</td>
             <td class="col-irr">{_format_memgui_irr(memgui_eval_info, memgui_metadata)}</td>
             <td class="col-step">{failure_step}</td>
             <td class="col-reason"><div class="col-reason-block"><div class="col-reason-text">{_escape_html(eval_reason)}</div>{badcase_html}</div></td>
@@ -485,7 +495,7 @@ def _generate_index_page(
                     <th>MemGUI</th>
                     <th>Status</th>
                     <th>Score</th>
-                    <th>pass@k</th>
+                    <th>Attempts</th>
                     <th>IRR</th>
                     <th>Failure Step</th>
                     <th>Reason</th>
@@ -717,7 +727,7 @@ def _generate_task_page(
                     "Cross-App", "Yes" if memgui_metadata.get("is_cross_app") else "No"
                 ),
                 _detail_meta_html("Output Type", memgui_metadata.get("output_type") or "-"),
-                _detail_meta_html("pass@k", _pass_at_html(memgui_eval_info), escape_value=False),
+                _detail_meta_html("Attempts", _attempt_status_html(memgui_eval_info), escape_value=False),
                 _detail_meta_html("IRR", _format_memgui_irr(memgui_eval_info, memgui_metadata)),
                 _detail_meta_html("Eval Method", latest_eval.get("method") or "-"),
                 _detail_meta_html("Failure Step", latest_eval.get("failure_step") or "-"),

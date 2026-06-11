@@ -419,6 +419,59 @@ def get_memgui_eval_info(log_root: str, task_name: str) -> dict:
     }
 
 
+def get_memgui_attempt_statuses(memgui_eval_info: dict) -> list[dict]:
+    """Return per-attempt display states for MemGUI pass@k runs."""
+    if not memgui_eval_info:
+        return []
+
+    attempts_by_num = {}
+    for item in memgui_eval_info.get("attempts") or []:
+        attempt_num = _to_int(item.get("attempt"))
+        if attempt_num is not None:
+            attempts_by_num[attempt_num] = item
+
+    max_attempt = _to_int(memgui_eval_info.get("max_attempt"))
+    if max_attempt is None:
+        max_attempt = max(attempts_by_num, default=1)
+    max_attempt = max(max_attempt, 1)
+
+    successful_attempts = [
+        attempt
+        for attempt in (_to_int(item) for item in memgui_eval_info.get("successful_attempts") or [])
+        if attempt is not None
+    ]
+    first_success = min(successful_attempts) if successful_attempts else None
+
+    statuses = []
+    for attempt_num in range(1, max_attempt + 1):
+        attempt_info = attempts_by_num.get(attempt_num)
+        if attempt_info:
+            evaluation = _clean_csv_value(attempt_info.get("evaluation"))
+            evaluation_upper = evaluation.upper()
+            if attempt_info.get("success") or evaluation_upper == "S":
+                label = "Pass"
+                state = "success"
+            elif evaluation_upper == "F":
+                label = "Fail"
+                state = "danger"
+            elif evaluation_upper == "E":
+                label = "Error"
+                state = "danger"
+            else:
+                label = evaluation or "Done"
+                state = "info"
+        elif first_success is not None and attempt_num > first_success:
+            label = "Skipped"
+            state = "info"
+        else:
+            label = "Pending"
+            state = "pending"
+
+        statuses.append({"attempt": attempt_num, "label": label, "state": state})
+
+    return statuses
+
+
 def calculate_memgui_eval_metrics(
     log_root: str,
     total_tasks: int,

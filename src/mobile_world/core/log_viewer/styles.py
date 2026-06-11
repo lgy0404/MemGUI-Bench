@@ -353,7 +353,7 @@ input[type="checkbox"] {
 .col-step { width: 85px; }
 .col-action { width: 120px; white-space: normal; word-break: break-word; }
 .col-prediction { width: 250px; white-space: normal; word-break: break-word; }
-.col-pass { width: 135px; white-space: normal; }
+.col-pass { width: 165px; white-space: normal; }
 .col-irr { width: 65px; }
 .col-reason-block { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .col-reason-text { white-space: normal; word-break: break-word; }

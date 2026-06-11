@@ -18,6 +18,7 @@ from mobile_world.core.log_viewer.utils import (
     get_latest_screenshot,
     get_latest_trajectory_action,
     get_log_root_state,
+    get_memgui_attempt_statuses,
     get_memgui_eval_info,
     get_memgui_task_metadata,
     get_screenshots,
@@ -385,19 +386,23 @@ def register_routes(rt, base_path: str = "/"):
     def _detail_meta_item(label: str, value, value_cls: str = "meta-value"):
         return Div(Span(label, cls="meta-label"), Span(value, cls=value_cls), cls="meta-item")
 
-    def _pass_at_cell(memgui_eval_info: dict):
-        pass_at = memgui_eval_info.get("pass_at") or {}
-        if not pass_at:
+    def _attempt_status_cell(memgui_eval_info: dict):
+        statuses = get_memgui_attempt_statuses(memgui_eval_info)
+        if not statuses:
             return "-"
-        chips = []
-        for k in sorted(pass_at):
-            passed = pass_at[k]
-            chips.append(
-                Span(
-                    f"@{k} {'Pass' if passed else 'Fail'}",
-                    cls=f"meta-chip {'meta-chip-success' if passed else 'meta-chip-danger'}",
-                )
+        cls_by_state = {
+            "success": "meta-chip-success",
+            "danger": "meta-chip-danger",
+            "info": "meta-chip-info",
+            "pending": "",
+        }
+        chips = [
+            Span(
+                f"Attempt {item['attempt']} · {item['label']}",
+                cls=f"meta-chip {cls_by_state.get(item['state'], '')}".strip(),
             )
+            for item in statuses
+        ]
         return Div(*chips, cls="meta-chip-list")
 
     def _selected_attempt_eval(memgui_eval_info: dict, selected_attempt: int) -> dict:
@@ -467,7 +472,7 @@ def register_routes(rt, base_path: str = "/"):
                 Th("MemGUI"),
                 Th("Status"),
                 Th("Score"),
-                Th("pass@k"),
+                Th("Attempts"),
                 Th("IRR"),
                 Th("Failure Step"),
                 Th("Reason"),
@@ -598,7 +603,7 @@ def register_routes(rt, base_path: str = "/"):
                         Td(_memgui_summary_cell(memgui_metadata), cls="col-tags"),
                         Td(_status_badge(status), cls="col-status"),
                         Td(score_display, cls="col-score"),
-                        Td(_pass_at_cell(memgui_eval_info), cls="col-pass"),
+                        Td(_attempt_status_cell(memgui_eval_info), cls="col-pass"),
                         Td(_format_irr(memgui_eval_info, memgui_metadata), cls="col-irr"),
                         Td(str(failure_step), cls="col-step"),
                         Td(reason_content, cls="col-reason"),
@@ -1290,8 +1295,8 @@ def register_routes(rt, base_path: str = "/"):
                     ),
                     _detail_meta_item("Output Type", memgui_metadata.get("output_type") or "-"),
                     Div(
-                        Span("pass@k", cls="meta-label"),
-                        _pass_at_cell(memgui_eval_info),
+                        Span("Attempts", cls="meta-label"),
+                        _attempt_status_cell(memgui_eval_info),
                         cls="meta-item",
                     ),
                     _detail_meta_item("IRR", _format_irr(memgui_eval_info, memgui_metadata)),
