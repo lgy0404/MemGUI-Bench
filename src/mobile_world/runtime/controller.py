@@ -18,6 +18,9 @@ from mobile_world.runtime.utils.models import APP_DICT, COMMON_APP_MAPPER
 APP_LOWER_DICT = {app_name.lower(): package_name for package_name, app_name in COMMON_APP_MAPPER.items()}
 APP_LOWER_DICT.update({k.lower(): v for k, v in APP_DICT.items()})
 
+_ADB_KEYBOARD_PACKAGE = "com.android.adbkeyboard"
+_ADB_KEYBOARD_IME = "com.android.adbkeyboard/.AdbIME"
+
 
 class AndroidController:
     def __init__(self, device="emulator-5554"):
@@ -218,14 +221,52 @@ class AndroidController:
         ret = self.tap(x, y)
         return ret
 
-    def text(self, input_str: str) -> AdbResponse:
-        chars = input_str
-        charsb64 = str(base64.b64encode(chars.encode("utf-8")))[1:]
-        adb_command = (
-            f"adb -s {self.device} shell am broadcast -a ADB_INPUT_B64 --es msg {charsb64}"
+    def _current_input_method(self) -> str:
+        ret = execute_adb(
+            f"adb -s {self.device} shell settings get secure default_input_method",
+            output=False,
         )
-        ret = execute_adb(adb_command)
-        return ret
+        if not ret.success:
+            return ""
+        return ret.output.strip()
+
+    def _adb_keyboard_installed(self) -> bool:
+        ret = execute_adb(
+            f"adb -s {self.device} shell pm list packages {_ADB_KEYBOARD_PACKAGE}",
+            output=False,
+        )
+        return ret.success and _ADB_KEYBOARD_PACKAGE in ret.output
+
+    def _shell_input_text(self, input_str: str) -> AdbResponse:
+        escaped = input_str.replace("%", r"\%").replace(" ", "%s")
+        adb_command = f"adb -s {self.device} shell input text {shlex.quote(escaped)}"
+        return execute_adb(adb_command)
+
+    def text(self, input_str: str) -> AdbResponse:
+        activate_ret = self.activate_adb_keyboard()
+        if activate_ret.success:
+            charsb64 = base64.b64encode(input_str.encode("utf-8")).decode("ascii")
+            adb_command = (
+                "adb -s "
+                f"{self.device} shell am broadcast -a ADB_INPUT_B64 "
+                f"--es msg {shlex.quote(charsb64)}"
+            )
+            ret = execute_adb(adb_command)
+            if ret.success:
+                return ret
+            logger.warning(
+                "ADB Keyboard broadcast failed on device {}: {}; falling back to shell input",
+                self.device,
+                ret.error,
+            )
+        else:
+            logger.warning(
+                "ADB Keyboard is unavailable on device {}: {}; falling back to shell input",
+                self.device,
+                activate_ret.error,
+            )
+
+        return self._shell_input_text(input_str)
 
     def simulate_sms(self, sender: str | None, message: str | None) -> AdbResponse:
         if sender is None or message is None:
@@ -461,8 +502,44 @@ class AndroidController:
         logger.error(f"Timed out waiting for device after loading snapshot: {tag}")
         return False
 
-    def activate_adb_keyboard(self):
-        execute_adb("adb shell ime set com.android.adbkeyboard/.AdbIME")
+    def activate_adb_keyboard(self) -> AdbResponse:
+        current_ime = self._current_input_method()
+        if current_ime == _ADB_KEYBOARD_IME:
+            return AdbResponse(
+                success=True,
+                output=current_ime,
+                command=f"adb -s {self.device} shell settings get secure default_input_method",
+            )
+
+        if not self._adb_keyboard_installed():
+            return AdbResponse(
+                success=False,
+                error=f"{_ADB_KEYBOARD_PACKAGE} is not installed",
+                command=f"adb -s {self.device} shell pm list packages {_ADB_KEYBOARD_PACKAGE}",
+            )
+
+        enable_ret = execute_adb(
+            f"adb -s {self.device} shell ime enable {_ADB_KEYBOARD_IME}",
+            output=False,
+        )
+        if not enable_ret.success:
+            return enable_ret
+
+        set_ret = execute_adb(
+            f"adb -s {self.device} shell ime set {_ADB_KEYBOARD_IME}",
+            output=False,
+        )
+        if not set_ret.success:
+            return set_ret
+
+        current_ime = self._current_input_method()
+        if current_ime != _ADB_KEYBOARD_IME:
+            return AdbResponse(
+                success=False,
+                error=f"ADB Keyboard activation did not stick; current IME: {current_ime}",
+                command=set_ret.command,
+            )
+        return AdbResponse(success=True, output=current_ime, command=set_ret.command)
 
     def check_health(self, try_times: int = 0) -> bool:
         try:

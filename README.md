@@ -237,11 +237,12 @@ uv run mg eval \
 | `--task` / `--tasks` | all when omitted | Task id(s), comma-separated, or `ALL` |
 | `--task-file` / `--task-csv` | none | MemGUI CSV subset to run, e.g. `data/memgui-tasks-40.csv` |
 | `--difficulty` / `--task-difficulty` | none | MemGUI difficulty filter: `easy`/`medium`/`hard`, `1`/`2`/`3`, or `简单`/`中等`/`困难`; comma-separated values are supported |
-| `--pass-at-k` / `--attempts` | `1` | Run each MemGUI task K times and aggregate pass@K |
+| `--pass-at-k` / `--attempts` | `1` | Run each MemGUI task until one attempt succeeds or K attempts are exhausted, then aggregate pass@K |
 | `--suite-family` | `memgui_bench` | Benchmark suite family |
 | `--log-file-root` | `./traj_logs` | Local root for MobileWorld trajectory logs |
 | `--aw-host` | auto | Comma-separated backend URL(s); auto-discovered when omitted |
 | `--max-round` / `--max-step` | MemGUI task budget | Maximum agent steps per task; omitted uses `int(golden_steps * 2.5 + 1)`, `-1` means unlimited |
+| `--step-wait-time` | `3.0` | Seconds to wait after each action before the next screenshot for MemGUI-Bench |
 | `--max-concurrency` | number of containers | Maximum concurrent tasks |
 | `--shuffle-tasks` | false | Shuffle task order before scheduling |
 | `--dry-run` | false | Resolve tasks/backends without execution |
@@ -292,6 +293,10 @@ uv run mg logs export \
   --output exported-sites/qwen3vl-full
 ```
 
+For pass@K runs, the task detail page includes attempt tabs. Attempt 1 is stored
+in the canonical task folder; later attempts are stored under `_attempt_trajs/`
+and can be opened from the same viewer page.
+
 ---
 
 ## 📁 Benchmark Session
@@ -301,7 +306,8 @@ host-side `mg eval` process writes these files directly, so they are not trapped
 inside Docker containers.
 
 - Each task has a MobileWorld `traj.json`, screenshots, marked screenshots, and `result.txt`
-- Re-running the same log root skips tasks with completed `result.txt`
+- Re-running the same log root skips tasks that already succeeded; pass@K runs
+  also skip tasks that already have a completed pass@K aggregate result
 - MemGUI-Eval receives a generated compatibility workspace under `_memgui_eval/`
 
 ### Output Structure
@@ -320,6 +326,12 @@ traj_logs/qwen3vl-full/
 │   │   └── 001-FindProductAndFilter-0-1.png
 │   └── marked_screenshots/
 │       └── marked-001-FindProductAndFilter-0-1.png
+├── _attempt_trajs/
+│   └── 001-FindProductAndFilter/
+│       └── attempt_2/
+│           ├── traj.json
+│           ├── result.txt
+│           └── screenshots/
 └── _memgui_eval/
     ├── results.csv
     └── 001-FindProductAndFilter/

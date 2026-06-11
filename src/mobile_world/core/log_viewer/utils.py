@@ -15,6 +15,28 @@ from mobile_world.core.api.info import get_task_registry
 _log_root_state: dict[str, str] = {}
 _task_registries: dict[str, object] = {}
 _ATTEMPT_EVAL_RE = re.compile(r"^(?P<prefix>.+_attempt_(?P<attempt>\d+))_evaluation$")
+MEMGUI_DIFFICULTY_TAGS = {
+    "1": "Difficulty: Easy",
+    "2": "Difficulty: Medium",
+    "3": "Difficulty: Hard",
+}
+_MEMGUI_DIFFICULTY_ALIASES = {
+    "1": "1",
+    "easy": "1",
+    "simple": "1",
+    "low": "1",
+    "简单": "1",
+    "2": "2",
+    "medium": "2",
+    "middle": "2",
+    "normal": "2",
+    "中等": "2",
+    "3": "3",
+    "hard": "3",
+    "difficult": "3",
+    "high": "3",
+    "困难": "3",
+}
 
 
 def parse_result_file(result_file: str) -> tuple[float | None, str | None]:
@@ -72,6 +94,27 @@ def _read_memgui_results_rows(log_root: str) -> tuple[list[dict], list[str]]:
         return [], []
 
 
+def _read_latest_eval_report_metadata(log_root: str) -> dict:
+    if not log_root or not os.path.isdir(log_root):
+        return {}
+    report_paths = [
+        os.path.join(log_root, item)
+        for item in os.listdir(log_root)
+        if item.startswith("eval_report_") and item.endswith(".json")
+    ]
+    if not report_paths:
+        return {}
+    latest_path = max(report_paths, key=lambda path: os.path.getmtime(path))
+    try:
+        with open(latest_path) as f:
+            report = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Error reading eval report metadata in {latest_path}: {e}")
+        return {}
+    metadata = report.get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
 def _get_attempt_prefixes(fieldnames: list[str]) -> list[tuple[int, str]]:
     prefixes: list[tuple[int, str]] = []
     seen: set[tuple[int, str]] = set()
@@ -96,6 +139,13 @@ def _is_evaluated_value(value) -> bool:
     return _clean_csv_value(value).upper() in {"S", "F", "E"}
 
 
+def _metadata_pass_at_k(log_root: str) -> int:
+    try:
+        return max(1, int(read_log_metadata(log_root).get("pass_at_k") or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
 def get_log_root_state() -> dict[str, str]:
     """Get the global log root state."""
     return _log_root_state
@@ -108,20 +158,29 @@ def read_log_metadata(log_root: str) -> dict:
     Falls back to defaults if file doesn't exist (backward compat).
     """
     defaults = {"suite_family": "memgui_bench", "seed": None}
+    data = dict(defaults)
     if not log_root:
-        return defaults
+        return data
+
+    report_metadata = _read_latest_eval_report_metadata(log_root)
+    for key, value in report_metadata.items():
+        if value not in (None, ""):
+            data[key] = value
+
     metadata_path = os.path.join(log_root, "metadata.json")
     if not os.path.exists(metadata_path):
-        return defaults
+        return data
     try:
         with open(metadata_path) as f:
-            data = json.load(f)
-        for key, value in defaults.items():
-            data.setdefault(key, value)
+            file_data = json.load(f)
+        data.update(file_data)
+        for key, value in report_metadata.items():
+            if data.get(key) in (None, "") and value not in (None, ""):
+                data[key] = value
         return data
     except (json.JSONDecodeError, OSError) as e:
         logger.warning(f"Error reading metadata.json in {log_root}: {e}")
-        return defaults
+        return data
 
 
 def is_valid_trajectory_dir(path: str) -> bool:
@@ -203,6 +262,50 @@ def get_task_tags(task_name: str, suite_family: str = "memgui_bench") -> list[st
     except Exception:
         pass
     return []
+
+
+def _memgui_difficulty_tag(difficulty: str | None) -> str | None:
+    difficulty_id = (difficulty or "").strip()
+    return MEMGUI_DIFFICULTY_TAGS.get(difficulty_id)
+
+
+def _normalize_memgui_difficulties(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    difficulties: set[str] = set()
+    for raw_item in str(value).split(","):
+        item = raw_item.strip().lower()
+        if not item:
+            continue
+        normalized = _MEMGUI_DIFFICULTY_ALIASES.get(item)
+        if normalized:
+            difficulties.add(normalized)
+    return difficulties
+
+
+def _is_memgui_category_tag(tag: str) -> bool:
+    return ":" in tag
+
+
+def _memgui_tag_sort_key(tag: str) -> tuple[int, int | str]:
+    difficulty_order = {label: index for index, label in enumerate(MEMGUI_DIFFICULTY_TAGS.values())}
+    if tag in difficulty_order:
+        return (0, difficulty_order[tag])
+    if _is_memgui_category_tag(tag):
+        return (2, tag.lower())
+    return (1, tag.lower())
+
+
+def get_task_filter_tags(task_name: str, suite_family: str = "memgui_bench") -> list[str]:
+    """Get tags used by the viewer filters, including MemGUI difficulty tags."""
+    tags = list(get_task_tags(task_name, suite_family=suite_family))
+    if suite_family == "memgui_bench":
+        difficulty_tag = _memgui_difficulty_tag(
+            str(get_memgui_task_metadata(task_name).get("difficulty") or "")
+        )
+        if difficulty_tag:
+            tags.append(difficulty_tag)
+    return sorted(set(tags), key=_memgui_tag_sort_key if suite_family == "memgui_bench" else str.lower)
 
 
 def _parse_memgui_list(value: str | None) -> list[str]:
@@ -298,7 +401,10 @@ def get_memgui_eval_info(log_root: str, task_name: str) -> dict:
         )
 
     latest_attempt = attempts[-1] if attempts else {}
-    max_attempt = max((attempt["attempt"] for attempt in attempts), default=0)
+    max_attempt = max(
+        max((attempt["attempt"] for attempt in attempts), default=0),
+        _metadata_pass_at_k(log_root),
+    )
     pass_at = {
         k: any(attempt <= k for attempt in successful_attempts)
         for k in range(1, max(max_attempt, 1) + 1)
@@ -313,11 +419,21 @@ def get_memgui_eval_info(log_root: str, task_name: str) -> dict:
     }
 
 
-def calculate_memgui_eval_metrics(log_root: str, total_tasks: int) -> dict:
+def calculate_memgui_eval_metrics(
+    log_root: str,
+    total_tasks: int,
+    task_set: list[str] | None = None,
+) -> dict:
     """Calculate MemGUI leaderboard-style metrics from `_memgui_eval/results.csv`."""
     rows, fieldnames = _read_memgui_results_rows(log_root)
     attempt_prefixes = _get_attempt_prefixes(fieldnames)
-    max_attempt = max((attempt for attempt, _ in attempt_prefixes), default=1)
+    max_attempt = max(
+        max((attempt for attempt, _ in attempt_prefixes), default=1),
+        _metadata_pass_at_k(log_root),
+    )
+    task_set_lookup = set(task_set or [])
+    if task_set_lookup:
+        rows = [row for row in rows if row.get("task_identifier", "") in task_set_lookup]
 
     pass_counts = {k: 0 for k in range(1, max_attempt + 1)}
     pass_memory_counts = {k: 0 for k in range(1, max_attempt + 1)}
@@ -330,15 +446,24 @@ def calculate_memgui_eval_metrics(log_root: str, total_tasks: int) -> dict:
     irr_sum = 0.0
     irr_count = 0
 
+    if task_set_lookup:
+        for task_id in task_set or []:
+            metadata = get_memgui_task_metadata(task_id)
+            if metadata.get("requires_ui_memory"):
+                memory_total += 1
+            else:
+                standard_total += 1
+
     for row in rows:
         task_id = row.get("task_identifier", "")
         if not task_id:
             continue
         is_memory_task = _parse_bool_flag(row.get("requires_ui_memory"))
-        if is_memory_task:
-            memory_total += 1
-        else:
-            standard_total += 1
+        if not task_set_lookup:
+            if is_memory_task:
+                memory_total += 1
+            else:
+                standard_total += 1
 
         attempt_results: dict[int, bool] = {}
         first_success_attempt: int | None = None
@@ -460,7 +585,59 @@ def get_all_tags(suite_family: str = "memgui_bench") -> list[str]:
                     tags.update(t.task_tags)
             except Exception:
                 pass
+    if suite_family == "memgui_bench":
+        tags.update(MEMGUI_DIFFICULTY_TAGS.values())
+        return sorted(list(tags), key=_memgui_tag_sort_key)
     return sorted(list(tags))
+
+
+def _load_memgui_task_list_from_metadata(metadata: dict) -> list[str]:
+    task_list = metadata.get("task_list")
+    if isinstance(task_list, list) and task_list:
+        return [str(task) for task in task_list]
+
+    task_file = metadata.get("task_file")
+    difficulty = metadata.get("difficulty")
+    if not task_file and not difficulty:
+        return []
+
+    try:
+        from mobile_world.tasks.memgui_registry import MemGUITaskRegistry
+
+        registry = MemGUITaskRegistry(dataset_path=task_file)
+    except Exception as e:
+        logger.warning(f"Could not load MemGUI task set from metadata: {e}")
+        return []
+
+    tasks = registry.list_tasks()
+    difficulties = _normalize_memgui_difficulties(difficulty)
+    if difficulties:
+        tasks = [
+            task_id
+            for task_id in tasks
+            if registry.get_task(task_id).record.task_difficulty.strip() in difficulties
+        ]
+    return tasks
+
+
+def _get_metric_task_set(log_root: str, suite_family: str, task_folders: list[str]) -> list[str]:
+    metadata = read_log_metadata(log_root)
+    task_list = metadata.get("task_list")
+    if isinstance(task_list, list) and task_list:
+        return [str(task) for task in task_list]
+
+    if suite_family == "memgui_bench":
+        metadata_task_list = _load_memgui_task_list_from_metadata(metadata)
+        if metadata_task_list:
+            return metadata_task_list
+
+    registry = get_registry(suite_family)
+    if registry:
+        try:
+            return registry.list_tasks()
+        except Exception:
+            pass
+    return task_folders
 
 
 def get_task_folders(log_root: str) -> list[str]:
@@ -476,6 +653,54 @@ def get_task_folders(log_root: str) -> list[str]:
             task_folders.append(item)
 
     return sorted(task_folders)
+
+
+def get_task_attempt_folder(log_root: str, task_name: str, attempt: int = 1) -> str:
+    """Return the trajectory folder for a task attempt.
+
+    Attempt 1 is the canonical MobileWorld task folder. Additional MemGUI pass@k
+    attempts live under `_attempt_trajs/{task_name}/attempt_{n}`.
+    """
+    if attempt <= 1:
+        return os.path.join(log_root, task_name)
+    return os.path.join(log_root, "_attempt_trajs", task_name, f"attempt_{attempt}")
+
+
+def get_task_attempts(log_root: str, task_name: str) -> list[dict]:
+    """Return available trajectory attempts for a task."""
+    attempts: list[dict] = []
+    canonical = get_task_attempt_folder(log_root, task_name, 1)
+    if os.path.exists(os.path.join(canonical, "traj.json")):
+        attempts.append(
+            {
+                "attempt": 1,
+                "label": "Attempt 1",
+                "task_folder": canonical,
+                "canonical": True,
+            }
+        )
+
+    attempt_root = os.path.join(log_root, "_attempt_trajs", task_name)
+    if os.path.isdir(attempt_root):
+        for item in os.listdir(attempt_root):
+            if not item.startswith("attempt_"):
+                continue
+            try:
+                attempt_num = int(item.split("_", 1)[1])
+            except (IndexError, ValueError):
+                continue
+            attempt_folder = os.path.join(attempt_root, item)
+            if os.path.exists(os.path.join(attempt_folder, "traj.json")):
+                attempts.append(
+                    {
+                        "attempt": attempt_num,
+                        "label": f"Attempt {attempt_num}",
+                        "task_folder": attempt_folder,
+                        "canonical": False,
+                    }
+                )
+
+    return sorted(attempts, key=lambda item: item["attempt"])
 
 
 def is_user_trajectory_log(log_root: str) -> bool:
@@ -702,9 +927,9 @@ def get_task_status(task_folder: str) -> tuple[str, float | None, str | None]:
     return "Running", None, None
 
 
-def get_task_info(log_root: str, task_name: str) -> dict | None:
+def get_task_info(log_root: str, task_name: str, attempt: int = 1) -> dict | None:
     """Get detailed information for a specific task."""
-    task_folder = os.path.join(log_root, task_name)
+    task_folder = get_task_attempt_folder(log_root, task_name, attempt)
     if not os.path.exists(task_folder):
         return None
 
@@ -725,12 +950,14 @@ def get_task_info(log_root: str, task_name: str) -> dict | None:
 
     return {
         "name": task_name,
+        "attempt": attempt,
         "status": status,
         "score": score,
         "reason": reason,
         "screenshots": screenshots,
         "trajectory_steps": trajectory_steps,
         "task_folder": task_folder,
+        "attempts": get_task_attempts(log_root, task_name),
         "task_goal": task_goal,
         "tools": tools,
         "token_usage": token_usage,
@@ -756,8 +983,11 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
       and I_triggered = non-interaction tasks that triggered ask_user
     """
     task_folders = get_task_folders(log_root)
+    metric_task_set = _get_metric_task_set(log_root, suite_family, task_folders)
+    total_task_no = len(metric_task_set)
     if not task_folders:
         return {
+            "total_task_no": total_task_no,
             "total": 0,
             "finished": 0,
             "running": 0,
@@ -912,8 +1142,7 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
         total_steps += step_count
 
     total = finished_count + running_count + stale_count
-    registry = get_registry(suite_family)
-    total_task_no = len(registry.list_tasks()) if registry else total
+    total_task_no = total_task_no if total_task_no > 0 else total
     success_rate = (success_count / total_task_no * 100) if total_task_no > 0 else 0.0
     finished_success_rate = (
         (success_count / finished_count * 100) if finished_count > 0 else 0.0
@@ -957,7 +1186,7 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
         else 0.0
     )
     memgui_eval_metrics = (
-        calculate_memgui_eval_metrics(log_root, total_task_no)
+        calculate_memgui_eval_metrics(log_root, total_task_no, metric_task_set)
         if suite_family == "memgui_bench"
         else {}
     )

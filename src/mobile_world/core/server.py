@@ -42,6 +42,7 @@ from mobile_world.runtime.utils.models import (
     TaskCallbackRequest,
     TaskOperationRequest,
 )
+
 SUITE_FAMILY: str = "memgui_bench"
 RUNNING_TASK = None
 AVD_MAPPING: dict[str, str] = {
@@ -435,6 +436,10 @@ def step(req: StepRequest):
         else:
             logger.error(f"[STEP] Unknown action: {action_type}")
             raise HTTPException(status_code=400, detail=f"unknown action: {action_type}")
+
+        if isinstance(ret, AdbResponse) and not ret.success:
+            logger.error(f"[STEP] ADB action failed: {ret.error}")
+            raise HTTPException(status_code=500, detail=ret.error or "ADB action failed")
 
         if isinstance(ret, AdbResponse):
             ret = ret.output

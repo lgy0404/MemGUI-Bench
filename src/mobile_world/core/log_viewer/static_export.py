@@ -316,10 +316,6 @@ def _build_index_stats_html(stats: dict, suite_family: str) -> str:
             <div class="stat-value">{stats["avg_steps"]:.1f}</div>
             <div class="stat-label">Avg Steps</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-value">{stats.get("memgui_avg_step_ratio", 0.0):.2f}x</div>
-            <div class="stat-label">Step Ratio</div>
-        </div>
     </div>
     <div class="stats-grid stats-grid-rates">
         {"".join(pass_cards)}

@@ -39,6 +39,7 @@ load_dotenv()
 
 MEMGUI_MAX_STEP_MULTIPLIER = 2.5
 MEMGUI_DEFAULT_MAX_STEP_FALLBACK = 15
+MEMGUI_SUCCESS_THRESHOLD = 0.99
 
 
 @lru_cache(maxsize=1)
@@ -93,6 +94,80 @@ def _create_attempt_traj_logger(
     return TrajLogger(attempt_root, f"attempt_{attempt_num}")
 
 
+def _is_successful_score(score: float | int | str | None) -> bool:
+    if score is None:
+        return False
+    try:
+        return float(score) > MEMGUI_SUCCESS_THRESHOLD
+    except (TypeError, ValueError):
+        return False
+
+
+def _parse_score_file(result_file: str) -> tuple[float | None, str]:
+    with open(result_file) as f:
+        lines = f.readlines()
+
+    score = None
+    if lines and "score:" in lines[0]:
+        try:
+            score = float(lines[0].split("score:", 1)[1].strip())
+        except ValueError:
+            score = None
+    reason = lines[1].strip() if len(lines) > 1 else ""
+    return score, reason
+
+
+def _scan_finished_memgui_pass_at_k_tasks(
+    log_file_root: str,
+    task_list: list[str],
+    pass_at_k: int,
+) -> tuple[list[str], list[float]]:
+    """Find pass@k tasks that should be skipped in the current log root.
+
+    This mirrors the original MemGUI-Bench behavior more closely than the
+    plain MobileWorld `result.txt` scan: a previous success can stop all later
+    attempts, and a completed aggregate pass@K run should be skipped. A lone
+    failed pass@1 result should not block a later pass@3 run from adding more
+    attempts.
+    """
+    finished_tasks: list[str] = []
+    finished_scores: list[float] = []
+    pass_marker = f"pass@{pass_at_k}:"
+
+    for task_name in task_list:
+        result_file = os.path.join(log_file_root, task_name, SCORE_FILE_NAME)
+        if not os.path.exists(result_file):
+            continue
+        try:
+            score, reason = _parse_score_file(result_file)
+        except OSError as e:
+            logger.warning(f"Error reading result.txt for {task_name}: {e}")
+            continue
+
+        if score is None:
+            continue
+        if _is_successful_score(score) or pass_marker in reason:
+            finished_tasks.append(task_name)
+            finished_scores.append(score)
+
+    return finished_tasks, finished_scores
+
+
+def _update_log_metadata(metadata_path: str, updates: dict) -> None:
+    """Merge run metadata without changing the existing suite-family guard."""
+    metadata = {}
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path) as f:
+                metadata = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Could not read existing metadata at {metadata_path}: {e}")
+
+    metadata.update(updates)
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+
 def _write_pass_at_k_result(
     log_file_root: str,
     task_name: str,
@@ -110,7 +185,8 @@ def _write_pass_at_k_result(
     if best_attempt is not None:
         reason = (
             f"pass@{pass_at_k}: success at attempt {best_attempt}; "
-            f"successful_attempts={successful_attempts}"
+            f"successful_attempts={successful_attempts}; "
+            f"attempts_run={len(attempt_results)}/{pass_at_k}"
         )
     else:
         reason = f"pass@{pass_at_k}: all {len(attempt_results)} attempts failed"
@@ -344,6 +420,14 @@ def _process_task_on_env(
                         "trajectory_dir": traj_logger.log_file_dir,
                     }
                 )
+                if pass_at_k > 1 and _is_successful_score(task_score):
+                    logger.info(
+                        "Task '{}' succeeded at attempt {}/{}; skipping remaining attempts",
+                        task_name,
+                        attempt_num,
+                        pass_at_k,
+                    )
+                    break
 
             task_duration = time.time() - task_start_time
             if pass_at_k > 1:
@@ -421,6 +505,8 @@ def run_agent_with_evaluation(
     max_concurrency: int | None = None,
     shuffle_tasks: bool = False,
     pass_at_k: int = 1,
+    task_file: str | None = None,
+    difficulty: str | None = None,
     **kwargs,
 ) -> list[dict]:
     """Run the agent and return the evaluation results.
@@ -462,6 +548,9 @@ def run_agent_with_evaluation(
             "agent_type": agent_type,
             "model_name": model_name,
             "pass_at_k": pass_at_k,
+            "task_file": task_file,
+            "difficulty": difficulty,
+            "step_wait_time": step_wait_time,
             "timestamp": datetime.now().isoformat(),
         }
         with open(metadata_path, "w") as f:
@@ -503,10 +592,33 @@ def run_agent_with_evaluation(
         )
 
     logger.info("Task list: {} ({} tasks)", task_list, len(task_list))
+    _update_log_metadata(
+        metadata_path,
+        {
+            "suite_family": suite_family,
+            "seed": seed,
+            "agent_type": agent_type,
+            "model_name": model_name,
+            "pass_at_k": pass_at_k,
+            "task_file": task_file,
+            "difficulty": difficulty,
+            "step_wait_time": step_wait_time,
+            "task_list": task_list,
+            "task_count": len(task_list),
+            "task_selection": "selected" if tasks else "all",
+            "updated_at": datetime.now().isoformat(),
+        },
+    )
 
-    if pass_at_k > 1:
-        finished_task_list, finished_scores = [], []
-        logger.info("pass@{} enabled; skipping result.txt based task skip", pass_at_k)
+    if pass_at_k > 1 and suite_family == "memgui_bench":
+        finished_task_list, finished_scores = _scan_finished_memgui_pass_at_k_tasks(
+            log_file_root, task_list, pass_at_k
+        )
+        logger.info(
+            "pass@{} enabled; skipping existing successful or completed pass@{} tasks",
+            pass_at_k,
+            pass_at_k,
+        )
     else:
         finished_task_list, finished_scores = scan_finished_tasks(log_file_root, task_list)
     logger.info("Finished task list: {} ({} tasks)", finished_task_list, len(finished_task_list))

@@ -32,6 +32,21 @@ disable_avd_modem() {
   done
 }
 
+activate_adb_keyboard() {
+  local package="com.android.adbkeyboard"
+  local ime="com.android.adbkeyboard/.AdbIME"
+  local current_ime
+
+  if adb -s "${DEVICE_ID}" shell pm list packages "${package}" 2>/dev/null | grep -F -q "${package}"; then
+    adb -s "${DEVICE_ID}" shell ime enable "${ime}" || true
+    adb -s "${DEVICE_ID}" shell ime set "${ime}" || true
+    current_ime="$(adb -s "${DEVICE_ID}" shell settings get secure default_input_method 2>/dev/null | tr -d '\r' || true)"
+    echo "Default input method: ${current_ime:-<empty>}"
+  else
+    echo "ADB Keyboard is not installed; runtime will fall back to adb shell input text"
+  fi
+}
+
 adb devices | awk '/emulator/ {print $1}' | xargs -r -I {} adb -s "{}" emu kill || true
 adb kill-server >/dev/null 2>&1 || true
 adb start-server >/dev/null
@@ -91,6 +106,7 @@ while true; do
     adb -s "${DEVICE_ID}" shell "settings put global animator_duration_scale 0.0" || true
     adb -s "${DEVICE_ID}" shell "settings put global hidden_api_policy_pre_p_apps 1; settings put global hidden_api_policy_p_apps 1; settings put global hidden_api_policy 1" || true
     adb -s "${DEVICE_ID}" root || true
+    activate_adb_keyboard
     if [ -n "${INIT_SNAPSHOT}" ] && [ "${INIT_SNAPSHOT}" != "none" ] && [ "${INIT_SNAPSHOT}" != "false" ]; then
       echo "Saving MemGUI init snapshot: ${INIT_SNAPSHOT}"
       adb -s "${DEVICE_ID}" emu avd snapshot delete "${INIT_SNAPSHOT}" >/dev/null 2>&1 || true

@@ -340,21 +340,21 @@ input[type="checkbox"] {
     color: var(--text-primary);
 }
 
-.task-name-col { font-weight: 600; font-size: 14px; width: 200px; white-space: normal; word-break: break-word; }
+.task-name-col { font-weight: 600; font-size: 14px; width: 190px; white-space: normal; word-break: break-word; }
 .task-name-col a { display: block; }
 
 /* Column Specifics */
-.col-screenshot { width: 160px; }
-.col-goal { width: 250px; white-space: normal; word-break: break-word; }
-.col-tags { width: 150px; white-space: normal; }
-.col-status { width: 100px; }
+.col-screenshot { width: 145px; }
+.col-goal { width: 260px; white-space: normal; word-break: break-word; }
+.col-tags { width: 165px; white-space: normal; }
+.col-status { width: 90px; }
 .col-score { width: 80px; }
-.col-reason { width: 200px; white-space: normal; word-break: break-word; }
-.col-step { width: 110px; }
-.col-action { width: 140px; white-space: normal; word-break: break-word; }
+.col-reason { width: 340px; white-space: normal; word-break: break-word; }
+.col-step { width: 85px; }
+.col-action { width: 120px; white-space: normal; word-break: break-word; }
 .col-prediction { width: 250px; white-space: normal; word-break: break-word; }
-.col-pass { width: 150px; white-space: normal; }
-.col-irr { width: 90px; }
+.col-pass { width: 135px; white-space: normal; }
+.col-irr { width: 65px; }
 .col-reason-block { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .col-reason-text { white-space: normal; word-break: break-word; }
 

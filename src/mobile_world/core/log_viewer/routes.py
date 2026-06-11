@@ -21,6 +21,8 @@ from mobile_world.core.log_viewer.utils import (
     get_memgui_eval_info,
     get_memgui_task_metadata,
     get_screenshots,
+    get_task_attempt_folder,
+    get_task_filter_tags,
     get_task_folders,
     get_task_goal,
     get_task_info,
@@ -55,6 +57,7 @@ def register_routes(rt, base_path: str = "/"):
 
     ITEMS_PER_PAGE = 20
     GOAL_TRUNCATE_LENGTH = 80
+    REASON_TRUNCATE_LENGTH = 180
 
     def _status_badge(status):
         cls_map = {
@@ -64,16 +67,22 @@ def register_routes(rt, base_path: str = "/"):
         }
         return Span(status, cls=f"badge {cls_map.get(status, 'neutral')}")
 
-    def _truncated_goal(goal: str, task_id: str) -> Div:
-        """Render goal with show more/less toggle if too long."""
-        if not goal or goal == "N/A" or len(goal) <= GOAL_TRUNCATE_LENGTH:
-            return Div(goal if goal else "N/A")
+    def _truncated_text(
+        text: str,
+        item_id: str,
+        prefix: str,
+        max_length: int,
+        fallback: str = "",
+    ):
+        """Render long text with a show more/less toggle."""
+        if not text or text == "N/A" or len(text) <= max_length:
+            return Div(text if text else fallback)
 
-        truncated = goal[:GOAL_TRUNCATE_LENGTH] + "..."
-        unique_id = f"goal-{hash(task_id) % 100000}"
+        truncated = text[:max_length] + "..."
+        unique_id = f"{prefix}-{hash((prefix, item_id)) % 100000}"
         return Div(
             Span(truncated, id=f"{unique_id}-short"),
-            Span(goal, id=f"{unique_id}-full", style="display: none;"),
+            Span(text, id=f"{unique_id}-full", style="display: none;"),
             A(
                 "show more",
                 href="javascript:void(0)",
@@ -94,6 +103,14 @@ def register_routes(rt, base_path: str = "/"):
                 f"this.previousElementSibling.style.display='inline';",
             ),
         )
+
+    def _truncated_goal(goal: str, task_id: str):
+        """Render goal with show more/less toggle if too long."""
+        return _truncated_text(goal, task_id, "goal", GOAL_TRUNCATE_LENGTH, fallback="N/A")
+
+    def _truncated_reason(reason: str, task_id: str):
+        """Render long MemGUI evaluation reason with show more/less toggle."""
+        return _truncated_text(reason, task_id, "reason", REASON_TRUNCATE_LENGTH)
 
     def _build_pagination(
         current_page: int,
@@ -207,11 +224,6 @@ def register_routes(rt, base_path: str = "/"):
                     Div(
                         Div(f"{stats['avg_steps']:.1f}", cls="stat-value"),
                         Div("Avg Steps", cls="stat-label"),
-                        cls="stat-card",
-                    ),
-                    Div(
-                        Div(f"{stats.get('memgui_avg_step_ratio', 0.0):.2f}x", cls="stat-value"),
-                        Div("Step Ratio", cls="stat-label", title="Actual steps / golden steps"),
                         cls="stat-card",
                     ),
                     cls="stats-grid",
@@ -388,6 +400,55 @@ def register_routes(rt, base_path: str = "/"):
             )
         return Div(*chips, cls="meta-chip-list")
 
+    def _selected_attempt_eval(memgui_eval_info: dict, selected_attempt: int) -> dict:
+        for attempt in memgui_eval_info.get("attempts") or []:
+            if attempt.get("attempt") == selected_attempt:
+                return attempt
+        return {}
+
+    def _attempt_tabs(
+        log_root: str,
+        task_name: str,
+        attempts: list[dict],
+        selected_attempt: int,
+        memgui_eval_info: dict,
+    ):
+        if len(attempts) <= 1:
+            return None
+
+        eval_by_attempt = {
+            int(item.get("attempt")): item for item in memgui_eval_info.get("attempts") or []
+        }
+        links = []
+        for attempt_info in attempts:
+            attempt_num = int(attempt_info["attempt"])
+            eval_info = eval_by_attempt.get(attempt_num, {})
+            status_label = eval_info.get("evaluation") or "log"
+            status_cls = (
+                "meta-chip-success"
+                if eval_info.get("success")
+                else (
+                    "meta-chip-danger"
+                    if eval_info.get("evaluation") in {"F", "E"}
+                    else "meta-chip-info"
+                )
+            )
+            selected_cls = " meta-chip-warning" if attempt_num == selected_attempt else ""
+            links.append(
+                A(
+                    f"Attempt {attempt_num} · {status_label}",
+                    href=url(
+                        f"task/{task_name}?log_root={quote(log_root)}&attempt={attempt_num}"
+                    ),
+                    cls=f"meta-chip {status_cls}{selected_cls}",
+                )
+            )
+        return Div(
+            Span("Attempts", cls="meta-label"),
+            Div(*links, cls="meta-chip-list"),
+            cls="meta-item",
+        )
+
     def _format_irr(memgui_eval_info: dict, metadata: dict) -> str:
         latest = memgui_eval_info.get("latest") or {}
         irr = latest.get("irr_percentage")
@@ -452,6 +513,7 @@ def register_routes(rt, base_path: str = "/"):
 
             status, score, reason = get_task_status(task_folder)
             task_tags = get_task_tags(task_name, suite_family=suite_family)
+            filter_tags = get_task_filter_tags(task_name, suite_family=suite_family)
             memgui_metadata = (
                 get_memgui_task_metadata(task_name) if suite_family == "memgui_bench" else {}
             )
@@ -480,7 +542,7 @@ def register_routes(rt, base_path: str = "/"):
                     continue
 
             if tag_filter != "all":
-                if tag_filter not in task_tags:
+                if tag_filter not in filter_tags:
                     continue
 
             filtered_count += 1
@@ -526,7 +588,7 @@ def register_routes(rt, base_path: str = "/"):
                 eval_reason = latest_eval.get("details") or reason or ""
                 badcase = latest_eval.get("badcase_category") or ""
                 reason_content = Div(
-                    Div(eval_reason, cls="col-reason-text"),
+                    Div(_truncated_reason(eval_reason, task_name), cls="col-reason-text"),
                     Span(badcase, cls="meta-chip meta-chip-danger") if badcase else None,
                     cls="col-reason-block",
                 )
@@ -669,18 +731,23 @@ def register_routes(rt, base_path: str = "/"):
         filename = filename + ".png"
         log_root_state = get_log_root_state()
         log_root_raw = request.query_params.get("log_root") or log_root_state.get("log_root", "")
+        attempt_raw = request.query_params.get("attempt", "1")
         if not log_root_raw:
             return "Log root not specified", 400
 
         log_root = unquote(log_root_raw)
         if not os.path.isabs(log_root):
             log_root = os.path.abspath(log_root)
+        try:
+            attempt = max(1, int(attempt_raw))
+        except ValueError:
+            return "Invalid attempt", 400
 
         # Validate subfolder to prevent path traversal
         if subfolder not in ("screenshots", "marked_screenshots"):
             return "Invalid subfolder", 400
 
-        task_folder = os.path.join(log_root, task_name)
+        task_folder = get_task_attempt_folder(log_root, task_name, attempt)
         screenshot_path = os.path.join(task_folder, subfolder, filename)
 
         if not os.path.exists(screenshot_path):
@@ -1091,6 +1158,11 @@ def register_routes(rt, base_path: str = "/"):
         log_root_state = get_log_root_state()
         log_root_raw = request.query_params.get("log_root") or log_root_state.get("log_root", "")
         log_root = unquote(log_root_raw) if log_root_raw else ""
+        attempt_raw = request.query_params.get("attempt", "1")
+        try:
+            selected_attempt = max(1, int(attempt_raw))
+        except ValueError:
+            selected_attempt = 1
 
         if not log_root:
             return (
@@ -1104,7 +1176,10 @@ def register_routes(rt, base_path: str = "/"):
         metadata = read_log_metadata(log_root)
         suite_family = metadata.get("suite_family", "memgui_bench")
 
-        task_info = get_task_info(log_root, task_name)
+        task_info = get_task_info(log_root, task_name, attempt=selected_attempt)
+        if not task_info and selected_attempt != 1:
+            selected_attempt = 1
+            task_info = get_task_info(log_root, task_name, attempt=selected_attempt)
         if not task_info:
             return (
                 Titled("Task Not Found"),
@@ -1128,7 +1203,7 @@ def register_routes(rt, base_path: str = "/"):
             action_type = action.get("action_type", "N/A")
             prediction = step_data.get("prediction", "")
             screenshot_url = url(
-                f"static/screenshots/{task_name}/{subfolder}/{screenshot_file.replace('.png', '')}?log_root={quote(log_root)}"
+                f"static/screenshots/{task_name}/{subfolder}/{screenshot_file.replace('.png', '')}?log_root={quote(log_root)}&attempt={selected_attempt}"
             )
 
             # Get ask_user_response and tool_call from next step
@@ -1174,10 +1249,19 @@ def register_routes(rt, base_path: str = "/"):
         is_memgui = suite_family == "memgui_bench"
         memgui_metadata = task_info.get("memgui_metadata") or {}
         memgui_eval_info = task_info.get("memgui_eval_info") or {}
-        latest_eval = memgui_eval_info.get("latest") or {}
+        selected_eval = _selected_attempt_eval(memgui_eval_info, selected_attempt)
+        latest_eval = selected_eval or memgui_eval_info.get("latest") or {}
+        attempt_tabs = _attempt_tabs(
+            log_root,
+            task_name,
+            task_info.get("attempts") or [],
+            selected_attempt,
+            memgui_eval_info,
+        )
 
         detail_meta_items = [
             _detail_meta_item("Suite", suite_family.replace("_", " ").title()),
+            _detail_meta_item("Attempt", selected_attempt),
             Div(
                 Span("Status", cls="meta-label"),
                 _status_badge(task_info["status"]),
@@ -1234,6 +1318,8 @@ def register_routes(rt, base_path: str = "/"):
                         "Suggested Fix", latest_eval["badcase_suggested_improvement"]
                     )
                 )
+            if attempt_tabs:
+                detail_meta_items.append(attempt_tabs)
         else:
             detail_meta_items.extend(
                 [
@@ -1977,7 +2063,7 @@ def register_routes(rt, base_path: str = "/"):
                                 cls="filter-item",
                             ),
                             Div(
-                                Label("Tag"),
+                                Label("Tag / Difficulty"),
                                 Select(
                                     Option(
                                         "All",

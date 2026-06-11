@@ -1,6 +1,9 @@
 """Tests for MemGUI-Bench task registry on the MobileWorld runtime."""
 
+import asyncio
+
 from mobile_world.core.cli import create_parser
+from mobile_world.core.subcommands import eval as eval_command
 from mobile_world.core.subcommands.eval import (
     _normalize_difficulties,
     _resolve_memgui_task_selection,
@@ -26,6 +29,7 @@ def test_eval_defaults_to_memgui_suite_and_image():
     assert args.suite_family == "memgui_bench"
     assert args.env_name_prefix == "memgui_bench_env"
     assert args.env_image == DEFAULT_IMAGE
+    assert args.step_wait_time is None
 
 
 def test_memgui_registry_loads_subset_task_file():
@@ -55,6 +59,31 @@ def test_eval_parser_accepts_task_file_and_difficulty():
     assert args.task_file == "data/memgui-tasks-40.csv"
     assert args.difficulty == "hard"
     assert args.pass_at_k == 3
+
+
+def test_memgui_eval_execute_defaults_to_three_second_step_wait(monkeypatch, tmp_path):
+    parser = create_parser()
+    args = parser.parse_args(
+        [
+            "eval",
+            "--agent-type",
+            "qwen3vl",
+            "--dry-run",
+            "--log-file-root",
+            str(tmp_path),
+        ]
+    )
+    captured = {}
+
+    def fake_run_agent_with_evaluation(**kwargs):
+        captured.update(kwargs)
+        return [], []
+
+    monkeypatch.setattr(eval_command, "run_agent_with_evaluation", fake_run_agent_with_evaluation)
+
+    asyncio.run(eval_command.execute(args))
+
+    assert captured["step_wait_time"] == 3.0
 
 
 def test_resolve_memgui_task_selection_filters_task_file_by_difficulty():

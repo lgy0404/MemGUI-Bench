@@ -197,8 +197,8 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         "--step_wait_time",
         dest="step_wait_time",
         type=float,
-        default=1.0,
-        help="Wait time in seconds after each step (default: 1.0)",
+        default=None,
+        help="Wait time in seconds after each step (default: 3.0 for memgui_bench, 1.0 otherwise)",
     )
     parser.add_argument(
         "--suite-family",
@@ -290,7 +290,7 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
         dest="pass_at_k",
         type=int,
         default=1,
-        help="Run each MemGUI task K times and aggregate pass@K (default: 1).",
+        help="Run each MemGUI task until one attempt succeeds or K attempts are exhausted, then aggregate pass@K (default: 1).",
     )
     eval_parser.add_argument(
         "--max-retries",
@@ -363,6 +363,12 @@ async def execute(args: argparse.Namespace) -> None:
     # Parse aw_host URLs - if None, will auto-discover; if provided, split by comma
     aw_urls = None if args.aw_host is None else args.aw_host.split(",")
 
+    step_wait_time = (
+        args.step_wait_time
+        if args.step_wait_time is not None
+        else (3.0 if args.suite_family == "memgui_bench" else 1.0)
+    )
+
     task_results, task_list_with_no_results = run_agent_with_evaluation(
         agent_type=args.agent_type,
         model_name=args.model_name,
@@ -376,7 +382,7 @@ async def execute(args: argparse.Namespace) -> None:
         executor_model_name=args.executor_model_name,
         executor_agent_class=args.executor_agent_class,
         device=args.device or "emulator-5554",
-        step_wait_time=args.step_wait_time or 1.0,
+        step_wait_time=step_wait_time,
         suite_family=args.suite_family or "memgui_bench",
         seed=getattr(args, "seed", None),
         env_name_prefix=args.env_name_prefix,
@@ -387,6 +393,8 @@ async def execute(args: argparse.Namespace) -> None:
         max_concurrency=args.max_concurrency,
         shuffle_tasks=args.shuffle_tasks,
         pass_at_k=args.pass_at_k,
+        task_file=args.task_file,
+        difficulty=args.difficulty,
         scale_factor=getattr(args, "scale_factor", 1000),
     )
     if run_task_set and task_results:
