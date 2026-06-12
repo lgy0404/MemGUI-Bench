@@ -60,6 +60,24 @@ const sortOptions = {
 };
 
 let currentTab = 'main';
+const resultViewMeta = {
+  main: {
+    title: 'Main Results',
+    subtitle: 'Average performance across all 128 tasks'
+  },
+  difficulty: {
+    title: 'Difficulty',
+    subtitle: 'Breakdown across easy, medium, and hard tasks'
+  },
+  crossapp: {
+    title: 'Cross-App',
+    subtitle: 'Performance by number of apps involved'
+  },
+  efficiency: {
+    title: 'Efficiency',
+    subtitle: 'Step, time, and API cost trade-offs'
+  }
+};
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -75,15 +93,18 @@ async function loadData() {
   try {
     // Load each agent file in parallel
     const agentPromises = AGENT_FILES.map(async (agentId) => {
-      const response = await fetch(`data/agents/${agentId}.json`);
-      if (!response.ok) {
+      try {
+        return await fetchBenchmarkJson(`agents/${agentId}.json`);
+      } catch (error) {
         console.warn(`Failed to load agent: ${agentId}`);
         return null;
       }
-      return response.json();
     });
     
     const agents = (await Promise.all(agentPromises)).filter(a => a !== null);
+    if (AGENT_FILES.length > 0 && agents.length === 0) {
+      throw new Error('No agent result files could be loaded');
+    }
     
     leaderboardData = {
       lastUpdated: new Date().toISOString().split('T')[0],
@@ -131,6 +152,13 @@ function setupEventListeners() {
       renderTables();
     });
   });
+
+  document.querySelectorAll('#resultViewTabs .home-view-tab').forEach(button => {
+    button.addEventListener('click', () => {
+      const view = button.dataset.view || 'main';
+      setActiveResultView(view);
+    });
+  });
   
   // Agent type filter
   document.getElementById('agentTypeFilter').addEventListener('change', (e) => {
@@ -166,6 +194,29 @@ function setupEventListeners() {
     renderTables();
   });
   
+}
+
+function setActiveResultView(view) {
+  currentTab = view;
+  updateSortOptions(view);
+
+  document.querySelectorAll('#resultViewTabs .home-view-tab').forEach(button => {
+    button.classList.toggle('active', button.dataset.view === view);
+  });
+
+  document.querySelectorAll('[data-view-panel]').forEach(panel => {
+    const isActive = panel.dataset.viewPanel === view;
+    panel.hidden = !isActive;
+    panel.classList.toggle('active', isActive);
+  });
+
+  const meta = resultViewMeta[view] || resultViewMeta.main;
+  const title = document.getElementById('resultViewTitle');
+  const subtitle = document.getElementById('resultViewSubtitle');
+  if (title) title.textContent = meta.title;
+  if (subtitle) subtitle.textContent = meta.subtitle;
+
+  renderTables();
 }
 
 // Filter and sort data

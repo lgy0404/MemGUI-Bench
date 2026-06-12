@@ -1,8 +1,9 @@
 /* ===== Submission Page Styles - Light Theme ===== */
 
 .submission-header {
-  padding: 140px 0 60px;
+  padding: 48px 0 42px;
   background: linear-gradient(180deg, var(--bg-light-alt) 0%, var(--bg-light) 100%);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .submission-header h1 {
@@ -13,9 +14,9 @@
 }
 
 .submission-container {
-  max-width: 1400px;
+  max-width: 1500px;
   margin: 0 auto;
-  padding: 0 1rem;
+  padding: 0 48px;
 }
 
 .submission-main {
@@ -26,7 +27,7 @@
 
 @media (min-width: 1200px) {
   .submission-main {
-    margin-left: 5%;
+    margin-left: 4%;
     margin-right: 280px;
   }
 }
@@ -42,7 +43,7 @@
 
 @media (max-width: 1600px) {
   .toc-sidebar-fixed {
-    right: 20px;
+    right: 48px;
   }
 }
 
@@ -350,8 +351,16 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  .submission-header {
+    padding: 36px 0 32px;
+  }
+
+  .submission-container {
+    padding: 0 20px;
+  }
+
   .submission-main {
-    padding: 1rem;
+    padding: 1.5rem 0;
   }
   
   .content-section h2 {

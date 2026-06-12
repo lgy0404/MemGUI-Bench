@@ -133,47 +133,44 @@
         <span class="legend-item"><span class="type-badge model">Model</span> End-to-end model</span>
       </div>
 
-      <article class="home-table-card">
-        <div class="home-table-heading">
-          <h3>Main Results</h3>
-          <span>Average performance across all 128 tasks</span>
-        </div>
-        <div class="table-container">
-          <div id="mainTable" class="leaderboard-table-wrapper"></div>
-        </div>
-      </article>
-
-      <div class="home-analysis-grid">
-        <article class="home-table-card">
-          <div class="home-table-heading">
-            <h3>Cross-App</h3>
-            <span>Performance by number of apps involved</span>
+      <article class="home-table-card home-results-card">
+        <div class="home-table-heading home-table-heading-with-tabs">
+          <div>
+            <h3 id="resultViewTitle">Main Results</h3>
+            <span id="resultViewSubtitle">Average performance across all 128 tasks</span>
           </div>
+          <div class="home-view-tabs" id="resultViewTabs" aria-label="Leaderboard result views">
+            <button type="button" class="home-view-tab active" data-view="main">Main Results</button>
+            <button type="button" class="home-view-tab" data-view="difficulty">Difficulty</button>
+            <button type="button" class="home-view-tab" data-view="crossapp">Cross-App</button>
+            <button type="button" class="home-view-tab" data-view="efficiency">Efficiency</button>
+          </div>
+        </div>
+
+        <div class="home-result-panel active" data-view-panel="main">
           <div class="table-container">
-            <div id="crossAppTable" class="leaderboard-table-wrapper"></div>
+            <div id="mainTable" class="leaderboard-table-wrapper"></div>
           </div>
-        </article>
+        </div>
 
-        <article class="home-table-card">
-          <div class="home-table-heading">
-            <h3>Difficulty</h3>
-            <span>Breakdown across easy, medium, and hard tasks</span>
-          </div>
+        <div class="home-result-panel" data-view-panel="difficulty" hidden>
           <div class="table-container">
             <div id="difficultyTable" class="leaderboard-table-wrapper"></div>
           </div>
-        </article>
+        </div>
 
-        <article class="home-table-card">
-          <div class="home-table-heading">
-            <h3>Efficiency</h3>
-            <span>Step, time, and API cost trade-offs</span>
+        <div class="home-result-panel" data-view-panel="crossapp" hidden>
+          <div class="table-container">
+            <div id="crossAppTable" class="leaderboard-table-wrapper"></div>
           </div>
+        </div>
+
+        <div class="home-result-panel" data-view-panel="efficiency" hidden>
           <div class="table-container">
             <div id="efficiencyTable" class="leaderboard-table-wrapper"></div>
           </div>
-        </article>
-      </div>
+        </div>
+      </article>
     </section>
 
     <section class="home-info-section">

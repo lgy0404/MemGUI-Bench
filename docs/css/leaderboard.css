@@ -8,9 +8,14 @@
 }
 
 .leaderboard-main {
-  max-width: 1600px;
-  padding: 30px 20px;
+  max-width: 1500px;
+  padding: 36px 48px 52px;
   margin: 0 auto;
+}
+
+.home-compact .leaderboard-main.home-leaderboard {
+  max-width: 1500px;
+  padding: 36px 48px 52px;
 }
 
 /* Tab Controls */
@@ -546,8 +551,9 @@
 
 /* Responsive */
 @media (max-width: 1200px) {
-  .leaderboard-main {
-    padding: 20px 15px;
+  .leaderboard-main,
+  .home-compact .leaderboard-main.home-leaderboard {
+    padding: 28px 32px 44px;
   }
   
   .filters-section {
@@ -556,6 +562,11 @@
 }
 
 @media (max-width: 768px) {
+  .leaderboard-main,
+  .home-compact .leaderboard-main.home-leaderboard {
+    padding: 24px 20px 36px;
+  }
+
   .leaderboard-header {
     padding-top: 100px;
     padding-bottom: 30px;

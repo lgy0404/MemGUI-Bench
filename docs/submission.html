@@ -19,26 +19,26 @@
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/submission.css">
 </head>
-<body>
-  <!-- Navigation -->
-  <nav class="navbar navbar-expand-lg fixed-top">
-    <div class="container">
-      <a class="navbar-brand" href="index.html">
+<body class="home-compact submission-page">
+  <header class="home-topbar">
+    <div class="container-fluid home-shell">
+      <a class="home-brand" href="index.html" aria-label="MemGUI-Bench homepage">
         <img src="assets/favicon.png" alt="MemGUI-Bench" class="brand-icon">
-        <span class="brand-text">MemGUI-Bench</span>
+        <span>MemGUI-Bench</span>
       </a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ms-auto">
-          <li class="nav-item"><a class="nav-link" href="index.html">Home</a></li>
-          <li class="nav-item"><a class="nav-link" href="leaderboard.html">Leaderboard</a></li>
-          <li class="nav-item"><a class="nav-link active" href="submission.html">Submit</a></li>
-        </ul>
+      <div class="home-links" aria-label="Primary resources">
+        <a href="index.html" class="home-link">
+          <i class="bi bi-table"></i> Leaderboard
+        </a>
+        <a href="https://arxiv.org/abs/2602.06075" target="_blank" class="home-link">
+          <i class="bi bi-file-earmark-pdf"></i> Paper
+        </a>
+        <a href="https://github.com/lgy0404/MemGUI-Bench" target="_blank" class="home-link">
+          <i class="bi bi-github"></i> Code
+        </a>
       </div>
     </div>
-  </nav>
+  </header>
 
   <!-- Header -->
   <header class="submission-header">

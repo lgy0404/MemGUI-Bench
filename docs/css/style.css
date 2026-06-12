@@ -27,10 +27,10 @@
 }
 
 .home-shell {
-  max-width: 1580px;
+  max-width: 1500px;
   margin: 0 auto;
-  padding-left: 28px;
-  padding-right: 28px;
+  padding-left: 48px;
+  padding-right: 48px;
 }
 
 .home-topbar {
@@ -197,7 +197,7 @@
 
 .home-table-heading {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 20px;
   padding: 16px 18px;
@@ -215,6 +215,51 @@
 .home-table-heading span {
   color: #64748b;
   font-size: 0.9rem;
+}
+
+.home-table-heading-with-tabs {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.home-view-tabs {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.home-view-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid #d7dde8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.home-view-tab:hover {
+  color: #0f172a;
+  border-color: #b7c1d3;
+  background: #f8fafc;
+}
+
+.home-view-tab.active {
+  color: #ffffff;
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.home-result-panel[hidden] {
+  display: none;
 }
 
 .home-analysis-grid {
@@ -293,8 +338,8 @@
 
 @media (max-width: 768px) {
   .home-shell {
-    padding-left: 16px;
-    padding-right: 16px;
+    padding-left: 20px;
+    padding-right: 20px;
   }
 
   .home-topbar .home-shell {
@@ -320,6 +365,11 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 6px;
+  }
+
+  .home-view-tabs {
+    justify-content: flex-start;
+    width: 100%;
   }
 }
 
