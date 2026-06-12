@@ -40,6 +40,8 @@ load_dotenv()
 MEMGUI_MAX_STEP_MULTIPLIER = 2.5
 MEMGUI_DEFAULT_MAX_STEP_FALLBACK = 15
 MEMGUI_SUCCESS_THRESHOLD = 0.99
+DEVICE_RECOVERY_WAIT_SECONDS = 240
+DEVICE_RECOVERY_POLL_SECONDS = 10
 
 
 @lru_cache(maxsize=1)
@@ -199,6 +201,21 @@ def _write_pass_at_k_result(
         f.write(f"score: {best_score}\nreason: {reason}")
 
     return best_score, reason
+
+
+def _wait_for_env_recovery(
+    env: AndroidEnvClient,
+    timeout: int = DEVICE_RECOVERY_WAIT_SECONDS,
+    poll_interval: int = DEVICE_RECOVERY_POLL_SECONDS,
+) -> bool:
+    """Wait for an unhealthy environment to report healthy again."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if env.health():
+            env._initialized = False
+            return True
+        time.sleep(poll_interval)
+    return False
 
 
 def _execute_single_task(
@@ -401,9 +418,19 @@ def _process_task_on_env(
                             "Device is not healthy" in str(e)
                             and remaining_health_retries > 0
                         ):
-                            logger.warning("Device is not healthy, retrying...")
-                            time.sleep(20)
                             remaining_health_retries -= 1
+                            logger.warning(
+                                "Device is not healthy; waiting for environment recovery "
+                                "before retrying task '{}' (remaining retries: {})",
+                                task_name,
+                                remaining_health_retries,
+                            )
+                            if not _wait_for_env_recovery(env):
+                                logger.warning(
+                                    "Environment {} did not recover within {}s",
+                                    env.base_url,
+                                    DEVICE_RECOVERY_WAIT_SECONDS,
+                                )
                             traj_logger.reset_traj()
                             continue
                         logger.exception(
@@ -471,7 +498,21 @@ def _init_env(
         env = AndroidMCPEnvClient(env_url, device, step_wait_time=step_wait_time)
     else:
         env = AndroidEnvClient(env_url, device, step_wait_time=step_wait_time)
-    env.switch_suite_family(suite_family, seed=seed)
+
+    for attempt in range(3):
+        try:
+            env.switch_suite_family(suite_family, seed=seed)
+            return env
+        except Exception as e:
+            if "Device is not healthy" not in str(e) or attempt == 2:
+                raise
+            logger.warning(
+                "Environment {} is unhealthy during initialization; waiting for recovery "
+                "before retry {}/3",
+                env_url,
+                attempt + 2,
+            )
+            _wait_for_env_recovery(env)
     return env
 
 

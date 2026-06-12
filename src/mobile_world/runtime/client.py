@@ -45,8 +45,13 @@ class AndroidEnvClient:
             init_data = {
                 "device": self.device,
             }
-            response = requests.post(f"{self.base_url}/init", json=init_data)
-            response.raise_for_status()
+            response = requests.post(f"{self.base_url}/init", json=init_data, timeout=30)
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as e:
+                if response.status_code == 503:
+                    raise RuntimeError(f"Device is not healthy: {response.text}") from e
+                raise
             self._initialized = True
 
     def switch_suite_family(self, target_family: str, seed: int = None) -> dict:
@@ -74,7 +79,12 @@ class AndroidEnvClient:
                 params=params,
                 timeout=300,
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as e:
+                if response.status_code == 503:
+                    raise RuntimeError(f"Device is not healthy: {response.text}") from e
+                raise
             result = response.json()
             logger.info(f"Suite family switch result: {result}")
 
@@ -300,7 +310,7 @@ class AndroidEnvClient:
     def health(self) -> bool:
         """Checks the health of the environment."""
         try:
-            response = requests.get(f"{self.base_url}/health")
+            response = requests.get(f"{self.base_url}/health", timeout=10)
             response.raise_for_status()
             result = response.json()
             return result.get("ok", False)

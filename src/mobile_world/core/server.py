@@ -3,6 +3,8 @@
 
 import asyncio
 import base64
+import os
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -45,10 +47,11 @@ from mobile_world.runtime.utils.models import (
 
 SUITE_FAMILY: str = "memgui_bench"
 RUNNING_TASK = None
+DEFAULT_DEVICE_ID = os.getenv("ANDROID_DEVICE", "emulator-5554")
 AVD_MAPPING: dict[str, str] = {
     "mobile_world": "Pixel_8_API_34_x86_64",
     "android_world": "Pixel_8_API_34_x86_64",
-    "memgui_bench": "Pixel_8_API_34_x86_64",
+    "memgui_bench": os.getenv("MEMGUI_AVD_NAME", os.getenv("AVD_NAME", "MemGUI-AVD-250704")),
 }
 SNAPSHOT_MAPPING: dict[str, str | None] = {
     "mobile_world": "init_state",
@@ -97,18 +100,96 @@ CONTROLLERS: dict[str, AndroidController] = {}
 # Lock and tracking for emulator restart to prevent concurrent restarts
 _restart_lock = threading.Lock()
 _last_restart_attempt: float = 0.0  # Track last restart attempt per suite family
-RESTART_COOLDOWN_SECONDS = 300  # Minimum time between restart attempts
+_restart_in_progress = False
+RESTART_COOLDOWN_SECONDS = int(os.getenv("EMULATOR_RESTART_COOLDOWN_SECONDS", "60"))
+ADB_HEALTH_TIMEOUT_SECONDS = float(os.getenv("ADB_HEALTH_TIMEOUT_SECONDS", "3"))
+
+
+def _is_adb_device_ready(device_id: str = DEFAULT_DEVICE_ID) -> bool:
+    try:
+        state = subprocess.run(
+            ["adb", "-s", device_id, "get-state"],
+            capture_output=True,
+            text=True,
+            timeout=ADB_HEALTH_TIMEOUT_SECONDS,
+        )
+        if state.returncode != 0 or state.stdout.strip() != "device":
+            return False
+
+        boot = subprocess.run(
+            ["adb", "-s", device_id, "shell", "getprop", "sys.boot_completed"],
+            capture_output=True,
+            text=True,
+            timeout=ADB_HEALTH_TIMEOUT_SECONDS,
+        )
+        return boot.returncode == 0 and boot.stdout.strip() == "1"
+    except subprocess.TimeoutExpired:
+        logger.warning("[HEALTH] ADB probe timed out for {}", device_id)
+        return False
+    except Exception as e:
+        logger.warning("[HEALTH] ADB probe failed for {}: {}", device_id, e)
+        return False
+
+
+def _restart_emulator_worker(reason: str) -> None:
+    global _restart_in_progress
+    try:
+        avd_name = AVD_MAPPING[SUITE_FAMILY]
+        logger.warning(
+            "[HEALTH] Restarting emulator for suite_family={} avd={} reason={}",
+            SUITE_FAMILY,
+            avd_name,
+            reason,
+        )
+        CONTROLLERS.clear()
+        device_id = restart_emulator_with_avd(avd_name)
+        logger.info("[HEALTH] Emulator recovery finished: {}", device_id)
+    except Exception as e:
+        logger.error("[HEALTH] Emulator recovery failed: {}", e, exc_info=True)
+    finally:
+        with _restart_lock:
+            _restart_in_progress = False
+
+
+def _request_emulator_restart(reason: str, *, force: bool = False) -> str:
+    global _last_restart_attempt, _restart_in_progress
+
+    current_time = time.time()
+    with _restart_lock:
+        if _restart_in_progress:
+            return "in_progress"
+        if not force and current_time - _last_restart_attempt < RESTART_COOLDOWN_SECONDS:
+            return "cooldown"
+
+        _last_restart_attempt = current_time
+        _restart_in_progress = True
+        thread = threading.Thread(
+            target=_restart_emulator_worker,
+            args=(reason,),
+            name="emulator-recovery",
+            daemon=True,
+        )
+        thread.start()
+        return "started"
 
 
 def ensure_controller(req_device: str) -> AndroidController:
+    if not _is_adb_device_ready(req_device):
+        status = _request_emulator_restart(f"ensure_controller:{req_device}", force=True)
+        logger.error(
+            "[INIT] Device {} is not healthy; recovery status={}",
+            req_device,
+            status,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=f"Device is not healthy; emulator recovery {status}",
+        )
+
     if req_device not in CONTROLLERS:
         logger.info(f"[INIT] Device {req_device} not initialized, initializing...")
         ctr = AndroidController(device=req_device)
         CONTROLLERS[req_device] = ctr
-    if not CONTROLLERS[req_device].check_health(try_times=3):
-        logger.error(f"[INIT] Device {req_device} is not healthy, restarting...")
-        raise HTTPException(status_code=500, detail="Device is not healthy")
-        # restart_emulator_with_avd(AVD_MAPPING[SUITE_FAMILY])
     return CONTROLLERS[req_device]
 
 
@@ -134,59 +215,32 @@ def health():
     suite family. Implements locking to prevent concurrent restart attempts.
     """
     device_status = {}
-    all_healthy = True
-    unhealthy_devices = []
+    devices_to_check = set(CONTROLLERS.keys()) or {DEFAULT_DEVICE_ID}
 
-    for device_id, controller in CONTROLLERS.items():
-        is_healthy = controller.check_health(try_times=2)
+    for device_id in devices_to_check:
+        is_healthy = _is_adb_device_ready(device_id)
         device_status[device_id] = is_healthy
-        if not is_healthy:
-            all_healthy = False
-            unhealthy_devices.append(device_id)
+
+    all_healthy = all(device_status.values())
+    unhealthy_devices = [device_id for device_id, ok in device_status.items() if not ok]
+    recovery_status = "not_needed"
 
     # If unhealthy, attempt to restart emulator (with concurrency protection)
     if not all_healthy:
-        current_time = time.time()
-
-        # Check if we should attempt restart (cooldown check)
-        should_restart = False
-        global _last_restart_attempt
-        with _restart_lock:
-            if current_time - _last_restart_attempt >= RESTART_COOLDOWN_SECONDS:
-                _last_restart_attempt = current_time
-                should_restart = True
-
-        if should_restart:
-            try:
-                logger.warning(
-                    f"[HEALTH] Unhealthy devices detected: {unhealthy_devices}. "
-                    f"Restarting emulator for suite family: {SUITE_FAMILY}"
-                )
-                avd_name = AVD_MAPPING[SUITE_FAMILY]
-
-                device_id = restart_emulator_with_avd(avd_name)
-                logger.info(
-                    f"[HEALTH] Successfully restarted emulator with AVD {avd_name}, "
-                    f"new device_id: {device_id}"
-                )
-
-            except Exception as e:
-                logger.error(
-                    f"[HEALTH] Failed to restart emulator for suite family {SUITE_FAMILY}: {e}",
-                    exc_info=True,
-                )
-        else:
-            time_since_last = current_time - _last_restart_attempt
-            logger.debug(
-                f"[HEALTH] Restart skipped - cooldown period active "
-                f"(last attempt: {time_since_last:.1f}s ago, "
-                f"cooldown: {RESTART_COOLDOWN_SECONDS}s)"
-            )
+        recovery_status = _request_emulator_restart(
+            f"health:{','.join(unhealthy_devices)}"
+        )
+        logger.warning(
+            "[HEALTH] Unhealthy devices detected: {}; recovery_status={}",
+            unhealthy_devices,
+            recovery_status,
+        )
 
     return {
         "ok": all_healthy,
-        "devices": list(CONTROLLERS.keys()),
+        "devices": sorted(devices_to_check),
         "device_status": device_status,
+        "recovery_status": recovery_status,
     }
 
 
@@ -662,7 +716,16 @@ def switch_suite_family(
             detail=f"Invalid suite_family: {target_family}. Must be one of {list(AVD_MAPPING.keys())}",
         )
 
-    is_healthy = all(ctr.check_health() for ctr in CONTROLLERS.values())
+    is_healthy = _is_adb_device_ready(DEFAULT_DEVICE_ID)
+    if not is_healthy:
+        recovery_status = _request_emulator_restart(
+            f"suite_family_switch:{target_family}",
+            force=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=f"Device is not healthy; emulator recovery {recovery_status}",
+        )
 
     if SUITE_FAMILY == target_family and is_healthy:
         logger.info(f"[SUITE_FAMILY_SWITCH] Already on {target_family}, no switch needed")

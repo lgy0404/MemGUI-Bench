@@ -1,6 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+LOCK_FILE="${MEMGUI_EMULATOR_LOCK_FILE:-/tmp/start_memgui_emulator.lock}"
+exec 9>"${LOCK_FILE}"
+if ! flock -n 9; then
+  echo "Another MemGUI emulator startup is already running; waiting for it to finish"
+  flock 9
+fi
+
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/root/.android}"
 export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
 export AVD_NAME="${AVD_NAME:-MemGUI-AVD-250704}"
@@ -17,6 +24,30 @@ BOOT_SNAPSHOT="${MEMGUI_BOOT_SNAPSHOT:-}"
 INIT_SNAPSHOT="${MEMGUI_INIT_SNAPSHOT:-}"
 DEVICE_ID="emulator-${CONSOLE_PORT}"
 AVD_DIR="${ANDROID_SDK_ROOT}/avd/${AVD_NAME}.avd"
+
+cleanup_existing_emulator() {
+  echo "Cleaning existing emulator processes for ${EMULATOR_NAME} on ports ${CONSOLE_PORT},${ADB_PORT}"
+  adb devices | awk '/emulator/ {print $1}' | xargs -r -I {} adb -s "{}" emu kill || true
+  sleep 2
+
+  local pattern="@${EMULATOR_NAME}|-ports ${CONSOLE_PORT},${ADB_PORT}|-grpc ${GRPC_PORT}"
+  local pids
+  pids="$(pgrep -f "${pattern}" || true)"
+  if [ -n "${pids}" ]; then
+    echo "Stopping stale emulator/qemu process(es): ${pids}"
+    kill ${pids} 2>/dev/null || true
+    sleep 5
+    pids="$(pgrep -f "${pattern}" || true)"
+    if [ -n "${pids}" ]; then
+      echo "Force-killing stale emulator/qemu process(es): ${pids}"
+      kill -9 ${pids} 2>/dev/null || true
+      sleep 2
+    fi
+  fi
+
+  find "${AVD_DIR}" -name '*.lock' -type f -delete 2>/dev/null || true
+  rm -f /tmp/android-*/emu-crash-*.db.lock 2>/dev/null || true
+}
 
 disable_avd_modem() {
   local avd_file
@@ -64,7 +95,7 @@ activate_adb_keyboard() {
   fi
 }
 
-adb devices | awk '/emulator/ {print $1}' | xargs -r -I {} adb -s "{}" emu kill || true
+cleanup_existing_emulator
 adb kill-server >/dev/null 2>&1 || true
 adb start-server >/dev/null
 disable_avd_modem

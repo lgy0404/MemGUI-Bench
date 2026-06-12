@@ -60,7 +60,7 @@ RUN chmod 600 /root/.android/adbkey && \
     /app/docker/authorize_adb_grpc.py
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:6800/health || exit 1
+    CMD python3 -c "import json, sys, urllib.request; data=json.load(urllib.request.urlopen('http://localhost:6800/health', timeout=8)); sys.exit(0 if data.get('ok') else 1)"
 
 ENTRYPOINT ["/usr/local/bin/memgui-runtime-entrypoint.sh"]
 CMD ["tail", "-f", "/var/log/emulator.log", "/var/log/server.log", "/var/log/dockerd.err.log"]
