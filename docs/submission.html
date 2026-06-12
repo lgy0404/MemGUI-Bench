@@ -62,21 +62,21 @@
           <div class="step-card">
             <div class="step-number">1</div>
             <h4>Run Benchmark</h4>
-            <p>Execute your agent on MemGUI-Bench using <code>python run.py</code>. Results are saved automatically.</p>
+            <p>Launch MemGUI containers and run your agent with <code>mg eval</code>. Logs are written to local <code>traj_logs/</code>.</p>
           </div>
         </div>
         <div class="col-md-4">
           <div class="step-card">
             <div class="step-number">2</div>
             <h4>Fill Metadata</h4>
-            <p>Edit the generated <code>{agent}.json</code> file to fill in metadata fields (backbone, institution, etc.).</p>
+            <p>Create or update <code>docs/data/agents/{agent}.json</code> with metadata and MemGUI-Eval metrics.</p>
           </div>
         </div>
         <div class="col-md-4">
           <div class="step-card">
             <div class="step-number">3</div>
             <h4>Submit via GitHub</h4>
-            <p>Submit results JSON via GitHub PR, and upload trajectories to HuggingFace.</p>
+            <p>Submit the results JSON via GitHub PR. Optionally upload the zipped <code>traj_logs</code> run to HuggingFace.</p>
           </div>
         </div>
       </div>
@@ -91,8 +91,11 @@
         <p>Submit your leaderboard results via GitHub PR:</p>
         <ol>
               <li>Fork <a href="https://github.com/lgy0404/MemGUI-Bench" target="_blank">lgy0404/MemGUI-Bench</a></li>
-              <li>Copy your <code>{agent}.json</code> to <code>docs/data/agents/</code> directory</li>
+              <li>Run the official benchmark with <code>mg eval</code> and review the outputs under <code>traj_logs/{run-name}/_memgui_eval/</code></li>
+              <li>Add your results file as <code>docs/data/agents/{agent-id}.json</code></li>
+              <li>Add <code>{agent-id}</code> to <code>docs/data/index.json</code></li>
           <li>Create a Pull Request with title: <code>[Leaderboard] Add {Your Agent Name}</code></li>
+          <li>Include the command, log root, pass@K setting, and trajectory link in the PR description</li>
           <li>Our team will review and merge within 3-5 business days</li>
         </ol>
       </div>
@@ -101,7 +104,7 @@
         <h4><i class="bi bi-database"></i> Trajectories → HuggingFace Dataset</h4>
             <p>Upload your execution trajectories via Pull Request:</p>
             <ol>
-              <li>Compress your session folder: <code>zip -r your-agent-name.zip session-{id}</code></li>
+              <li>Compress your local run folder: <code>cd traj_logs &amp;&amp; zip -r your-agent-name.zip {run-name}</code></li>
               <li>Go to <a href="https://huggingface.co/datasets/lgy0404/memgui-bench-trajs" target="_blank">lgy0404/memgui-bench-trajs</a></li>
               <li>Click <strong>Community</strong> tab → <strong>New Pull Request</strong> → <strong>Upload files</strong></li>
               <li>Upload your zip file and submit the PR</li>
@@ -113,7 +116,19 @@
         <section class="content-section" id="results-format">
       <h2><i class="bi bi-file-earmark-code"></i> Results Format</h2>
       
-      <p>After running <code>python run.py</code>, a JSON file <code>{agent}.json</code> is generated in your session folder. Fill in the metadata fields before submission:</p>
+      <p>Run the benchmark with the current MobileWorld-style CLI. Official leaderboard submissions should use the full task set and pass@3 unless otherwise noted by the benchmark maintainers:</p>
+
+      <div class="code-block">
+<pre><code>sudo uv run mg eval \
+  --agent-type qwen3vl \
+  --model-name your-model-name \
+  --task ALL \
+  --pass-at-k 3 \
+  --log-file-root traj_logs/your-run-name \
+  --max-concurrency 2</code></pre>
+      </div>
+
+      <p>After the run, MemGUI-Eval artifacts are saved under <code>traj_logs/your-run-name/_memgui_eval/</code>. Create or update <code>docs/data/agents/{agent-id}.json</code> using the schema below. Fill metadata manually and copy benchmark metrics from the MemGUI-Eval results.</p>
       
       <div class="code-block">
 <pre><code>{
@@ -189,49 +204,41 @@
       </div>
 
       <h4>Session Output Structure</h4>
-      <p>When you run <code>python run.py</code>, the following structure is generated:</p>
+      <p>When you run <code>mg eval</code>, the following structure is generated under the local log root:</p>
       
       <div class="code-block">
-<pre><code>results/session-{session_id}/
-├── results.csv                    # Aggregated execution & evaluation metrics
-├── results.csv.lock               # File lock for concurrent access
-├── metrics_summary.json           # Computed benchmark metrics
-├── {agent_name}.json              # Leaderboard format (submit this!)
-├── config.yaml                    # Config snapshot for reproducibility
-│
-└── {task_id}/                     # Per-task results
-    └── {agent_name}/
-        └── attempt_{n}/
-            ├── log.json                    # Execution log with actions
-            ├── 0.png, 1.png, ...          # Raw screenshots per step
-            ├── stdout.txt, stderr.txt     # Process output logs
-            ├── error.json                 # Error info (if any)
-            │
-            ├── visualize_actions/         # Action visualization images
-            │   └── step_1.png, step_2.png, ...
-            │
-            ├── single_actions/            # Individual action screenshots
-            │   └── step_1.png, step_2.png, ...
-            │
-            ├── puzzle/                    # Evaluation puzzle images
-            │   ├── puzzle.png
-            │   ├── pre_eval_puzzle.png
-            │   └── supplemental_puzzle.png (if needed)
-            │
-            ├── evaluation_summary.json    # Detailed evaluation results
-            ├── final_decision.json        # Final evaluation decision
-            ├── irr_analysis.json          # IRR evaluation results
-            ├── badcase_analysis.json      # BadCase classification
-            └── step_*_description.json    # Step-by-step analysis</code></pre>
+<pre><code>traj_logs/your-run-name/
+├── metadata.json
+├── 001-FindProductAndFilter/
+│   ├── traj.json                  # MobileWorld trajectory
+│   ├── result.txt                 # Task-level score
+│   ├── thread_&lt;id&gt;.log
+│   ├── screenshots/
+│   └── marked_screenshots/
+├── _attempt_trajs/
+│   └── 001-FindProductAndFilter/
+│       └── attempt_2/
+│           ├── traj.json
+│           ├── result.txt
+│           └── screenshots/
+└── _memgui_eval/
+    ├── results.csv                # Aggregated MemGUI-Eval rows
+    └── 001-FindProductAndFilter/
+        └── qwen3vl/
+            └── attempt_1/
+                ├── log.json
+                ├── 0.png, 1.png, ...
+                ├── final_decision.json
+                └── evaluation_summary.json</code></pre>
       </div>
 
       <h4>Upload to HuggingFace</h4>
-          <p>Compress your session folder and submit via Pull Request to <a href="https://huggingface.co/datasets/lgy0404/memgui-bench-trajs" target="_blank">lgy0404/memgui-bench-trajs</a>:</p>
+          <p>Compress your local trajectory folder and submit via Pull Request to <a href="https://huggingface.co/datasets/lgy0404/memgui-bench-trajs" target="_blank">lgy0404/memgui-bench-trajs</a>:</p>
       
       <div class="code-block">
-<pre><code># Step 1: Compress session folder (filename should match your agent JSON)
-cd results
-zip -r your-agent-name.zip session-{session_id}
+<pre><code># Step 1: Compress the local MobileWorld trajectory folder
+cd traj_logs
+zip -r your-agent-name.zip your-run-name
 
 # Step 2: Upload via HuggingFace Web UI
 # 1. Go to https://huggingface.co/datasets/lgy0404/memgui-bench-trajs
@@ -259,7 +266,7 @@ zip -r your-agent-name.zip session-{session_id}
           <div class="process-icon"><i class="bi bi-1-circle-fill"></i></div>
           <div class="process-content">
             <h5>PR Submitted</h5>
-            <p>Create a Pull Request to add your JSON to <code>data/agents/</code>.</p>
+            <p>Create a Pull Request to add your JSON to <code>docs/data/agents/</code> and update <code>docs/data/index.json</code>.</p>
           </div>
         </div>
         <div class="process-step">
@@ -336,7 +343,7 @@ zip -r your-agent-name.zip session-{session_id}
                 <li><strong>metrics.shortTerm:</strong> IRR, MTPR, stepRatio, timePerStep, costPerStep</li>
                 <li><strong>metrics.longTerm:</strong> FRR, stepRatio, timePerStep, costPerStep</li>
               </ul>
-              <strong>You only need to fill in metadata fields</strong> (backbone, type, institution, etc.)
+              The current runner saves the raw evaluation table in <code>_memgui_eval/results.csv</code>, and the viewer can summarize it. For the leaderboard JSON, keep those computed metric values consistent with the run and fill in the metadata fields (backbone, type, institution, etc.).
             </div>
           </div>
         </div>
