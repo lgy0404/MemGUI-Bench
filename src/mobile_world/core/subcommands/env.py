@@ -46,6 +46,8 @@ from mobile_world.runtime.utils.docker import (
 # Create a Rich console instance for better terminal output
 console = Console()
 
+DEFAULT_PYTHON_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
 
 def _add_common_options(
     parser: argparse.ArgumentParser, *, image: bool = False, prefix: bool = False
@@ -262,7 +264,7 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
         help=(
             "Python package index used by uv while building the runtime image "
             "(also read from .env: UV_DEFAULT_INDEX, PYTHON_PACKAGE_INDEX_URL, "
-            "UV_INDEX_URL, or PIP_INDEX_URL)"
+            f"UV_INDEX_URL, or PIP_INDEX_URL; default: {DEFAULT_PYTHON_INDEX_URL})"
         ),
     )
 
@@ -1462,7 +1464,7 @@ def _resolve_python_index_url(cli_value: str | None) -> str | None:
         value = env_values.get(key)
         if value:
             return str(value)
-    return None
+    return DEFAULT_PYTHON_INDEX_URL
 
 
 def _offer_runtime_build(tag: str, base_image: str) -> None:

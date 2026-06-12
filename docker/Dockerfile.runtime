@@ -2,9 +2,9 @@
 ARG MEMGUI_BASE_IMAGE=crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/memgui/memgui-bench:26020301
 FROM ${MEMGUI_BASE_IMAGE}
 
-ARG UV_DEFAULT_INDEX=
+ARG UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
 ARG UV_INDEX_URL=
-ARG PIP_INDEX_URL=
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 
 ENV PYTHONUNBUFFERED=1 \
     ANDROID_SDK_ROOT=/root/.android \

@@ -261,7 +261,7 @@ def discover_backends(
 def restart_emulator_with_avd(avd_name: str) -> str:
     """Restart emulator with the specified AVD using existing script.
 
-    This function calls the existing /app/docker/start_emulator.sh script
+    This function calls the runtime image's emulator startup script.
 
     Args:
         avd_name: Name of the AVD to start
@@ -277,8 +277,21 @@ def restart_emulator_with_avd(avd_name: str) -> str:
         env = os.environ.copy()
         env["AVD_NAME"] = avd_name
 
-        # Call the existing emulator management script
-        script_path = "/app/docker/start_emulator.sh"
+        # MobileWorld images use start_emulator.sh; MemGUI runtime images use
+        # start_memgui_emulator.sh. Support both so server-side recovery works.
+        script_candidates = [
+            "/app/docker/start_emulator.sh",
+            "/app/docker/start_memgui_emulator.sh",
+        ]
+        script_path = next(
+            (candidate for candidate in script_candidates if os.path.exists(candidate)),
+            None,
+        )
+        if script_path is None:
+            raise RuntimeError(
+                "No emulator startup script found. Checked: "
+                + ", ".join(script_candidates)
+            )
         logger.info(f"Calling {script_path} with AVD_NAME={avd_name}")
 
         result = subprocess.run(
