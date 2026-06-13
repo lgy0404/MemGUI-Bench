@@ -236,6 +236,7 @@ uv run mg eval \
 | `--aw-host` | auto | Comma-separated backend URL(s); auto-discovered when omitted |
 | `--max-round` / `--max-step` | MemGUI task budget | Maximum agent steps per task; omitted uses `int(golden_steps * 2.5 + 1)`, `-1` means unlimited |
 | `--step-wait-time` | `3.0` | Seconds to wait after each action before the next screenshot for MemGUI-Bench |
+| `--timeout` | none | Optional per-task timeout in seconds; timed-out tasks are recorded as failed and the run continues |
 | `--max-concurrency` | number of containers | Maximum concurrent tasks |
 | `--shuffle-tasks` | false | Shuffle task order before scheduling |
 | `--dry-run` | false | Resolve tasks/backends without execution |

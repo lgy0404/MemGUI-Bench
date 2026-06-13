@@ -395,6 +395,7 @@ async def execute(args: argparse.Namespace) -> None:
         pass_at_k=args.pass_at_k,
         task_file=args.task_file,
         difficulty=args.difficulty,
+        task_timeout=args.timeout,
         scale_factor=getattr(args, "scale_factor", 1000),
     )
     if run_task_set and task_results:

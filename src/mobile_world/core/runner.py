@@ -203,6 +203,34 @@ def _write_pass_at_k_result(
     return best_score, reason
 
 
+def _write_failure_result(
+    log_file_root: str, task_name: str, reason: str
+) -> tuple[float, str]:
+    """Write a terminal failed result so aborted tasks do not look perpetually running."""
+    task_dir = os.path.join(log_file_root, task_name)
+    os.makedirs(task_dir, exist_ok=True)
+    with open(os.path.join(task_dir, SCORE_FILE_NAME), "w") as f:
+        f.write(f"score: 0.0\nreason: {reason}")
+    return 0.0, reason
+
+
+def _safe_tear_down_task(
+    env: AndroidEnvClient, agent: BaseAgent | None, task_name: str
+) -> None:
+    """Best-effort cleanup after an attempt fails before normal teardown."""
+    try:
+        res = env.tear_down_task(task_type=task_name)
+        logger.debug(f"tear_down_task response after failure: {res}")
+    except Exception as e:
+        logger.warning(f"Error tearing down failed task {task_name}: {e}")
+
+    if agent is not None:
+        try:
+            agent.done()
+        except Exception as e:
+            logger.warning(f"Error finalizing agent after failed task {task_name}: {e}")
+
+
 def _wait_for_env_recovery(
     env: AndroidEnvClient,
     timeout: int = DEVICE_RECOVERY_WAIT_SECONDS,
@@ -229,6 +257,7 @@ def _execute_single_task(
     log_file_root: str | None = None,
     agent_name: str | None = None,
     attempt_num: int = 1,
+    timeout_deadline: float | None = None,
 ) -> tuple[int, float, str]:
     """Execute a single task and return the number of steps and score.
 
@@ -254,6 +283,11 @@ def _execute_single_task(
     agent.initialize(task_goal)
 
     while True:
+        if timeout_deadline is not None and time.monotonic() >= timeout_deadline:
+            raise TimeoutError(
+                f"Task {task_name} exceeded its timeout before step {step + 1}"
+            )
+
         step += 1
 
         logger.debug(f"Screenshot captured in step {step}")
@@ -299,6 +333,11 @@ def _execute_single_task(
             break
 
     if suite_family == "memgui_bench":
+        if timeout_deadline is not None and time.monotonic() >= timeout_deadline:
+            raise TimeoutError(
+                f"Task {task_name} exceeded its timeout before MemGUI-Eval"
+            )
+
         from mobile_world.runtime.utils.memgui_eval import evaluate_memgui_trajectory
 
         score, reason = evaluate_memgui_trajectory(
@@ -333,6 +372,7 @@ def _process_task_on_env(
     enable_mcp: bool = False,
     suite_family: str = "memgui_bench",
     pass_at_k: int = 1,
+    task_timeout: int | None = None,
     **kwargs,
 ) -> dict:
     """Process a single task on a specific environment.
@@ -372,8 +412,18 @@ def _process_task_on_env(
         with logger.contextualize(thread_id=thread_id, container_name=container_name):
             attempt_results = []
             task_start_time = time.time()
+            timeout_deadline = (
+                time.monotonic() + task_timeout
+                if task_timeout is not None and task_timeout > 0
+                else None
+            )
             task_max_step = _resolve_task_max_step(suite_family, task_name, max_step)
             for attempt_num in range(1, pass_at_k + 1):
+                if timeout_deadline is not None and time.monotonic() >= timeout_deadline:
+                    raise TimeoutError(
+                        f"Task {task_name} exceeded its timeout before attempt {attempt_num}"
+                    )
+
                 logger.info(
                     "Processing task '{}' attempt {}/{} on environment {}",
                     task_name,
@@ -388,10 +438,12 @@ def _process_task_on_env(
                     try:
                         env.reset_tools(task_type=task_name)
                     except Exception as e:
-                        logger.exception(f"Error resetting tools for task {task_name}: {e}")
-                        return None
+                        logger.exception(
+                            f"Error resetting tools for task {task_name}: {e}"
+                        )
+                        raise
 
-                agent = create_agent(
+                agent: BaseAgent | None = create_agent(
                     agent_type, model_name, llm_base_url, api_key, env=env, **kwargs
                 )
                 traj_logger = _create_attempt_traj_logger(
@@ -411,6 +463,7 @@ def _process_task_on_env(
                             log_file_root=log_file_root,
                             agent_name=agent_type,
                             attempt_num=attempt_num,
+                            timeout_deadline=timeout_deadline,
                         )
                         break
                     except Exception as e:
@@ -436,7 +489,18 @@ def _process_task_on_env(
                         logger.exception(
                             f"Error executing task {task_name} attempt {attempt_num}"
                         )
-                        return None
+                        task_steps = 0
+                        task_score = 0.0
+                        task_reason = (
+                            f"Task execution failed at attempt {attempt_num}: "
+                            f"{type(e).__name__}: {e}"
+                        )
+                        try:
+                            traj_logger.log_score(score=task_score, reason=task_reason)
+                        except Exception:
+                            _write_failure_result(log_file_root, task_name, task_reason)
+                        _safe_tear_down_task(env, agent, task_name)
+                        break
 
                 attempt_results.append(
                     {
@@ -483,6 +547,20 @@ def _process_task_on_env(
                 "pass_at_k": pass_at_k,
                 "attempts": attempt_results,
             }
+    except Exception as e:
+        with logger.contextualize(thread_id=thread_id, container_name=container_name):
+            logger.exception("Task '{}' failed before completion", task_name)
+        task_reason = f"Task failed before completion: {type(e).__name__}: {e}"
+        task_score, task_reason = _write_failure_result(
+            log_file_root, task_name, task_reason
+        )
+        return {
+            "task_name": task_name,
+            "score": task_score,
+            "reason": task_reason,
+            "pass_at_k": pass_at_k,
+            "attempts": [],
+        }
     finally:
         # Remove the thread-specific handler
         logger.remove(thread_handler_id)
@@ -548,6 +626,7 @@ def run_agent_with_evaluation(
     pass_at_k: int = 1,
     task_file: str | None = None,
     difficulty: str | None = None,
+    task_timeout: int | None = None,
     **kwargs,
 ) -> list[dict]:
     """Run the agent and return the evaluation results.
@@ -709,6 +788,7 @@ def run_agent_with_evaluation(
                 enable_mcp=enable_mcp,
                 suite_family=suite_family,
                 pass_at_k=pass_at_k,
+                task_timeout=task_timeout,
                 **kwargs,
             )
             for task_name in task_list

@@ -37,6 +37,7 @@ _MEMGUI_DIFFICULTY_ALIASES = {
     "high": "3",
     "困难": "3",
 }
+STALE_TASK_SECONDS = 600
 
 
 def parse_result_file(result_file: str) -> tuple[float | None, str | None]:
@@ -948,8 +949,8 @@ def get_task_status(task_folder: str) -> tuple[str, float | None, str | None]:
 
     Status can be:
     - "Finished": has result.txt
-    - "Running": no result.txt and .log file updated within 10 minutes
-    - "Stale": no result.txt and .log file older than 10 minutes
+    - "Running": no result.txt and task activity updated within 10 minutes
+    - "Stale": no result.txt and task activity older than 10 minutes
     """
     result_file = os.path.join(task_folder, "result.txt")
     if os.path.exists(result_file):
@@ -960,24 +961,48 @@ def get_task_status(task_folder: str) -> tuple[str, float | None, str | None]:
             logger.warning(f"Error parsing result.txt in {task_folder}: {e}")
             return "Finished", None, None
 
-    # Check .log file modification time
-    log_files = [f for f in os.listdir(task_folder) if f.endswith(".log")]
-    if log_files:
-        latest_log_time = 0.0
-        for log_file in log_files:
-            log_path = os.path.join(task_folder, log_file)
-            try:
-                mtime = os.path.getmtime(log_path)
-                latest_log_time = max(latest_log_time, mtime)
-            except OSError:
-                pass
+    latest_activity_time = 0.0
+    activity_paths = [
+        task_folder,
+        os.path.join(task_folder, "traj.json"),
+        os.path.join(task_folder, "screenshots"),
+        os.path.join(task_folder, "marked_screenshots"),
+    ]
 
-        if latest_log_time > 0:
-            age_seconds = time.time() - latest_log_time
-            if age_seconds > 600:  # 10 minutes
-                return "Stale", None, None
+    for activity_path in activity_paths:
+        try:
+            if os.path.exists(activity_path):
+                latest_activity_time = max(
+                    latest_activity_time, os.path.getmtime(activity_path)
+                )
+        except OSError:
+            pass
 
-    return "Running", None, None
+    # Thread logs are stored under the log root, not in each task folder.
+    thread_logs_dir = os.path.join(os.path.dirname(task_folder), "_thread_logs")
+    thread_log_prefix = f"{os.path.basename(task_folder)}_"
+    if os.path.isdir(thread_logs_dir):
+        try:
+            for log_file in os.listdir(thread_logs_dir):
+                if (
+                    not log_file.startswith(thread_log_prefix)
+                    or not log_file.endswith(".log")
+                ):
+                    continue
+                log_path = os.path.join(thread_logs_dir, log_file)
+                latest_activity_time = max(
+                    latest_activity_time, os.path.getmtime(log_path)
+                )
+        except OSError:
+            pass
+
+    if latest_activity_time > 0:
+        age_seconds = time.time() - latest_activity_time
+        if age_seconds > STALE_TASK_SECONDS:
+            return "Stale", None, None
+        return "Running", None, None
+
+    return "Stale", None, None
 
 
 def get_task_info(log_root: str, task_name: str, attempt: int = 1) -> dict | None:

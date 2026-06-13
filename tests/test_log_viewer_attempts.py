@@ -2,13 +2,17 @@
 
 import csv
 import json
+import os
+import time
 
 from mobile_world.core.log_viewer.utils import (
+    STALE_TASK_SECONDS,
     calculate_task_stats,
     get_all_tags,
     get_task_attempts,
     get_task_filter_tags,
     get_task_info,
+    get_task_status,
 )
 
 
@@ -106,3 +110,22 @@ def test_memgui_filter_tags_include_difficulty_and_categories_last():
 
     task_tags = get_task_filter_tags("005-SearchSportsScores", "memgui_bench")
     assert "Difficulty: Easy" in task_tags
+
+
+def test_unfinished_task_without_result_becomes_stale(tmp_path):
+    task_name = "001-FindProductAndFilter"
+    task_dir = tmp_path / task_name
+    screenshots_dir = task_dir / "screenshots"
+    screenshots_dir.mkdir(parents=True)
+    (task_dir / "traj.json").write_text(json.dumps({"0": {"traj": [{"step": 1}]}}))
+    (screenshots_dir / f"{task_name}-0-1.png").write_bytes(b"fake")
+
+    old_time = time.time() - STALE_TASK_SECONDS - 5
+    for path in [task_dir, task_dir / "traj.json", screenshots_dir]:
+        os.utime(path, (old_time, old_time))
+
+    status, score, reason = get_task_status(str(task_dir))
+
+    assert status == "Stale"
+    assert score is None
+    assert reason is None
