@@ -166,13 +166,14 @@ def test_logs_results_prints_memgui_metrics(tmp_path, capsys, monkeypatch):
     assert "Logged" in output
     assert "Evaluated" in output
     assert "Evaluating" in output
+    assert "Awaiting Eval" in output
     assert "IRR%" in output
     assert "MTPR" in output
     assert "FRR%" in output
     assert "MCP SR%" not in output
 
 
-def test_memgui_status_counts_evaluating_attempt(tmp_path):
+def test_memgui_status_counts_awaiting_eval_attempt(tmp_path):
     task_name = "005-SearchSportsScores"
     (tmp_path / "metadata.json").write_text(
         json.dumps(
@@ -230,10 +231,84 @@ def test_memgui_status_counts_evaluating_attempt(tmp_path):
     status, score, reason = get_task_status(str(task_dir))
     stats = calculate_task_stats(str(tmp_path), suite_family="memgui_bench")
 
+    assert status == "Awaiting Eval"
+    assert score is None
+    assert "MemGUI-Eval awaiting evaluation" in reason
+    assert stats["awaiting_eval"] == 1
+    assert stats["evaluating"] == 0
+    assert stats["running"] == 0
+    assert stats["finished"] == 0
+    assert stats["memgui_eval"]["max_attempt"] == 1
+
+    memgui_eval_info = get_memgui_eval_info(str(tmp_path), task_name)
+    attempt_statuses = get_memgui_attempt_statuses(memgui_eval_info)
+    assert attempt_statuses[0]["label"] == "Awaiting Eval"
+
+
+def test_memgui_status_counts_active_evaluating_attempt(tmp_path):
+    task_name = "005-SearchSportsScores"
+    (tmp_path / "metadata.json").write_text(
+        json.dumps(
+            {
+                "suite_family": "memgui_bench",
+                "pass_at_k": 1,
+                "task_list": [task_name],
+                "task_count": 1,
+            }
+        )
+    )
+
+    task_dir = tmp_path / task_name
+    task_dir.mkdir()
+    (task_dir / "traj.json").write_text(
+        json.dumps(
+            {
+                "0": {
+                    "traj": [
+                        {
+                            "step": 1,
+                            "task_goal": f"Goal for {task_name}",
+                            "prediction": "done with execution",
+                            "action": {"action_type": "wait"},
+                        }
+                    ]
+                }
+            }
+        )
+    )
+
+    eval_root = tmp_path / "_memgui_eval"
+    eval_root.mkdir()
+    with (eval_root / "results.csv").open("w", newline="") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "task_identifier",
+                "requires_ui_memory",
+                "qwen3vl_attempt_1_evaluation",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "task_identifier": task_name,
+                "requires_ui_memory": "N",
+                "qwen3vl_attempt_1_evaluation": "",
+            }
+        )
+    workspace = eval_root / task_name / "qwen3vl" / "attempt_1"
+    workspace.mkdir(parents=True)
+    (workspace / "log.json").write_text("[]")
+    (workspace / "single_actions").mkdir()
+
+    status, score, reason = get_task_status(str(task_dir))
+    stats = calculate_task_stats(str(tmp_path), suite_family="memgui_bench")
+
     assert status == "Evaluating"
     assert score is None
     assert "MemGUI-Eval in progress" in reason
     assert stats["evaluating"] == 1
+    assert stats["awaiting_eval"] == 0
     assert stats["running"] == 0
     assert stats["finished"] == 0
     assert stats["memgui_eval"]["max_attempt"] == 1
@@ -243,7 +318,7 @@ def test_memgui_status_counts_evaluating_attempt(tmp_path):
     assert attempt_statuses[0]["label"] == "Evaluating"
 
 
-def test_memgui_eval_error_result_stays_evaluating_until_csv_decision(tmp_path):
+def test_memgui_eval_error_result_stays_awaiting_eval_until_csv_decision(tmp_path):
     task_name = "005-SearchSportsScores"
     (tmp_path / "metadata.json").write_text(
         json.dumps(
@@ -289,10 +364,11 @@ def test_memgui_eval_error_result_stays_evaluating_until_csv_decision(tmp_path):
     status, score, reason = get_task_status(str(task_dir))
     stats = calculate_task_stats(str(tmp_path), suite_family="memgui_bench")
 
-    assert status == "Evaluating"
+    assert status == "Awaiting Eval"
     assert score is None
-    assert "MemGUI-Eval in progress" in reason
-    assert stats["evaluating"] == 1
+    assert "MemGUI-Eval awaiting evaluation" in reason
+    assert stats["awaiting_eval"] == 1
+    assert stats["evaluating"] == 0
     assert stats["failed"] == 0
     assert stats["success"] == 0
 

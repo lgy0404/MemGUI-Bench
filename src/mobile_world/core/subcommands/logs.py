@@ -146,6 +146,7 @@ def print_results_table(log_roots: list[str]) -> None:
         memgui_table.add_column("Logged", justify="right")
         memgui_table.add_column("Evaluated", justify="right")
         memgui_table.add_column("Evaluating", justify="right")
+        memgui_table.add_column("Awaiting Eval", justify="right")
         memgui_table.add_column("Running", justify="right")
         memgui_table.add_column("Success", justify="right")
         memgui_table.add_column("Failed", justify="right")
@@ -171,6 +172,7 @@ def print_results_table(log_roots: list[str]) -> None:
                 str(stats["total"]),
                 str(memgui_eval.get("evaluated_count", stats["finished"])),
                 str(stats.get("evaluating", 0)),
+                str(stats.get("awaiting_eval", 0)),
                 str(stats["running"]),
                 str(stats["success"]),
                 str(stats["failed"]),

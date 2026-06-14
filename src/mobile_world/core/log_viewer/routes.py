@@ -64,6 +64,7 @@ def register_routes(rt, base_path: str = "/"):
         cls_map = {
             "Finished": "finished",
             "Evaluating": "running",
+            "Awaiting Eval": "neutral",
             "Running": "running",
             "Stale": "stale",
         }
@@ -214,6 +215,11 @@ def register_routes(rt, base_path: str = "/"):
                         cls="stat-card",
                     ),
                     Div(
+                        Div(stats.get("awaiting_eval", 0), cls="stat-value"),
+                        Div("Awaiting Eval", cls="stat-label"),
+                        cls="stat-card",
+                    ),
+                    Div(
                         Div(stats["running"], cls="stat-value warning"),
                         Div("Running", cls="stat-label"),
                         cls="stat-card",
@@ -289,6 +295,11 @@ def register_routes(rt, base_path: str = "/"):
                 Div(
                     Div(stats.get("evaluating", 0), cls="stat-value warning"),
                     Div("Evaluating", cls="stat-label"),
+                    cls="stat-card",
+                ),
+                Div(
+                    Div(stats.get("awaiting_eval", 0), cls="stat-value"),
+                    Div("Awaiting Eval", cls="stat-label"),
                     cls="stat-card",
                 ),
                 Div(
@@ -544,6 +555,8 @@ def register_routes(rt, base_path: str = "/"):
                 if status_filter == "running" and status != "Running":
                     continue
                 if status_filter == "evaluating" and status != "Evaluating":
+                    continue
+                if status_filter == "awaiting_eval" and status != "Awaiting Eval":
                     continue
                 if status_filter == "stale" and status != "Stale":
                     continue
@@ -1921,6 +1934,7 @@ def register_routes(rt, base_path: str = "/"):
                 "finished": 0,
                 "running": 0,
                 "evaluating": 0,
+                "awaiting_eval": 0,
                 "stale": 0,
                 "success": 0,
                 "failed": 0,
@@ -2039,6 +2053,11 @@ def register_routes(rt, base_path: str = "/"):
                                         "Evaluating",
                                         value="evaluating",
                                         selected=status_filter == "evaluating",
+                                    ),
+                                    Option(
+                                        "Awaiting Eval",
+                                        value="awaiting_eval",
+                                        selected=status_filter == "awaiting_eval",
                                     ),
                                     Option(
                                         "Stale",

@@ -315,6 +315,10 @@ def _build_index_stats_html(stats: dict, suite_family: str) -> str:
             <div class="stat-label">Evaluating</div>
         </div>
         <div class="stat-card">
+            <div class="stat-value">{stats.get("awaiting_eval", 0)}</div>
+            <div class="stat-label">Awaiting Eval</div>
+        </div>
+        <div class="stat-card">
             <div class="stat-value warning">{stats["running"]}</div>
             <div class="stat-label">Running</div>
         </div>
@@ -365,6 +369,10 @@ def _build_index_stats_html(stats: dict, suite_family: str) -> str:
         <div class="stat-card">
             <div class="stat-value warning">{stats.get("evaluating", 0)}</div>
             <div class="stat-label">Evaluating</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{stats.get("awaiting_eval", 0)}</div>
+            <div class="stat-label">Awaiting Eval</div>
         </div>
         <div class="stat-card">
             <div class="stat-value danger">{stats["stale"]}</div>
@@ -425,6 +433,7 @@ def _generate_index_page(
         status_class = {
             "Finished": "finished",
             "Evaluating": "running",
+            "Awaiting Eval": "neutral",
             "Running": "running",
             "Stale": "stale",
         }.get(task["status"], "neutral")
@@ -633,6 +642,7 @@ def _generate_task_page(
     status_class = {
         "Finished": "finished",
         "Evaluating": "running",
+        "Awaiting Eval": "neutral",
         "Running": "running",
         "Stale": "stale",
     }.get(task_info["status"], "neutral")
