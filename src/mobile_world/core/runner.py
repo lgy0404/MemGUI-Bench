@@ -1,6 +1,8 @@
+import csv
 import json
 import os
 import random
+import re
 import threading
 import time
 from datetime import datetime
@@ -40,6 +42,8 @@ load_dotenv()
 MEMGUI_MAX_STEP_MULTIPLIER = 2.5
 MEMGUI_DEFAULT_MAX_STEP_FALLBACK = 15
 MEMGUI_SUCCESS_THRESHOLD = 0.99
+MEMGUI_EVAL_ERROR_MARKER = "MemGUI-Eval error"
+MEMGUI_ATTEMPT_EVAL_RE = re.compile(r"^.+_attempt_(?P<attempt>\d+)_evaluation$")
 DEVICE_RECOVERY_WAIT_SECONDS = 240
 DEVICE_RECOVERY_POLL_SECONDS = 10
 
@@ -119,18 +123,56 @@ def _parse_score_file(result_file: str) -> tuple[float | None, str]:
     return score, reason
 
 
+def _has_memgui_csv_evaluation(
+    log_file_root: str,
+    task_name: str,
+    max_attempt: int | None = None,
+) -> bool:
+    csv_path = os.path.join(log_file_root, "_memgui_eval", "results.csv")
+    if not os.path.exists(csv_path):
+        return False
+
+    try:
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames or []
+            row = next(
+                (item for item in reader if item.get("task_identifier") == task_name),
+                None,
+            )
+    except (OSError, csv.Error) as e:
+        logger.warning(f"Error reading MemGUI results.csv in {log_file_root}: {e}")
+        return False
+
+    if not row:
+        return False
+
+    for field in fieldnames:
+        match = MEMGUI_ATTEMPT_EVAL_RE.match(field)
+        if not match:
+            continue
+        if max_attempt is not None and int(match.group("attempt")) > max_attempt:
+            continue
+        value = str(row.get(field, "")).strip().upper()
+        if value in {"S", "F", "E"}:
+            return True
+    return False
+
+
 def _scan_finished_memgui_pass_at_k_tasks(
     log_file_root: str,
     task_list: list[str],
     pass_at_k: int,
 ) -> tuple[list[str], list[float]]:
-    """Find pass@k tasks that should be skipped in the current log root.
+    """Find MemGUI tasks that should be skipped in the current log root.
 
     This mirrors the original MemGUI-Bench behavior more closely than the
     plain MobileWorld `result.txt` scan: a previous success can stop all later
     attempts, and a completed aggregate pass@K run should be skipped. A lone
     failed pass@1 result should not block a later pass@3 run from adding more
-    attempts.
+    attempts. A MemGUI-Eval infrastructure error without a CSV decision should
+    not be treated as finished, because reruns should retry evaluation after the
+    environment is fixed.
     """
     finished_tasks: list[str] = []
     finished_scores: list[float] = []
@@ -147,6 +189,15 @@ def _scan_finished_memgui_pass_at_k_tasks(
             continue
 
         if score is None:
+            continue
+        if (
+            MEMGUI_EVAL_ERROR_MARKER in reason
+            and not _has_memgui_csv_evaluation(log_file_root, task_name, pass_at_k)
+        ):
+            continue
+        if pass_at_k <= 1:
+            finished_tasks.append(task_name)
+            finished_scores.append(score)
             continue
         if _is_successful_score(score) or pass_marker in reason:
             finished_tasks.append(task_name)
@@ -730,13 +781,12 @@ def run_agent_with_evaluation(
         },
     )
 
-    if pass_at_k > 1 and suite_family == "memgui_bench":
+    if suite_family == "memgui_bench":
         finished_task_list, finished_scores = _scan_finished_memgui_pass_at_k_tasks(
             log_file_root, task_list, pass_at_k
         )
         logger.info(
-            "pass@{} enabled; skipping existing successful or completed pass@{} tasks",
-            pass_at_k,
+            "MemGUI resume enabled; skipping existing successful or completed pass@{} tasks",
             pass_at_k,
         )
     else:
