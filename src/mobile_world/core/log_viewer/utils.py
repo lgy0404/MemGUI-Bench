@@ -446,18 +446,6 @@ def _has_memgui_attempt_evaluation(
     return False
 
 
-def _memgui_attempt_result_path(log_root: str, task_name: str, attempt_num: int) -> str:
-    if attempt_num <= 1:
-        return os.path.join(log_root, task_name, "result.txt")
-    return os.path.join(
-        log_root,
-        "_attempt_trajs",
-        task_name,
-        f"attempt_{attempt_num}",
-        "result.txt",
-    )
-
-
 def get_memgui_evaluating_attempts(
     log_root: str,
     task_name: str | None = None,
@@ -467,9 +455,9 @@ def get_memgui_evaluating_attempts(
     """Return MemGUI-Eval workspaces that are active/pending a CSV decision.
 
     A trajectory counts as evaluating once its compatibility workspace exists
-    under `_memgui_eval/`, but before that attempt has either an evaluation row
-    in `results.csv` or a per-attempt `result.txt` from a handled evaluator
-    failure.
+    under `_memgui_eval/`, but before that attempt has an evaluation row in
+    `results.csv`. A MobileWorld-facing `result.txt` may already exist with a
+    `MemGUI-Eval error` placeholder, so the CSV decision is the source of truth.
     """
     eval_root = os.path.join(log_root, "_memgui_eval")
     if not os.path.isdir(eval_root):
@@ -527,12 +515,6 @@ def get_memgui_evaluating_attempts(
                 task_row = row_by_task.get(eval_task_name)
                 if _has_memgui_attempt_evaluation(
                     task_row, fieldnames, workspace_attempt_num, agent_name
-                ):
-                    continue
-                if os.path.exists(
-                    _memgui_attempt_result_path(
-                        log_root, eval_task_name, workspace_attempt_num
-                    )
                 ):
                     continue
 

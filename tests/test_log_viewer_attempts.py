@@ -243,6 +243,60 @@ def test_memgui_status_counts_evaluating_attempt(tmp_path):
     assert attempt_statuses[0]["label"] == "Evaluating"
 
 
+def test_memgui_eval_error_result_stays_evaluating_until_csv_decision(tmp_path):
+    task_name = "005-SearchSportsScores"
+    (tmp_path / "metadata.json").write_text(
+        json.dumps(
+            {
+                "suite_family": "memgui_bench",
+                "pass_at_k": 1,
+                "task_list": [task_name],
+                "task_count": 1,
+            }
+        )
+    )
+
+    task_dir = tmp_path / task_name
+    _write_traj(task_dir, task_name, "placeholder")
+    (task_dir / "result.txt").write_text(
+        "score: 0.0\n"
+        "reason: MemGUI-Eval error: libGL.so.1: cannot open shared object file\n"
+    )
+
+    eval_root = tmp_path / "_memgui_eval"
+    eval_root.mkdir()
+    with (eval_root / "results.csv").open("w", newline="") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "task_identifier",
+                "requires_ui_memory",
+                "qwen3vl_attempt_1_evaluation",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "task_identifier": task_name,
+                "requires_ui_memory": "N",
+                "qwen3vl_attempt_1_evaluation": "",
+            }
+        )
+    workspace = eval_root / task_name / "qwen3vl" / "attempt_1"
+    workspace.mkdir(parents=True)
+    (workspace / "log.json").write_text("[]")
+
+    status, score, reason = get_task_status(str(task_dir))
+    stats = calculate_task_stats(str(tmp_path), suite_family="memgui_bench")
+
+    assert status == "Evaluating"
+    assert score is None
+    assert "MemGUI-Eval in progress" in reason
+    assert stats["evaluating"] == 1
+    assert stats["failed"] == 0
+    assert stats["success"] == 0
+
+
 def test_memgui_filter_tags_include_difficulty_and_categories_last():
     tags = get_all_tags("memgui_bench")
 
