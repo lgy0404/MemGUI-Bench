@@ -46,7 +46,7 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
     # logs results - Print results table
     results_parser = logs_subparsers.add_parser(
         "results",
-        help="Print results table for log directories",
+        help="Print result summary tables for log directories",
     )
     results_parser.add_argument(
         "log_dirs",
@@ -84,20 +84,28 @@ def print_results_table(log_roots: list[str]) -> None:
 
     console = Console()
 
-    table = Table(title="Log Results Summary", show_header=True, header_style="bold cyan")
-    table.add_column("Log Root", style="dim", no_wrap=True)
-    table.add_column("Suite", style="magenta")
-    table.add_column("Total", justify="right")
-    table.add_column("Finished", justify="right")
-    table.add_column("Success", justify="right")
-    table.add_column("SR%", justify="right")
-    table.add_column("Std SR%", justify="right")
-    table.add_column("MCP SR%", justify="right")
-    table.add_column("UI SR%", justify="right")
-    table.add_column("UIQ", justify="right")
-    table.add_column("Avg Steps", justify="right")
-    table.add_column("Avg Queries", justify="right")
-    table.add_column("Avg MCP", justify="right")
+    memgui_rows = []
+    default_rows = []
+    memgui_table = Table(
+        title="MemGUI Results Summary",
+        show_header=True,
+        header_style="bold cyan",
+    )
+
+    default_table = Table(title="Log Results Summary", show_header=True, header_style="bold cyan")
+    default_table.add_column("Log Root", style="dim", no_wrap=True)
+    default_table.add_column("Suite", style="magenta")
+    default_table.add_column("Total", justify="right")
+    default_table.add_column("Finished", justify="right")
+    default_table.add_column("Success", justify="right")
+    default_table.add_column("SR%", justify="right")
+    default_table.add_column("Std SR%", justify="right")
+    default_table.add_column("MCP SR%", justify="right")
+    default_table.add_column("UI SR%", justify="right")
+    default_table.add_column("UIQ", justify="right")
+    default_table.add_column("Avg Steps", justify="right")
+    default_table.add_column("Avg Queries", justify="right")
+    default_table.add_column("Avg MCP", justify="right")
 
     for log_root in log_roots:
         if not os.path.exists(log_root):
@@ -110,8 +118,75 @@ def print_results_table(log_roots: list[str]) -> None:
         # Use basename for display, but show full path if duplicates exist
         display_name = os.path.basename(log_root.rstrip("/"))
 
-        table.add_row(
-            display_name,
+        if suite_family == "memgui_bench":
+            memgui_eval = stats.get("memgui_eval") or {}
+            k = int(memgui_eval.get("max_attempt") or 1)
+            memgui_rows.append(
+                {
+                    "display_name": display_name,
+                    "stats": stats,
+                    "memgui_eval": memgui_eval,
+                    "max_attempt": k,
+                }
+            )
+            continue
+
+        default_rows.append(
+            {
+                "display_name": display_name,
+                "suite_family": suite_family,
+                "stats": stats,
+            }
+        )
+
+    if memgui_rows:
+        max_memgui_attempt = max(row["max_attempt"] for row in memgui_rows)
+        memgui_table.add_column("Log Root", style="dim", no_wrap=True)
+        memgui_table.add_column("Task Set", justify="right")
+        memgui_table.add_column("Logged", justify="right")
+        memgui_table.add_column("Evaluated", justify="right")
+        memgui_table.add_column("Evaluating", justify="right")
+        memgui_table.add_column("Running", justify="right")
+        memgui_table.add_column("Success", justify="right")
+        memgui_table.add_column("Failed", justify="right")
+        memgui_table.add_column("Avg Steps", justify="right")
+        for attempt in range(1, max_memgui_attempt + 1):
+            memgui_table.add_column(f"P@{attempt}%", justify="right")
+        memgui_table.add_column("IRR%", justify="right")
+        memgui_table.add_column("MTPR", justify="right")
+        memgui_table.add_column("FRR%", justify="right")
+
+        for row in memgui_rows:
+            stats = row["stats"]
+            memgui_eval = row["memgui_eval"]
+            pass_rates = memgui_eval.get("pass_rates") or {}
+            max_attempt = row["max_attempt"]
+            pass_cells = [
+                f"{pass_rates.get(attempt, 0.0):.1f}" if attempt <= max_attempt else "-"
+                for attempt in range(1, max_memgui_attempt + 1)
+            ]
+            memgui_table.add_row(
+                row["display_name"],
+                str(stats["total_task_no"]),
+                str(stats["total"]),
+                str(memgui_eval.get("evaluated_count", stats["finished"])),
+                str(stats.get("evaluating", 0)),
+                str(stats["running"]),
+                str(stats["success"]),
+                str(stats["failed"]),
+                f"{stats['avg_steps']:.1f}",
+                *pass_cells,
+                f"{memgui_eval.get('avg_irr', 0.0):.1f}",
+                f"{memgui_eval.get('mtpr', 0.0):.3f}",
+                f"{memgui_eval.get('frr', 0.0):.1f}",
+            )
+        console.print(memgui_table)
+
+    for row in default_rows:
+        stats = row["stats"]
+        suite_family = row["suite_family"]
+        default_table.add_row(
+            row["display_name"],
             suite_family.replace("_", " ").title(),
             str(stats["total"]),
             str(stats["finished"]),
@@ -125,8 +200,8 @@ def print_results_table(log_roots: list[str]) -> None:
             f"{stats['avg_queries']:.2f}",
             f"{stats['avg_mcp_calls']:.2f}",
         )
-
-    console.print(table)
+    if default_rows:
+        console.print(default_table)
 
 
 async def execute(args: argparse.Namespace) -> None:

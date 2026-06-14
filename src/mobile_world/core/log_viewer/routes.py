@@ -63,6 +63,7 @@ def register_routes(rt, base_path: str = "/"):
     def _status_badge(status):
         cls_map = {
             "Finished": "finished",
+            "Evaluating": "running",
             "Running": "running",
             "Stale": "stale",
         }
@@ -208,6 +209,11 @@ def register_routes(rt, base_path: str = "/"):
                         cls="stat-card",
                     ),
                     Div(
+                        Div(stats.get("evaluating", 0), cls="stat-value warning"),
+                        Div("Evaluating", cls="stat-label"),
+                        cls="stat-card",
+                    ),
+                    Div(
                         Div(stats["running"], cls="stat-value warning"),
                         Div("Running", cls="stat-label"),
                         cls="stat-card",
@@ -278,6 +284,11 @@ def register_routes(rt, base_path: str = "/"):
                 Div(
                     Div(stats["running"], cls="stat-value warning"),
                     Div("Running", cls="stat-label"),
+                    cls="stat-card",
+                ),
+                Div(
+                    Div(stats.get("evaluating", 0), cls="stat-value warning"),
+                    Div("Evaluating", cls="stat-label"),
                     cls="stat-card",
                 ),
                 Div(
@@ -531,6 +542,8 @@ def register_routes(rt, base_path: str = "/"):
             # Filtering
             if status_filter != "all":
                 if status_filter == "running" and status != "Running":
+                    continue
+                if status_filter == "evaluating" and status != "Evaluating":
                     continue
                 if status_filter == "stale" and status != "Stale":
                     continue
@@ -1907,6 +1920,7 @@ def register_routes(rt, base_path: str = "/"):
                 "total": 0,
                 "finished": 0,
                 "running": 0,
+                "evaluating": 0,
                 "stale": 0,
                 "success": 0,
                 "failed": 0,
@@ -2020,6 +2034,11 @@ def register_routes(rt, base_path: str = "/"):
                                         "Running",
                                         value="running",
                                         selected=status_filter == "running",
+                                    ),
+                                    Option(
+                                        "Evaluating",
+                                        value="evaluating",
+                                        selected=status_filter == "evaluating",
                                     ),
                                     Option(
                                         "Stale",

@@ -401,9 +401,14 @@ def get_memgui_eval_info(log_root: str, task_name: str) -> dict:
             }
         )
 
+    evaluating_attempts = [
+        item["attempt"]
+        for item in get_memgui_evaluating_attempts(log_root, task_name=task_name)
+    ]
     latest_attempt = attempts[-1] if attempts else {}
     max_attempt = max(
         max((attempt["attempt"] for attempt in attempts), default=0),
+        max(evaluating_attempts, default=0),
         _metadata_pass_at_k(log_root),
     )
     pass_at = {
@@ -415,9 +420,132 @@ def get_memgui_eval_info(log_root: str, task_name: str) -> dict:
         "attempts": attempts,
         "latest": latest_attempt,
         "successful_attempts": successful_attempts,
+        "evaluating_attempts": evaluating_attempts,
         "pass_at": pass_at,
         "max_attempt": max_attempt,
     }
+
+
+def _has_memgui_attempt_evaluation(
+    row: dict | None,
+    fieldnames: list[str],
+    attempt_num: int,
+    agent_name: str | None = None,
+) -> bool:
+    if not row:
+        return False
+    agent_prefix = f"{agent_name}_" if agent_name else None
+    for field in fieldnames:
+        match = _ATTEMPT_EVAL_RE.match(field)
+        if not match or int(match.group("attempt")) != attempt_num:
+            continue
+        if agent_prefix and not field.startswith(agent_prefix):
+            continue
+        if _is_evaluated_value(row.get(field)):
+            return True
+    return False
+
+
+def _memgui_attempt_result_path(log_root: str, task_name: str, attempt_num: int) -> str:
+    if attempt_num <= 1:
+        return os.path.join(log_root, task_name, "result.txt")
+    return os.path.join(
+        log_root,
+        "_attempt_trajs",
+        task_name,
+        f"attempt_{attempt_num}",
+        "result.txt",
+    )
+
+
+def get_memgui_evaluating_attempts(
+    log_root: str,
+    task_name: str | None = None,
+    attempt_num: int | None = None,
+    task_set: list[str] | None = None,
+) -> list[dict]:
+    """Return MemGUI-Eval workspaces that are active/pending a CSV decision.
+
+    A trajectory counts as evaluating once its compatibility workspace exists
+    under `_memgui_eval/`, but before that attempt has either an evaluation row
+    in `results.csv` or a per-attempt `result.txt` from a handled evaluator
+    failure.
+    """
+    eval_root = os.path.join(log_root, "_memgui_eval")
+    if not os.path.isdir(eval_root):
+        return []
+
+    rows, fieldnames = _read_memgui_results_rows(log_root)
+    row_by_task = {row.get("task_identifier", ""): row for row in rows}
+    task_set_lookup = set(task_set or [])
+    evaluating = []
+
+    try:
+        task_names = sorted(os.listdir(eval_root))
+    except OSError:
+        return []
+
+    for eval_task_name in task_names:
+        if task_name and eval_task_name != task_name:
+            continue
+        if task_set_lookup and eval_task_name not in task_set_lookup:
+            continue
+        task_eval_dir = os.path.join(eval_root, eval_task_name)
+        if not os.path.isdir(task_eval_dir):
+            continue
+
+        try:
+            agent_names = sorted(os.listdir(task_eval_dir))
+        except OSError:
+            continue
+
+        for agent_name in agent_names:
+            agent_dir = os.path.join(task_eval_dir, agent_name)
+            if not os.path.isdir(agent_dir):
+                continue
+            try:
+                attempt_dirs = sorted(os.listdir(agent_dir))
+            except OSError:
+                continue
+
+            for attempt_dir_name in attempt_dirs:
+                if not attempt_dir_name.startswith("attempt_"):
+                    continue
+                try:
+                    workspace_attempt_num = int(attempt_dir_name.split("_", 1)[1])
+                except (IndexError, ValueError):
+                    continue
+                if attempt_num is not None and workspace_attempt_num != attempt_num:
+                    continue
+
+                workspace_dir = os.path.join(agent_dir, attempt_dir_name)
+                if not os.path.isdir(workspace_dir):
+                    continue
+                if not os.path.exists(os.path.join(workspace_dir, "log.json")):
+                    continue
+
+                task_row = row_by_task.get(eval_task_name)
+                if _has_memgui_attempt_evaluation(
+                    task_row, fieldnames, workspace_attempt_num, agent_name
+                ):
+                    continue
+                if os.path.exists(
+                    _memgui_attempt_result_path(
+                        log_root, eval_task_name, workspace_attempt_num
+                    )
+                ):
+                    continue
+
+                evaluating.append(
+                    {
+                        "task_name": eval_task_name,
+                        "agent_name": agent_name,
+                        "attempt": workspace_attempt_num,
+                        "workspace": workspace_dir,
+                    }
+                )
+
+    return evaluating
 
 
 def get_memgui_attempt_statuses(memgui_eval_info: dict) -> list[dict]:
@@ -442,6 +570,11 @@ def get_memgui_attempt_statuses(memgui_eval_info: dict) -> list[dict]:
         if attempt is not None
     ]
     first_success = min(successful_attempts) if successful_attempts else None
+    evaluating_attempts = {
+        attempt
+        for attempt in (_to_int(item) for item in memgui_eval_info.get("evaluating_attempts") or [])
+        if attempt is not None
+    }
 
     statuses = []
     for attempt_num in range(1, max_attempt + 1):
@@ -461,6 +594,9 @@ def get_memgui_attempt_statuses(memgui_eval_info: dict) -> list[dict]:
             else:
                 label = evaluation or "Done"
                 state = "info"
+        elif attempt_num in evaluating_attempts:
+            label = "Evaluating"
+            state = "info"
         elif first_success is not None and attempt_num > first_success:
             label = "Skipped"
             state = "info"
@@ -481,8 +617,10 @@ def calculate_memgui_eval_metrics(
     """Calculate MemGUI leaderboard-style metrics from `_memgui_eval/results.csv`."""
     rows, fieldnames = _read_memgui_results_rows(log_root)
     attempt_prefixes = _get_attempt_prefixes(fieldnames)
+    evaluating_attempts = get_memgui_evaluating_attempts(log_root, task_set=task_set)
     max_attempt = max(
         max((attempt for attempt, _ in attempt_prefixes), default=1),
+        max((item["attempt"] for item in evaluating_attempts), default=1),
         _metadata_pass_at_k(log_root),
     )
     task_set_lookup = set(task_set or [])
@@ -944,14 +1082,41 @@ def get_latest_trajectory_action(task_folder: str) -> dict | None:
     return None
 
 
+def _task_folder_eval_lookup(task_folder: str) -> tuple[str, str, int | None]:
+    normalized = os.path.normpath(task_folder)
+    basename = os.path.basename(normalized)
+    parent = os.path.dirname(normalized)
+    grandparent = os.path.dirname(parent)
+
+    if basename.startswith("attempt_") and os.path.basename(grandparent) == "_attempt_trajs":
+        try:
+            attempt_num = int(basename.split("_", 1)[1])
+        except (IndexError, ValueError):
+            attempt_num = None
+        return os.path.dirname(grandparent), os.path.basename(parent), attempt_num
+
+    return parent, basename, None
+
+
 def get_task_status(task_folder: str) -> tuple[str, float | None, str | None]:
     """Get task status: (status, score, reason).
 
     Status can be:
     - "Finished": has result.txt
+    - "Evaluating": trajectory is in MemGUI-Eval and has no evaluator result yet
     - "Running": no result.txt and task activity updated within 10 minutes
     - "Stale": no result.txt and task activity older than 10 minutes
     """
+    log_root, task_name, attempt_num = _task_folder_eval_lookup(task_folder)
+    evaluating_attempts = get_memgui_evaluating_attempts(
+        log_root, task_name=task_name, attempt_num=attempt_num
+    )
+    if evaluating_attempts:
+        attempts = ", ".join(
+            f"attempt {item['attempt']}" for item in evaluating_attempts
+        )
+        return "Evaluating", None, f"MemGUI-Eval in progress for {attempts}"
+
     result_file = os.path.join(task_folder, "result.txt")
     if os.path.exists(result_file):
         try:
@@ -1064,11 +1229,17 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
     metric_task_set = _get_metric_task_set(log_root, suite_family, task_folders)
     total_task_no = len(metric_task_set)
     if not task_folders:
+        memgui_eval_metrics = (
+            calculate_memgui_eval_metrics(log_root, total_task_no, metric_task_set)
+            if suite_family == "memgui_bench"
+            else {}
+        )
         return {
             "total_task_no": total_task_no,
             "total": 0,
             "finished": 0,
             "running": 0,
+            "evaluating": 0,
             "stale": 0,
             "success": 0,
             "failed": 0,
@@ -1095,11 +1266,12 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
             "memgui_cross_app_finished": 0,
             "memgui_cross_app_success_rate": 0.0,
             "memgui_avg_step_ratio": 0.0,
-            "memgui_eval": {},
+            "memgui_eval": memgui_eval_metrics,
         }
 
     finished_count = 0
     running_count = 0
+    evaluating_count = 0
     stale_count = 0
     success_count = 0
     failed_count = 0
@@ -1212,6 +1384,8 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
                     if is_success:
                         memgui_cross_app_success += 1
 
+        elif status == "Evaluating":
+            evaluating_count += 1
         elif status == "Stale":
             stale_count += 1
         else:
@@ -1219,7 +1393,7 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
 
         total_steps += step_count
 
-    total = finished_count + running_count + stale_count
+    total = finished_count + running_count + evaluating_count + stale_count
     total_task_no = total_task_no if total_task_no > 0 else total
     success_rate = (success_count / total_task_no * 100) if total_task_no > 0 else 0.0
     finished_success_rate = (
@@ -1274,6 +1448,7 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
         "total": total,
         "finished": finished_count,
         "running": running_count,
+        "evaluating": evaluating_count,
         "stale": stale_count,
         "success": success_count,
         "failed": failed_count,

@@ -311,6 +311,10 @@ def _build_index_stats_html(stats: dict, suite_family: str) -> str:
             <div class="stat-label">Evaluated</div>
         </div>
         <div class="stat-card">
+            <div class="stat-value warning">{stats.get("evaluating", 0)}</div>
+            <div class="stat-label">Evaluating</div>
+        </div>
+        <div class="stat-card">
             <div class="stat-value warning">{stats["running"]}</div>
             <div class="stat-label">Running</div>
         </div>
@@ -357,6 +361,10 @@ def _build_index_stats_html(stats: dict, suite_family: str) -> str:
         <div class="stat-card">
             <div class="stat-value warning">{stats["running"]}</div>
             <div class="stat-label">Running</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value warning">{stats.get("evaluating", 0)}</div>
+            <div class="stat-label">Evaluating</div>
         </div>
         <div class="stat-card">
             <div class="stat-value danger">{stats["stale"]}</div>
@@ -416,6 +424,7 @@ def _generate_index_page(
     for task in task_data_list:
         status_class = {
             "Finished": "finished",
+            "Evaluating": "running",
             "Running": "running",
             "Stale": "stale",
         }.get(task["status"], "neutral")
@@ -623,6 +632,7 @@ def _generate_task_page(
     score_display = f"{task_info['score']:.2f}" if task_info["score"] is not None else "N/A"
     status_class = {
         "Finished": "finished",
+        "Evaluating": "running",
         "Running": "running",
         "Stale": "stale",
     }.get(task_info["status"], "neutral")

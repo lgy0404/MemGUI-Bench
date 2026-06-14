@@ -216,7 +216,7 @@ uv run mg eval \
 | `uv run mg info agent` | List configured agents |
 | `uv run mg info app` | Show app-level task counts |
 | `uv run mg logs view` | Launch the interactive trajectory viewer |
-| `uv run mg logs results` | Print a compact session summary table |
+| `uv run mg logs results` | Print the same compact MemGUI progress and summary metrics as `logs view` (`Evaluating`, `P@k`, `IRR`, `MTPR`, `FRR`) |
 | `uv run mg logs export` | Export a static HTML trajectory site |
 
 ### `mg eval` Arguments
