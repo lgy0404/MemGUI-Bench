@@ -6,6 +6,7 @@
   "date": "2025-08-01",
   "paperLink": "http://arxiv.org/abs/2508.15144",
   "codeLink": "https://github.com/X-PLUG/MobileAgent",
+  "trajFile": "trajs/gui-owl-7b.json.gz",
   "hasUITree": false,
   "hasLongTermMemory": false,
   "crossApp": {
@@ -36,4 +37,3 @@
     }
   }
 }
-

@@ -1,0 +1,632 @@
+#!/usr/bin/env python3
+"""Bundle MemGUI-Bench trajectories for the static docs viewer.
+
+The input can be either:
+- a MobileWorld-style run directory with task folders containing traj.json
+- a legacy MemGUI-Eval directory with task/agent/attempt_N/log.json
+- a .zip archive containing either layout
+
+Legacy inputs are converted to a MobileWorld-style directory first, then bundled
+into docs/trajs/<agent>.json.gz plus a local MP4 with screenshot frames.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import gzip
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+
+SCREENSHOT_RESIZE_WIDTH = 270
+VIDEO_FPS = 2
+VIDEO_CRF = 30
+
+
+@dataclass
+class LegacyAttempt:
+    task_name: str
+    agent_name: str
+    attempt_num: int
+    attempt_dir: Path
+
+
+def _load_json(path: Path) -> Any:
+    with path.open(encoding="utf-8") as file:
+        return json.load(file)
+
+
+def _safe_json_load(path: Path) -> Any:
+    try:
+        return _load_json(path)
+    except Exception:
+        return None
+
+
+def _ensure_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _hardlink_or_copy(src: Path, dst: Path) -> None:
+    _ensure_dir(dst.parent)
+    if dst.exists() or dst.is_symlink():
+        dst.unlink()
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copyfile(src, dst)
+
+
+def _legacy_action_to_mobileworld(action: Any) -> dict[str, Any]:
+    if isinstance(action, dict):
+        return action
+    if not isinstance(action, list) or not action:
+        return {"action_type": "unknown"}
+
+    action_type = action[0]
+    detail = action[1] if len(action) > 1 and isinstance(action[1], dict) else {}
+    detail_type = detail.get("detail_type")
+    value = detail.get("detail")
+
+    if detail_type == "coordinates" and isinstance(value, list):
+        if action_type in {"click", "double_tap", "long_press"} and len(value) >= 2:
+            return {"action_type": action_type, "x": value[0], "y": value[1]}
+        if action_type in {"drag", "swipe"} and len(value) >= 4:
+            return {
+                "action_type": "drag",
+                "start_x": value[0],
+                "start_y": value[1],
+                "end_x": value[2],
+                "end_y": value[3],
+            }
+    if detail_type == "text":
+        mapped = "input_text" if action_type in {"type", "input_text"} else action_type
+        return {"action_type": mapped, "text": value or ""}
+    if detail_type == "direction":
+        mapped = "scroll" if action_type in {"scroll", "swipe"} else action_type
+        return {"action_type": mapped, "direction": value or ""}
+    if detail_type == "app":
+        return {"action_type": "open_app", "app_name": value or ""}
+    if detail_type == "status" and isinstance(value, str):
+        return {"action_type": value}
+    return {"action_type": str(action_type), "raw_action": action}
+
+
+def _score_from_value(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        return 1.0 if float(value) > 0 else 0.0
+
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "1.0", "true", "yes", "y", "pass", "passed", "success", "succeeded", "correct"}:
+        return 1.0
+    if normalized in {"0", "0.0", "false", "no", "n", "fail", "failed", "failure", "incorrect"}:
+        return 0.0
+    return None
+
+
+def _load_legacy_task_catalog(source_dir: Path) -> dict[str, dict[str, str]]:
+    catalog: dict[str, dict[str, str]] = {}
+    for csv_path in source_dir.rglob("results.csv"):
+        try:
+            with csv_path.open(newline="", encoding="utf-8") as file:
+                for row in csv.DictReader(file):
+                    task_id = (row.get("task_identifier") or row.get("task_id") or row.get("task") or "").strip()
+                    if task_id:
+                        catalog.setdefault(task_id, row)
+        except Exception as error:
+            print(f"Warning: failed to read legacy task catalog {csv_path}: {error}", file=sys.stderr)
+    return catalog
+
+
+def _task_goal_from_catalog(task_name: str, task_catalog: dict[str, dict[str, str]] | None) -> str:
+    catalog_row = (task_catalog or {}).get(task_name) or {}
+    for key in ("task_description", "description", "goal", "task_goal", "instruction"):
+        if catalog_row.get(key):
+            return str(catalog_row[key])
+    return ""
+
+
+def _infer_legacy_attempt(path: Path, root: Path) -> LegacyAttempt | None:
+    if path.name != "log.json":
+        return None
+    attempt_dir = path.parent
+    match = re.match(r"attempt_(\d+)$", attempt_dir.name)
+    attempt_num = int(match.group(1)) if match else 1
+
+    parts = attempt_dir.parts
+    task_name = attempt_dir.parent.parent.name if len(attempt_dir.parents) >= 2 else root.name
+    agent_name = attempt_dir.parent.name if attempt_dir.parent != root else "agent"
+
+    if "_memgui_eval" in parts:
+        idx = parts.index("_memgui_eval")
+        if idx + 2 < len(parts):
+            task_name = parts[idx + 1]
+            agent_name = parts[idx + 2]
+    elif match and attempt_dir.parent != root:
+        agent_name = attempt_dir.parent.name
+        if attempt_dir.parent.parent != root.parent:
+            task_name = attempt_dir.parent.parent.name
+
+    summary = _safe_json_load(attempt_dir / "evaluation_summary.json")
+    if isinstance(summary, dict) and summary.get("task_identifier"):
+        task_name = str(summary["task_identifier"])
+
+    return LegacyAttempt(task_name, agent_name, attempt_num, attempt_dir)
+
+
+def discover_legacy_attempts(root: Path, attempt_num: int = 1) -> list[LegacyAttempt]:
+    attempts: list[LegacyAttempt] = []
+    for log_path in root.rglob("log.json"):
+        if any(part in {"single_actions", "visualize_actions", "puzzle"} for part in log_path.parts):
+            continue
+        attempt = _infer_legacy_attempt(log_path, root)
+        if attempt and attempt.attempt_num == attempt_num:
+            attempts.append(attempt)
+
+    seen: set[str] = set()
+    unique: list[LegacyAttempt] = []
+    for attempt in sorted(attempts, key=lambda item: (item.task_name, str(item.attempt_dir))):
+        if attempt.task_name in seen:
+            continue
+        seen.add(attempt.task_name)
+        unique.append(attempt)
+    return unique
+
+
+def has_mobileworld_tasks(root: Path) -> bool:
+    for traj_path in root.rglob("traj.json"):
+        if "_memgui_eval" in traj_path.parts:
+            continue
+        data = _safe_json_load(traj_path)
+        entry = data.get("0", data) if isinstance(data, dict) else None
+        if isinstance(entry, dict) and isinstance(entry.get("traj"), list):
+            return True
+    return False
+
+
+def _legacy_result_text(
+    attempt_dir: Path,
+    task_name: str,
+    task_catalog: dict[str, dict[str, str]] | None = None,
+) -> str | None:
+    final = _safe_json_load(attempt_dir / "final_decision.json")
+    summary = _safe_json_load(attempt_dir / "evaluation_summary.json")
+    catalog_row = (task_catalog or {}).get(task_name) or {}
+
+    decision = None
+    reason = None
+    if isinstance(final, dict):
+        decision = final.get("decision", final.get("final_result"))
+        reason = final.get("reason")
+    if isinstance(summary, dict):
+        decision = summary.get("final_result", decision)
+        reason = summary.get("final_reason", reason)
+    for key in (
+        "score",
+        "success",
+        "passed",
+        "pass",
+        "final_result",
+        "result",
+        "decision",
+        "is_success",
+    ):
+        if decision is None and catalog_row.get(key) not in {None, ""}:
+            decision = catalog_row.get(key)
+    reason = reason or catalog_row.get("reason") or catalog_row.get("final_reason")
+
+    if decision is None and reason is None:
+        return None
+    score = _score_from_value(decision)
+    if score is None:
+        score = 0.0
+    return f"score: {score:.1f}\nreason: {reason or 'No reason provided.'}"
+
+
+def _legacy_task_goal(
+    attempt_dir: Path,
+    task_name: str,
+    task_catalog: dict[str, dict[str, str]] | None = None,
+) -> str:
+    summary = _safe_json_load(attempt_dir / "evaluation_summary.json")
+    if isinstance(summary, dict) and summary.get("task_description"):
+        return str(summary["task_description"])
+    return _task_goal_from_catalog(task_name, task_catalog)
+
+
+def _legacy_screenshot_candidates(attempt_dir: Path, task_name: str, step_num: int) -> list[Path]:
+    return [
+        attempt_dir / f"{step_num - 1}.png",
+        attempt_dir / f"{step_num}.png",
+        attempt_dir / "screenshots" / f"{task_name}-0-{step_num}.png",
+        attempt_dir / "screenshots" / f"{task_name}-0-{step_num - 1}.png",
+        attempt_dir / "screenshots" / f"{step_num}.png",
+        attempt_dir / "screenshots" / f"{step_num - 1}.png",
+        attempt_dir / "single_actions" / f"step_{step_num}.png",
+        attempt_dir / "visualize_actions" / f"step_{step_num}.png",
+    ]
+
+
+def convert_legacy_run(source_dir: Path, output_dir: Path, attempt_num: int = 1) -> Path:
+    attempts = discover_legacy_attempts(source_dir, attempt_num=attempt_num)
+    if not attempts:
+        raise ValueError(f"No legacy attempt_{attempt_num} log.json files found under {source_dir}")
+    task_catalog = _load_legacy_task_catalog(source_dir)
+
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    _ensure_dir(output_dir)
+
+    metadata = {
+        "suite_family": "memgui_bench",
+        "source_format": "legacy_memgui_eval",
+        "source_dir": str(source_dir),
+        "attempt_num": attempt_num,
+    }
+    (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+
+    for attempt in attempts:
+        log_data = _load_json(attempt.attempt_dir / "log.json")
+        if not isinstance(log_data, list):
+            continue
+        task_goal = _legacy_task_goal(attempt.attempt_dir, attempt.task_name, task_catalog)
+        task_dir = output_dir / attempt.task_name
+        screenshots_dir = task_dir / "screenshots"
+        _ensure_dir(screenshots_dir)
+
+        steps = []
+        for index, legacy_step in enumerate(log_data):
+            if not isinstance(legacy_step, dict):
+                continue
+            step_num = int(legacy_step.get("step") or index + 1)
+            action = legacy_step.get("mobileworld_action") or _legacy_action_to_mobileworld(
+                legacy_step.get("action")
+            )
+            steps.append(
+                {
+                    "task_goal": task_goal,
+                    "step": step_num,
+                    "prediction": legacy_step.get("prediction") or legacy_step.get("thought") or "",
+                    "action": action,
+                    "ask_user_response": legacy_step.get("ask_user_response"),
+                    "tool_call": legacy_step.get("tool_call"),
+                }
+            )
+
+            src_image = next(
+                (
+                    candidate
+                    for candidate in _legacy_screenshot_candidates(
+                        attempt.attempt_dir,
+                        attempt.task_name,
+                        step_num,
+                    )
+                    if candidate.exists()
+                ),
+                None,
+            )
+            if src_image:
+                dst_image = screenshots_dir / f"{attempt.task_name}-0-{step_num}.png"
+                _hardlink_or_copy(src_image, dst_image)
+
+        traj = {"0": {"traj": steps, "token_usage": {}}}
+        (task_dir / "traj.json").write_text(
+            json.dumps(traj, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        result_text = _legacy_result_text(attempt.attempt_dir, attempt.task_name, task_catalog)
+        if result_text:
+            (task_dir / "result.txt").write_text(result_text, encoding="utf-8")
+
+    print(f"Converted {len(attempts)} legacy tasks -> {output_dir}")
+    return output_dir
+
+
+def _zip_marker_payload(input_path: Path) -> dict[str, Any]:
+    stat = input_path.stat()
+    return {
+        "source": str(input_path.resolve()),
+        "source_size": stat.st_size,
+        "source_mtime_ns": stat.st_mtime_ns,
+    }
+
+
+def _zip_marker_matches(marker: Path, input_path: Path) -> bool:
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    return data == _zip_marker_payload(input_path)
+
+
+def _safe_extract_zip(archive: zipfile.ZipFile, target: Path) -> None:
+    target_root = target.resolve()
+    for member in archive.infolist():
+        destination = (target / member.filename).resolve()
+        try:
+            destination.relative_to(target_root)
+        except ValueError as error:
+            raise ValueError(f"Refusing unsafe zip member path: {member.filename}") from error
+    archive.extractall(target)
+
+
+def extract_zip_if_needed(input_path: Path, extract_root: Path | None = None) -> Path:
+    if input_path.suffix.lower() != ".zip":
+        return input_path
+    target = (extract_root or input_path.parent) / input_path.stem
+    marker = target / ".extract_complete"
+    if marker.exists() and any(target.iterdir()) and _zip_marker_matches(marker, input_path):
+        print(f"Using existing extraction: {target}")
+        return target
+    if target.exists():
+        shutil.rmtree(target)
+    _ensure_dir(target)
+    print(f"Extracting {input_path} -> {target}")
+    with zipfile.ZipFile(input_path) as archive:
+        _safe_extract_zip(archive, target)
+    marker.write_text(
+        json.dumps(_zip_marker_payload(input_path), indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return target
+
+
+def _find_screenshot(screenshots_dir: Path, task_name: str, step: int) -> Path | None:
+    candidates = [
+        screenshots_dir / f"{task_name}-0-{step}.png",
+        screenshots_dir / f"{task_name}-0-{step - 1}.png",
+        screenshots_dir / f"{step}.png",
+        screenshots_dir / f"{step - 1}.png",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _iter_task_dirs(traj_dir: Path) -> list[Path]:
+    task_dirs = []
+    for traj_path in traj_dir.rglob("traj.json"):
+        if ".hfd" in traj_path.parts:
+            continue
+        task_dirs.append(traj_path.parent)
+    return sorted(task_dirs)
+
+
+def bundle_mobileworld_run(
+    traj_dir: Path,
+    output: Path,
+    *,
+    with_screenshots: bool = False,
+    video_base_url: str = "",
+) -> None:
+    if with_screenshots:
+        from PIL import Image  # noqa: F401
+
+    combined: dict[str, Any] = {}
+    frames: list[Path] = []
+    original_size: tuple[int, int] | None = None
+    display_size: tuple[int, int] | None = None
+    legacy_attempts = {
+        attempt.task_name: attempt
+        for attempt in discover_legacy_attempts(traj_dir, attempt_num=1)
+    }
+    task_catalog = _load_legacy_task_catalog(traj_dir) if legacy_attempts else {}
+
+    for task_path in _iter_task_dirs(traj_dir):
+        if "_backup_" in task_path.name:
+            continue
+        traj_file = task_path / "traj.json"
+        traj_data = _load_json(traj_file)
+        entry = traj_data.get("0", traj_data) if isinstance(traj_data, dict) else {}
+        steps = entry.get("traj", []) if isinstance(entry, dict) else []
+        if not isinstance(steps, list):
+            continue
+        fallback_goal = _task_goal_from_catalog(task_path.name, task_catalog)
+        if fallback_goal:
+            for step in steps:
+                if isinstance(step, dict) and not step.get("task_goal"):
+                    step["task_goal"] = fallback_goal
+
+        screenshots_dir = task_path / "screenshots"
+        if with_screenshots and screenshots_dir.is_dir():
+            for step in steps:
+                if not isinstance(step, dict):
+                    continue
+                step_num = int(step.get("step") or 0)
+                img_path = _find_screenshot(screenshots_dir, task_path.name, step_num)
+                if img_path:
+                    if original_size is None:
+                        from PIL import Image
+
+                        with Image.open(img_path) as img:
+                            original_size = img.size
+                            target_w = SCREENSHOT_RESIZE_WIDTH + (SCREENSHOT_RESIZE_WIDTH % 2)
+                            target_h = int(target_w * original_size[1] / original_size[0])
+                            if target_h % 2:
+                                target_h += 1
+                            display_size = (target_w, target_h)
+                    step["frame_index"] = len(frames)
+                    frames.append(img_path)
+
+        result = None
+        result_file = task_path / "result.txt"
+        if result_file.exists():
+            result = result_file.read_text(encoding="utf-8").strip()
+        elif task_path.name in legacy_attempts:
+            result = _legacy_result_text(
+                legacy_attempts[task_path.name].attempt_dir,
+                task_path.name,
+                task_catalog,
+            )
+
+        combined[task_path.name] = {
+            "traj": steps,
+            "token_usage": entry.get("token_usage", {}) if isinstance(entry, dict) else {},
+            "result": result,
+        }
+
+    video_ref = None
+    video_revision = None
+    if with_screenshots and frames:
+        video_output = output.with_suffix("").with_suffix(".mp4")
+        _encode_video(frames, video_output, original_size)
+        video_stat = video_output.stat()
+        video_revision = f"{video_stat.st_size}-{video_stat.st_mtime_ns}"
+        video_ref = (
+            video_base_url.rstrip("/") + "/" + video_output.name
+            if video_base_url
+            else video_output.name
+        )
+
+    if with_screenshots and original_size and frames and display_size:
+        combined["_meta"] = {
+            "video_file": video_ref,
+            "fps": VIDEO_FPS,
+            "total_frames": len(frames),
+            "video_revision": video_revision,
+            "original_width": original_size[0],
+            "original_height": original_size[1],
+            "display_width": display_size[0],
+            "display_height": display_size[1],
+        }
+
+    _ensure_dir(output.parent)
+    json_bytes = json.dumps(combined, ensure_ascii=False).encode("utf-8")
+    with gzip.open(output, "wb") as file:
+        file.write(json_bytes)
+
+    print(
+        f"{len(combined) - (1 if '_meta' in combined else 0)} tasks | "
+        f"{len(json_bytes) / 1024:.0f} KB raw | {output.stat().st_size / 1024:.0f} KB gzipped -> {output}"
+    )
+    if video_ref:
+        video_path = output.with_suffix("").with_suffix(".mp4")
+        print(f"{len(frames)} frames -> {video_path.stat().st_size / 1024 / 1024:.1f} MB video -> {video_path}")
+    _update_traj_manifest(output)
+
+
+def _update_traj_manifest(output: Path) -> None:
+    if output.parent.name != "trajs":
+        return
+    manifest = output.parent / "index.json"
+    files = [f"trajs/{path.name}" for path in sorted(output.parent.glob("*.json.gz"))]
+    manifest.write_text(
+        json.dumps({"files": files}, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _encode_video(frame_paths: list[Path], video_output: Path, original_size: tuple[int, int] | None) -> None:
+    from PIL import Image
+
+    tmpdir = Path(tempfile.mkdtemp(prefix="memgui_frames_"))
+    try:
+        target_w = SCREENSHOT_RESIZE_WIDTH
+        if target_w % 2:
+            target_w += 1
+        target_h = None
+        if original_size:
+            target_h = int(target_w * original_size[1] / original_size[0])
+            if target_h % 2:
+                target_h += 1
+
+        for index, src_path in enumerate(frame_paths):
+            with Image.open(src_path) as img:
+                if target_h is None:
+                    target_h = int(target_w * img.height / img.width)
+                    if target_h % 2:
+                        target_h += 1
+                resized = img.convert("RGB").resize((target_w, target_h), Image.LANCZOS)
+                resized.save(tmpdir / f"{index:06d}.png", optimize=True)
+
+        _ensure_dir(video_output.parent)
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-framerate",
+            str(VIDEO_FPS),
+            "-i",
+            str(tmpdir / "%06d.png"),
+            "-c:v",
+            "libx264",
+            "-g",
+            "1",
+            "-keyint_min",
+            "1",
+            "-sc_threshold",
+            "0",
+            "-bf",
+            "0",
+            "-pix_fmt",
+            "yuv420p",
+            "-crf",
+            str(VIDEO_CRF),
+            "-movflags",
+            "+faststart",
+            str(video_output),
+        ]
+        subprocess.run(cmd, check=True, capture_output=True)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def prepare_input(input_path: Path, converted_root: Path, attempt_num: int) -> Path:
+    source_dir = extract_zip_if_needed(input_path)
+    if has_mobileworld_tasks(source_dir):
+        return source_dir
+    attempts = discover_legacy_attempts(source_dir, attempt_num=attempt_num)
+    if not attempts:
+        raise ValueError(f"No MobileWorld traj.json or legacy log.json files found under {source_dir}")
+    output_dir = converted_root / source_dir.name
+    return convert_legacy_run(source_dir, output_dir, attempt_num=attempt_num)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input", help="Trajectory run directory or .zip archive")
+    parser.add_argument("-o", "--output", help="Output .json.gz path")
+    parser.add_argument("--with-screenshots", action="store_true", help="Bundle screenshots into an MP4")
+    parser.add_argument("--attempt-num", type=int, default=1, help="Legacy attempt number to bundle")
+    parser.add_argument(
+        "--converted-root",
+        default="traj_logs/_converted_mobileworld",
+        help="Where legacy inputs are converted before bundling",
+    )
+    parser.add_argument(
+        "--video-base-url",
+        default="",
+        help="Optional absolute base URL for MP4 files. By default MP4 paths are local relative filenames.",
+    )
+    args = parser.parse_args()
+
+    input_path = Path(args.input)
+    if not input_path.exists():
+        sys.exit(f"Error: {input_path} does not exist")
+
+    output = Path(args.output) if args.output else Path("docs/trajs") / f"{input_path.stem}.json.gz"
+    prepared_dir = prepare_input(input_path, Path(args.converted_root), args.attempt_num)
+    bundle_mobileworld_run(
+        prepared_dir,
+        output,
+        with_screenshots=args.with_screenshots,
+        video_base_url=args.video_base_url,
+    )
+
+
+if __name__ == "__main__":
+    main()

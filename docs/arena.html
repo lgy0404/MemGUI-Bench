@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MemGUI-Bench Arena</title>
+  <link rel="icon" href="assets/favicon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/leaderboard.css">
+  <link rel="stylesheet" href="css/traj.css">
+  <link rel="stylesheet" href="css/arena.css">
+</head>
+
+<body class="arena-page">
+  <header class="home-topbar">
+    <div class="container-fluid home-shell">
+      <a class="home-brand" href="index.html" aria-label="MemGUI-Bench homepage">
+        <img src="assets/favicon.png" alt="MemGUI-Bench" class="brand-icon">
+        <span>MemGUI-Bench</span>
+      </a>
+      <div class="home-links" aria-label="Primary resources">
+        <a href="index.html" class="home-link">
+          <i class="bi bi-table"></i> Leaderboard
+        </a>
+        <a href="https://huggingface.co/datasets/lgy0404/memgui-bench-trajs" target="_blank" class="home-link">
+          <i class="bi bi-database"></i> Trajectories
+        </a>
+        <a href="submission.html" class="home-link">
+          <i class="bi bi-upload"></i> Submit
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="arena-shell">
+    <section class="arena-hero">
+      <div>
+        <p class="home-kicker">Trajectory comparison</p>
+        <h1>MemGUI-Bench Arena</h1>
+        <p>
+          Compare two trajectory-enabled agents task by task, inspect pass/fail
+          buckets, and open their step traces side by side.
+        </p>
+      </div>
+    </section>
+
+    <section class="arena-card arena-select-card" aria-label="Arena model selectors">
+      <div class="arena-picker">
+        <label for="arenaModelA">Agent A</label>
+        <select class="form-select" id="arenaModelA"></select>
+      </div>
+      <div class="arena-vs">VS</div>
+      <div class="arena-picker">
+        <label for="arenaModelB">Agent B</label>
+        <select class="form-select" id="arenaModelB"></select>
+      </div>
+    </section>
+
+    <div class="arena-card arena-loading" id="arenaLoading">
+      <i class="bi bi-arrow-repeat"></i>
+      <span>Loading trajectory bundles...</span>
+    </div>
+
+    <section class="arena-card arena-matrix-card">
+      <h2 class="arena-section-title">Outcome Matrix</h2>
+      <div class="arena-matrix" id="arenaMatrix"></div>
+    </section>
+
+    <section class="arena-task-layout">
+      <article class="arena-card arena-task-card">
+        <div class="arena-task-header">
+          <h2>Tasks</h2>
+          <span class="arena-task-count" id="arenaTaskCount"></span>
+        </div>
+        <div class="arena-task-list" id="arenaTaskList"></div>
+      </article>
+
+      <article class="arena-card arena-comparison" id="arenaComparison">
+        <div class="arena-empty">Select two agents to compare their trajectories.</div>
+      </article>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/traj-viewer.js?v=20260615-keyframes"></script>
+  <script src="js/arena.js"></script>
+</body>
+
+</html>

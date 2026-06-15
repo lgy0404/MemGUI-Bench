@@ -6,6 +6,7 @@
   "date": "2025-04-01",
   "paperLink": "https://arxiv.org/abs/2504.00906",
   "codeLink": "https://github.com/simular-ai/Agent-S",
+  "trajFile": "trajs/agent-s2.json.gz",
   "hasUITree": false,
   "hasLongTermMemory": true,
   "crossApp": {
@@ -36,4 +37,3 @@
     }
   }
 }
-

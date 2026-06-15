@@ -6,6 +6,7 @@
   "date": "2025-01-20",
   "paperLink": "https://arxiv.org/abs/2501.11733",
   "codeLink": "https://github.com/X-PLUG/MobileAgent",
+  "trajFile": "trajs/mobile-agent-e.json.gz",
   "hasUITree": false,
   "hasLongTermMemory": true,
   "crossApp": {
@@ -36,4 +37,3 @@
     }
   }
 }
-

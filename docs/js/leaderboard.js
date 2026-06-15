@@ -82,6 +82,7 @@ const resultViewMeta = {
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   await loadAgentList();  // Load agent list from index.json first
+  await loadTrajManifest();
   await loadData();
   setupEventListeners();
   updateSortOptions('main');
@@ -411,6 +412,29 @@ function formatScore(value, metricKey, bestValues, isSorted = false) {
   return `<td class="${className}">${formatted}</td>`;
 }
 
+function escapeAttr(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function buildAgentActionLinks(agent) {
+  let actionLinks = '';
+  if (agent.paperLink) {
+    actionLinks += `<a href="${agent.paperLink}" target="_blank" class="action-link"><i class="bi bi-file-text"></i> Paper</a>`;
+  }
+  if (agent.codeLink) {
+    actionLinks += `<a href="${agent.codeLink}" target="_blank" class="action-link"><i class="bi bi-github"></i> Code</a>`;
+  }
+  if (hasTrajectoryBundle(agent)) {
+    actionLinks += `<button type="button" class="action-link traj-link" data-traj-file="${escapeAttr(agent.trajFile)}" data-model="${escapeAttr(agent.name)}"><i class="bi bi-signpost-split"></i> Traj</button>`;
+    actionLinks += `<a href="arena.html?model=${encodeURIComponent(agent.name)}" class="action-link arena-link"><i class="bi bi-columns-gap"></i> Arena</a>`;
+  }
+  return actionLinks;
+}
+
 // Render tables
 function renderTables() {
   const filteredData = getFilteredData();
@@ -480,14 +504,7 @@ function createTableHTML(data) {
       tags += '<span class="tag tag-ltm" title="Long-Term Memory">🧠</span>';
     }
     
-    // Build action links
-    let actionLinks = '';
-    if (agent.paperLink) {
-      actionLinks += `<a href="${agent.paperLink}" target="_blank" class="action-link"><i class="bi bi-file-text"></i> Paper</a>`;
-    }
-    if (agent.codeLink) {
-      actionLinks += `<a href="${agent.codeLink}" target="_blank" class="action-link"><i class="bi bi-github"></i> Code</a>`;
-    }
+    const actionLinks = buildAgentActionLinks(agent);
     
     // Display name with backbone for workflow types
     let displayName = agent.name;
@@ -588,14 +605,7 @@ function createEfficiencyTableHTML(data) {
     if (agent.hasUITree) tags += '<span class="tag tag-uitree" title="Uses UI Tree">🌳</span>';
     if (agent.hasLongTermMemory) tags += '<span class="tag tag-ltm" title="Long-Term Memory">🧠</span>';
     
-    // Build action links
-    let actionLinks = '';
-    if (agent.paperLink) {
-      actionLinks += `<a href="${agent.paperLink}" target="_blank" class="action-link"><i class="bi bi-file-text"></i> Paper</a>`;
-    }
-    if (agent.codeLink) {
-      actionLinks += `<a href="${agent.codeLink}" target="_blank" class="action-link"><i class="bi bi-github"></i> Code</a>`;
-    }
+    const actionLinks = buildAgentActionLinks(agent);
     
     // Display name with backbone for workflow types
     let displayName = agent.name;
@@ -794,14 +804,7 @@ function createDifficultyRow(agent, bestValues, rank, sortedCol = '') {
   if (agent.hasUITree) tags += '<span class="tag tag-uitree" title="Uses UI Tree">🌳</span>';
   if (agent.hasLongTermMemory) tags += '<span class="tag tag-ltm" title="Long-Term Memory">🧠</span>';
   
-  // Build action links
-  let actionLinks = '';
-  if (agent.paperLink) {
-    actionLinks += `<a href="${agent.paperLink}" target="_blank" class="action-link"><i class="bi bi-file-text"></i> Paper</a>`;
-  }
-  if (agent.codeLink) {
-    actionLinks += `<a href="${agent.codeLink}" target="_blank" class="action-link"><i class="bi bi-github"></i> Code</a>`;
-  }
+  const actionLinks = buildAgentActionLinks(agent);
   
   // Display name with backbone for workflow types
   let displayName = agent.name;
@@ -950,14 +953,7 @@ function createCrossAppRow(agent, bestValues, rank, sortedCol = '') {
   if (agent.hasUITree) tags += '<span class="tag tag-uitree" title="Uses UI Tree">🌳</span>';
   if (agent.hasLongTermMemory) tags += '<span class="tag tag-ltm" title="Long-Term Memory">🧠</span>';
   
-  // Build action links
-  let actionLinks = '';
-  if (agent.paperLink) {
-    actionLinks += `<a href="${agent.paperLink}" target="_blank" class="action-link"><i class="bi bi-file-text"></i> Paper</a>`;
-  }
-  if (agent.codeLink) {
-    actionLinks += `<a href="${agent.codeLink}" target="_blank" class="action-link"><i class="bi bi-github"></i> Code</a>`;
-  }
+  const actionLinks = buildAgentActionLinks(agent);
   
   // Display name with backbone for workflow types
   let displayName = agent.name;

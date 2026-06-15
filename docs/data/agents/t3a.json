@@ -6,6 +6,7 @@
   "date": "2024-05-01",
   "paperLink": "https://arxiv.org/abs/2405.14573",
   "codeLink": "https://github.com/google-research/android_world",
+  "trajFile": "trajs/t3a.json.gz",
   "hasUITree": true,
   "hasLongTermMemory": false,
   "crossApp": {
@@ -36,4 +37,3 @@
     }
   }
 }
-

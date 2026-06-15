@@ -6,6 +6,7 @@
   "date": "2025-11-27",
   "paperLink": "https://arxiv.org/abs/2511.21631",
   "codeLink": "https://github.com/QwenLM/Qwen3-VL",
+  "trajFile": "trajs/qwen3-vl-8b-instruct.json.gz",
   "hasUITree": false,
   "hasLongTermMemory": false,
   "crossApp": {

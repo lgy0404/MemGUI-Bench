@@ -24,16 +24,27 @@ This site is designed for GitHub Pages. Simply:
 ```
 memgui-bench-gh-page/
 ├── index.html              # Main landing page
+├── arena.html              # Side-by-side trajectory comparison
 ├── leaderboard.html        # Results leaderboard
 ├── submission.html         # Submission guidelines
 ├── css/
 │   ├── style.css           # Global styles
 │   ├── leaderboard.css     # Leaderboard-specific styles
+│   ├── traj.css            # Trajectory viewer styles
+│   ├── arena.css           # Arena-specific styles
 │   └── submission.css      # Submission page styles
 ├── js/
-│   └── leaderboard.js      # Leaderboard functionality
+│   ├── config.js           # Shared static data loading
+│   ├── leaderboard.js      # Leaderboard functionality
+│   ├── traj-viewer.js      # Static trajectory modal
+│   └── arena.js            # Arena comparison functionality
 ├── data/
-│   └── results.json        # Leaderboard data
+│   ├── index.json          # Agent file list
+│   └── agents/*.json       # Per-agent leaderboard data
+├── trajs/
+│   ├── index.json          # Generated trajectory bundle manifest
+│   ├── <agent>.json.gz     # Generated trajectory data
+│   └── <agent>.mp4         # Generated screenshot frame store
 ├── assets/
 │   └── favicon.png         # Site favicon
 └── README.md
@@ -43,7 +54,7 @@ memgui-bench-gh-page/
 
 ### Adding New Results
 
-1. Edit `data/results.json`
+1. Add or edit `data/agents/<agent-id>.json`
 2. Add a new agent entry following the existing format:
 
 ```json
@@ -72,6 +83,69 @@ memgui-bench-gh-page/
   }
 }
 ```
+
+3. Add the agent id to `data/index.json`
+
+## 🧭 Trajectory Viewer and Arena
+
+Trajectory bundles are generated into `trajs/` and are intentionally hidden
+from the homepage until `trajs/index.json` contains the corresponding
+`trajs/<agent>.json.gz` entry.
+
+From the project root:
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+bash scripts/download_and_bundle_trajs.sh
+scripts/start_traj_parallel_stage_downloads.sh
+scripts/start_traj_named_stage_supervisor.sh
+scripts/start_traj_finalize_watcher.sh
+scripts/start_traj_finalize_poller.sh
+scripts/start_traj_staged_handoff_watcher.sh
+scripts/start_traj_download_supervisor.sh
+scripts/check_traj_status.sh
+scripts/write_traj_status_snapshot.sh
+scripts/import_staged_traj_zips.sh
+scripts/promote_staged_traj_partials.sh
+scripts/finalize_ready_trajs.sh
+scripts/verify_ready_bundles.sh
+scripts/verify_traj_bundles.py
+scripts/verify_traj_site.py
+scripts/audit_traj_goal.py
+```
+
+The main download script stores source zips in `traj_logs/`, downloads agents in
+parallel by default, converts legacy MemGUI-Eval logs when needed, and writes
+final `.json.gz` plus `.mp4` bundles to `docs/trajs/`. It downloads each agent
+under `traj_logs/_parallel_downloads/<agent>/` to avoid shared `.hfd` state,
+then imports completed zips into `traj_logs/` only after their exact expected
+byte size is verified. Tune it with `DOWNLOAD_CONCURRENCY` (default `3`),
+`HFD_THREADS` (default `6` per file), and `HFD_JOBS` (default `1`).
+`start_traj_parallel_stage_downloads.sh` can still predownload a specific subset
+under `traj_logs/_parallel_downloads/` if you want a separate staged run.
+`start_traj_named_stage_supervisor.sh` keeps an extra named staged download
+group alive, for example a temporary `gui_m3a` group prefetching `gui-owl-7b`
+and `m3a` while the main staged downloader handles later agents.
+`finalize_ready_trajs.sh` can safely re-scan completed zips
+and create or validate any missing bundles without touching partial downloads.
+`start_traj_finalize_poller.sh` periodically performs the same safe scan while
+long downloads are still running.
+`start_traj_staged_handoff_watcher.sh` watches the root download sequence and
+promotes stronger staged partials at handoff points so resumed root downloads
+do not discard useful staged progress. It checks every 10 seconds by default;
+override with `STAGED_HANDOFF_INTERVAL_SECONDS`.
+`start_traj_finalize_watcher.sh` waits for the background downloader to exit,
+then runs the finalizer and audit automatically.
+`start_traj_download_supervisor.sh` keeps the long-running download pipeline
+alive by restarting the downloader, poller, finalizer watcher, staged handoff
+watcher, or staged parallel downloader if any of them exit before the final
+audit passes. It writes a `check_traj_status.sh` snapshot every 15 minutes by
+default; override with `TRAJ_SUPERVISOR_INTERVAL_SECONDS`.
+`verify_ready_bundles.sh` is a read-only helper for validating any already
+generated bundles as they appear.
+`audit_traj_goal.py` checks the downloaded zips, extraction markers, generated
+bundles, MP4 frame stores, manifest entries, site integration, and legacy
+conversion smoke test.
 
 ### Metrics Explained
 
@@ -113,4 +187,3 @@ For questions about the benchmark or leaderboard submissions, please contact: me
 ## 📜 License
 
 MIT License - See LICENSE file for details.
-
