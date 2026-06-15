@@ -41,6 +41,7 @@ def main() -> int:
     leaderboard_js = read(DOCS / "js" / "leaderboard.js")
     viewer_js = read(DOCS / "js" / "traj-viewer.js")
     arena_js = read(DOCS / "js" / "arena.js")
+    leaderboard_css = read(DOCS / "css" / "leaderboard.css")
 
     ok &= check("css/traj.css" in index_html, "homepage loads trajectory CSS")
     ok &= check("js/traj-viewer.js" in index_html, "homepage loads trajectory viewer JS")
@@ -49,23 +50,42 @@ def main() -> int:
     ok &= check("js/arena.js" in arena_html, "Arena loads Arena JS")
     ok &= check("js/traj-viewer.js" in arena_html, "Arena loads shared trajectory viewer")
     ok &= check("TRAJ_MANIFEST_PATHS" in config_js, "config defines trajectory manifest paths")
+    ok &= check("TRAJ_REMOTE_BASE_URL" in config_js, "config defines remote trajectory base URL")
+    ok &= check("site/trajs/" in config_js and "index.json" in config_js, "config loads the Hugging Face site trajectory manifest")
     ok &= check("loadTrajManifest" in config_js, "config exposes trajectory manifest loader")
     ok &= check("hasTrajectoryBundle" in config_js, "config exposes trajectory availability helper")
+    ok &= check("trajectoryBundleUrl" in config_js, "config exposes trajectory URL resolver")
     ok &= check("await loadTrajManifest()" in leaderboard_js, "leaderboard waits for trajectory manifest")
     ok &= check("data-traj-file" in leaderboard_js, "leaderboard renders trajectory trigger")
+    ok &= check("trajectoryBundleUrl(agent)" in leaderboard_js, "leaderboard opens resolved trajectory URLs")
     ok &= check("arena.html?model=" in leaderboard_js, "leaderboard links agents to Arena")
+    ok &= check("shareLeaderboard" in index_html, "homepage renders leaderboard share button")
+    ok &= check("shareLeaderboardSnapshot" in leaderboard_js, "leaderboard share button generates snapshots")
+    ok &= check("renderElementToPngBlob" in leaderboard_js, "leaderboard snapshot renderer creates PNG blobs")
     ok &= check("window.MemGUITraj" in viewer_js, "viewer exposes shared MemGUITraj API")
     ok &= check("DecompressionStream" in viewer_js, "viewer can read gzip JSON in browser")
     ok &= check("frame_index" in viewer_js, "viewer renders screenshot frames by frame_index")
+    ok &= check("trajAttemptSelect" in viewer_js, "viewer exposes attempt selector")
+    ok &= check("attemptSummary" in viewer_js, "viewer annotates task options with completion status")
+    ok &= check("primaryAttemptIndex" in viewer_js, "viewer understands primary attempts")
     ok &= check("MemGUITraj.getTrajectoryData" in arena_js, "Arena loads trajectory bundles")
     ok &= check("hasTrajectoryBundle" in arena_js, "Arena filters to bundled agents")
+    ok &= check("trajectoryBundleUrl(arenaState.agentA)" in arena_js, "Arena resolves Agent A trajectory URL")
+    ok &= check("trajectoryBundleUrl(arenaState.agentB)" in arena_js, "Arena resolves Agent B trajectory URL")
+    ok &= check("data-arena-expand-all" in arena_js, "Arena supports expand all screenshots")
+    ok &= check("taskForAttempt" in arena_js, "Arena renders selected primary attempts")
+    ok &= check(
+        "crossapp-table" in leaderboard_css
+        and "table-layout: fixed" in leaderboard_css
+        and 'data-view-panel="crossapp"] .table-container' in leaderboard_css,
+        "Cross-App table fits all columns without initial horizontal overflow",
+    )
 
     for rel_path in (
         "css/traj.css",
         "css/arena.css",
         "js/traj-viewer.js",
         "js/arena.js",
-        "trajs/index.json",
     ):
         path = DOCS / rel_path
         ok &= check(path.exists() and path.stat().st_size > 0, f"{rel_path} exists and is non-empty")
@@ -76,18 +96,7 @@ def main() -> int:
             data = json.loads(agent_path.read_text(encoding="utf-8"))
         except Exception:
             data = {}
-        ok &= check(data.get("trajFile") == f"trajs/{agent}.json.gz", f"{agent}: trajFile points to docs/trajs bundle")
-
-    try:
-        manifest = json.loads((DOCS / "trajs" / "index.json").read_text(encoding="utf-8"))
-    except Exception:
-        manifest = {}
-    files = manifest.get("files", [])
-    ok &= check(isinstance(files, list), "trajectory manifest has a files list")
-    for bundle_path in sorted((DOCS / "trajs").glob("*.json.gz")):
-        entry = f"trajs/{bundle_path.name}"
-        ok &= check(entry in files, f"{entry}: manifest entry exists")
-        ok &= check(bundle_path.with_suffix("").with_suffix(".mp4").exists(), f"{entry}: mp4 exists beside bundle")
+        ok &= check(data.get("trajFile") == f"trajs/{agent}.json.gz", f"{agent}: trajFile keeps logical bundle path")
 
     return 0 if ok else 1
 

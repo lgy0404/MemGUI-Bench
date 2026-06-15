@@ -88,11 +88,16 @@
 .traj-controls {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .traj-controls select {
   max-width: 520px;
+}
+
+.traj-attempt-select {
+  max-width: 180px;
 }
 
 .traj-body {

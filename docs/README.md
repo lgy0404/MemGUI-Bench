@@ -41,10 +41,7 @@ memgui-bench-gh-page/
 ├── data/
 │   ├── index.json          # Agent file list
 │   └── agents/*.json       # Per-agent leaderboard data
-├── trajs/
-│   ├── index.json          # Generated trajectory bundle manifest
-│   ├── <agent>.json.gz     # Generated trajectory data
-│   └── <agent>.mp4         # Generated screenshot frame store
+├── trajs/                  # Local generated cache, served from HF in production
 ├── assets/
 │   └── favicon.png         # Site favicon
 └── README.md
@@ -88,9 +85,15 @@ memgui-bench-gh-page/
 
 ## 🧭 Trajectory Viewer and Arena
 
-Trajectory bundles are generated into `trajs/` and are intentionally hidden
-from the homepage until `trajs/index.json` contains the corresponding
-`trajs/<agent>.json.gz` entry.
+Trajectory bundles are generated into `docs/trajs/` as a local cache, then
+published to the Hugging Face dataset under `site/trajs/`. The homepage and
+Arena load `site/trajs/index.json` from:
+
+`https://huggingface.co/datasets/lgy0404/memgui-bench-trajs`
+
+The checked-in agent metadata keeps logical paths like
+`trajs/<agent>.json.gz`; `js/config.js` resolves them to the HF-hosted files at
+runtime.
 
 From the project root:
 
@@ -114,13 +117,27 @@ scripts/verify_traj_site.py
 scripts/audit_traj_goal.py
 ```
 
+After regenerating bundles, publish the local cache to the dataset without
+deleting existing dataset files:
+
+```bash
+unset HF_ENDPOINT
+hf upload lgy0404/memgui-bench-trajs docs/trajs site/trajs \
+  --repo-type dataset \
+  --commit-message "Add website trajectory preview bundles"
+```
+
 The main download script stores source zips in `traj_logs/`, downloads agents in
 parallel by default, converts legacy MemGUI-Eval logs when needed, and writes
-final `.json.gz` plus `.mp4` bundles to `docs/trajs/`. It downloads each agent
+final `.json.gz` plus `.mp4` bundles to the ignored local `docs/trajs/`
+directory. It downloads each agent
 under `traj_logs/_parallel_downloads/<agent>/` to avoid shared `.hfd` state,
 then imports completed zips into `traj_logs/` only after their exact expected
 byte size is verified. Tune it with `DOWNLOAD_CONCURRENCY` (default `3`),
 `HFD_THREADS` (default `6` per file), and `HFD_JOBS` (default `1`).
+When a task has multiple attempts, the bundler keeps all attempts in the
+generated JSON, chooses the best-scored attempt as the primary trace, and leaves
+an attempt selector for the static trajectory viewer.
 `start_traj_parallel_stage_downloads.sh` can still predownload a specific subset
 under `traj_logs/_parallel_downloads/` if you want a separate staged run.
 `start_traj_named_stage_supervisor.sh` keeps an extra named staged download

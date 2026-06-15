@@ -162,11 +162,14 @@
   background: #fff;
   border-radius: 12px;
   border: 1px solid #dee2e6;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .leaderboard-table-wrapper {
+  width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Main Table */
@@ -828,14 +831,118 @@
 }
 
 /* Cross-App Table */
+.home-result-panel[data-view-panel="crossapp"] .table-container,
+.home-result-panel[data-view-panel="crossapp"] .leaderboard-table-wrapper {
+  overflow-x: hidden;
+}
+
 .leaderboard-table.crossapp-table {
-  font-size: 0.88em;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  font-size: 0.74em;
+}
+
+.crossapp-table .crossapp-rank-col {
+  width: 4.2%;
+}
+
+.crossapp-table .crossapp-model-col {
+  width: 18%;
+}
+
+.crossapp-table .crossapp-type-col {
+  width: 7%;
+}
+
+.crossapp-table .crossapp-score-col {
+  width: 4.72%;
 }
 
 .leaderboard-table.crossapp-table th,
 .leaderboard-table.crossapp-table td {
-  padding: 10px 8px;
-  min-width: 50px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 7px 3px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crossapp-table .model-cell {
+  min-width: 0;
+  white-space: normal;
+}
+
+.crossapp-table .rank-badge {
+  width: 24px;
+  height: 24px;
+  border-width: 1px;
+  font-size: 0.78em;
+}
+
+.crossapp-table .rank-badge.rank-1 {
+  width: 26px;
+  height: 26px;
+  border-width: 1px;
+  box-shadow: none;
+}
+
+.crossapp-table .model-name,
+.crossapp-table .model-meta {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.crossapp-table .model-name {
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 2px;
+  font-size: 0.98em;
+  line-height: 1.15;
+}
+
+.crossapp-table .crossapp-model-label,
+.crossapp-table .model-meta .model-institution {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crossapp-table .crossapp-model-label {
+  display: inline-block;
+}
+
+.crossapp-table .model-meta {
+  gap: 4px;
+  font-size: 0.86em;
+}
+
+.crossapp-table .model-meta .model-institution {
+  max-width: 72px;
+}
+
+.crossapp-table .model-meta .model-date {
+  padding-left: 4px;
+}
+
+.crossapp-table .action-links {
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.crossapp-table .action-link {
+  padding: 1px 3px;
+  font-size: 0.8em;
+}
+
+.crossapp-table .type-badge {
+  padding: 3px 4px;
+  font-size: 0.78em;
+}
+
+.crossapp-table .score-cell {
+  font-size: 0.95em;
 }
 
 /* STM and LTM Header Colors */
@@ -902,29 +1009,32 @@
 /* Responsive for Cross-App Table */
 @media (max-width: 992px) {
   .leaderboard-table.crossapp-table {
-    font-size: 0.8em;
+    font-size: 0.68em;
   }
   
   .leaderboard-table.crossapp-table th,
   .leaderboard-table.crossapp-table td {
-    padding: 8px 6px;
-    min-width: 45px;
+    padding: 6px 2px;
   }
   
-  .agent-cell {
-    min-width: 100px;
+  .crossapp-table .type-badge {
+    padding: 2px 3px;
   }
 }
 
 @media (max-width: 576px) {
   .leaderboard-table.crossapp-table {
-    font-size: 0.7em;
+    font-size: 0.58em;
   }
   
   .leaderboard-table.crossapp-table th,
   .leaderboard-table.crossapp-table td {
-    padding: 6px 4px;
-    min-width: 40px;
+    padding: 5px 1px;
+  }
+
+  .crossapp-table .action-links,
+  .crossapp-table .model-meta {
+    display: none;
   }
 }
 

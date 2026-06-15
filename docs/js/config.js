@@ -24,8 +24,15 @@ const DEFAULT_AGENT_FILES = [
 
 let AGENT_FILES = [...DEFAULT_AGENT_FILES];
 let TRAJ_FILES = null;
+let TRAJ_FILE_URLS = new Map();
 const DATA_BASE_PATHS = ["data", "docs/data"];
-const TRAJ_MANIFEST_PATHS = ["trajs/index.json", "docs/trajs/index.json"];
+const TRAJ_DATASET_BASE_URL = "https://huggingface.co/datasets/lgy0404/memgui-bench-trajs/resolve/main/";
+const TRAJ_REMOTE_BASE_URL = `${TRAJ_DATASET_BASE_URL}site/trajs/`;
+const TRAJ_MANIFEST_PATHS = [
+  `${TRAJ_REMOTE_BASE_URL}index.json`,
+  "trajs/index.json",
+  "docs/trajs/index.json",
+];
 
 // Task counts (fixed for MemGUI-Bench)
 const TASK_COUNTS = {
@@ -75,6 +82,18 @@ function normalizeTrajPath(path) {
   return String(path || '').replace(/^\.?\//, '');
 }
 
+function isAbsoluteUrl(path) {
+  return /^https?:\/\//i.test(String(path || ''));
+}
+
+function manifestFileUrl(manifestPath, filePath) {
+  if (isAbsoluteUrl(filePath)) return filePath;
+  const normalized = normalizeTrajPath(filePath);
+  if (!isAbsoluteUrl(manifestPath)) return normalized;
+  const relativeName = normalized.replace(/^trajs\//, '').replace(/^site\/trajs\//, '');
+  return new URL(relativeName, manifestPath).href;
+}
+
 async function loadTrajManifest() {
   for (const manifestPath of TRAJ_MANIFEST_PATHS) {
     try {
@@ -82,12 +101,24 @@ async function loadTrajManifest() {
       if (!response.ok) continue;
       const data = await response.json();
       const files = Array.isArray(data.files) ? data.files : [];
-      TRAJ_FILES = new Set(files.map(normalizeTrajPath));
+      TRAJ_FILES = new Set();
+      TRAJ_FILE_URLS = new Map();
+      files.forEach((file) => {
+        const path = normalizeTrajPath(file);
+        const shortPath = path.replace(/^trajs\//, '').replace(/^site\/trajs\//, '');
+        const localPath = `trajs/${shortPath}`;
+        const url = manifestFileUrl(manifestPath, path);
+        [path, shortPath, localPath].forEach((key) => {
+          TRAJ_FILES.add(key);
+          TRAJ_FILE_URLS.set(key, url);
+        });
+      });
       return TRAJ_FILES;
     } catch (error) {
       // Try the next static path.
     }
   }
+  TRAJ_FILE_URLS = new Map();
   TRAJ_FILES = new Set();
   return TRAJ_FILES;
 }
@@ -97,4 +128,11 @@ function hasTrajectoryBundle(agent) {
   if (!TRAJ_FILES) return true;
   const path = normalizeTrajPath(agent.trajFile);
   return TRAJ_FILES.has(path) || TRAJ_FILES.has(path.replace(/^trajs\//, ''));
+}
+
+function trajectoryBundleUrl(agent) {
+  if (!agent?.trajFile) return '';
+  if (isAbsoluteUrl(agent.trajFile)) return agent.trajFile;
+  const path = normalizeTrajPath(agent.trajFile);
+  return TRAJ_FILE_URLS.get(path) || TRAJ_FILE_URLS.get(path.replace(/^trajs\//, '')) || agent.trajFile;
 }

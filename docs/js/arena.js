@@ -4,6 +4,8 @@ let arenaAgents = [];
 let arenaState = {
   agentA: null,
   agentB: null,
+  trajUrlA: '',
+  trajUrlB: '',
   dataA: null,
   dataB: null,
   activeFilter: 'all',
@@ -33,6 +35,7 @@ function setupArena() {
   const selectA = document.getElementById('arenaModelA');
   const selectB = document.getElementById('arenaModelB');
   const loading = document.getElementById('arenaLoading');
+  const comparison = document.getElementById('arenaComparison');
 
   if (arenaAgents.length < 2) {
     loading.classList.add('is-active');
@@ -62,6 +65,20 @@ function setupArena() {
     arenaState.activeFilter = button.dataset.filter;
     renderArenaTaskList();
   });
+  comparison.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-arena-expand-all]');
+    if (!button) return;
+    const blocks = comparison.querySelectorAll('.traj-screenshot-block');
+    if (!blocks.length) return;
+    const allOpen = [...blocks].every((block) => block.open);
+    blocks.forEach((block) => { block.open = !allOpen; });
+    updateArenaExpandAll(comparison);
+  });
+  comparison.addEventListener('toggle', (event) => {
+    if (event.target.classList?.contains('traj-screenshot-block')) {
+      updateArenaExpandAll(comparison);
+    }
+  }, true);
 
   loadArenaComparison();
 }
@@ -87,6 +104,8 @@ async function loadArenaComparison() {
 
   arenaState.agentA = agentById(selectA.value);
   arenaState.agentB = agentById(selectB.value);
+  arenaState.trajUrlA = trajectoryBundleUrl(arenaState.agentA);
+  arenaState.trajUrlB = trajectoryBundleUrl(arenaState.agentB);
   arenaState.dataA = null;
   arenaState.dataB = null;
   arenaState.taskRows = [];
@@ -98,8 +117,8 @@ async function loadArenaComparison() {
 
   try {
     const [dataA, dataB] = await Promise.all([
-      MemGUITraj.getTrajectoryData(arenaState.agentA.trajFile),
-      MemGUITraj.getTrajectoryData(arenaState.agentB.trajFile),
+      MemGUITraj.getTrajectoryData(arenaState.trajUrlA),
+      MemGUITraj.getTrajectoryData(arenaState.trajUrlB),
     ]);
     arenaState.dataA = dataA;
     arenaState.dataB = dataB;
@@ -122,19 +141,23 @@ function buildArenaRows() {
   arenaState.taskRows = tasksA.filter((task) => tasksB.has(task)).sort().map((taskName) => {
     const taskA = dataA[taskName];
     const taskB = dataB[taskName];
+    const attemptA = MemGUITraj.taskForAttempt(taskA, MemGUITraj.primaryAttemptIndex(taskA));
+    const attemptB = MemGUITraj.taskForAttempt(taskB, MemGUITraj.primaryAttemptIndex(taskB));
     const statusA = taskStatus(taskA);
     const statusB = taskStatus(taskB);
     return {
       taskName,
       taskA,
       taskB,
+      attemptA,
+      attemptB,
       statusA,
       statusB,
       filter: statusA === 'unknown' || statusB === 'unknown'
         ? 'unknown'
         : `${statusA === 'pass' ? 'p' : 'f'}${statusB === 'pass' ? 'p' : 'f'}`,
-      stepsA: taskA?.traj?.length || 0,
-      stepsB: taskB?.traj?.length || 0,
+      stepsA: attemptA?.traj?.length || 0,
+      stepsB: attemptB?.traj?.length || 0,
     };
   });
 
@@ -149,10 +172,7 @@ function filterRows() {
 }
 
 function taskStatus(task) {
-  const score = MemGUITraj.taskScore(task);
-  if (score === 1) return 'pass';
-  if (score === 0) return 'fail';
-  return 'unknown';
+  return MemGUITraj.taskStatus(task);
 }
 
 function renderArenaMatrix() {
@@ -226,39 +246,43 @@ function renderArenaComparison() {
   }
 
   const generation = ++arenaState.renderGeneration;
-  const goal = row.taskA?.traj?.[0]?.task_goal || row.taskB?.traj?.[0]?.task_goal || '';
+  const goal = row.attemptA?.traj?.[0]?.task_goal || row.attemptB?.traj?.[0]?.task_goal || '';
   comparison.innerHTML = `
     <div class="arena-comparison-head">
-      <h2>${MemGUITraj.escHtml(row.taskName)}</h2>
+      <div class="arena-comparison-title-row">
+        <h2>${MemGUITraj.escHtml(row.taskName)}</h2>
+        <button type="button" class="traj-expand-all arena-expand-all" data-arena-expand-all hidden>Expand all</button>
+      </div>
       ${goal ? `<div class="arena-goal">${MemGUITraj.escHtml(goal)}</div>` : ''}
     </div>
     <div class="arena-columns">
-      ${arenaColumnHtml('A', arenaState.agentA, row.taskA, arenaState.dataA?._meta)}
-      ${arenaColumnHtml('B', arenaState.agentB, row.taskB, arenaState.dataB?._meta)}
+      ${arenaColumnHtml('A', arenaState.agentA, row.attemptA, arenaState.dataA?._meta, row.taskA)}
+      ${arenaColumnHtml('B', arenaState.agentB, row.attemptB, arenaState.dataB?._meta, row.taskB)}
     </div>
   `;
+  updateArenaExpandAll(comparison);
 
   const metaA = arenaState.dataA?._meta || null;
   const metaB = arenaState.dataB?._meta || null;
-  const urlA = MemGUITraj.videoUrlFor(arenaState.agentA.trajFile, metaA);
-  const urlB = MemGUITraj.videoUrlFor(arenaState.agentB.trajFile, metaB);
+  const urlA = MemGUITraj.videoUrlFor(arenaState.trajUrlA, metaA);
+  const urlB = MemGUITraj.videoUrlFor(arenaState.trajUrlB, metaB);
   const bodyA = comparison.querySelector('[data-arena-body="A"]');
   const bodyB = comparison.querySelector('[data-arena-body="B"]');
   if (urlA && metaA) {
     const promiseA = MemGUITraj.loadVideo(urlA);
     promiseA.then(() => {
-      if (generation === arenaState.renderGeneration) MemGUITraj.renderCanvases(bodyA, row.taskA, metaA, promiseA);
+      if (generation === arenaState.renderGeneration) MemGUITraj.renderCanvases(bodyA, row.attemptA, metaA, promiseA);
     });
   }
   if (urlB && metaB) {
     const promiseB = MemGUITraj.loadVideo(urlB);
     promiseB.then(() => {
-      if (generation === arenaState.renderGeneration) MemGUITraj.renderCanvases(bodyB, row.taskB, metaB, promiseB);
+      if (generation === arenaState.renderGeneration) MemGUITraj.renderCanvases(bodyB, row.attemptB, metaB, promiseB);
     });
   }
 }
 
-function arenaColumnHtml(side, agent, task, meta) {
+function arenaColumnHtml(side, agent, task, meta, sourceTask = null) {
   const status = taskStatus(task);
   const text = status === 'pass' ? 'Pass' : status === 'fail' ? 'Fail' : 'Unknown';
   const badgeClass = status === 'pass'
@@ -266,15 +290,31 @@ function arenaColumnHtml(side, agent, task, meta) {
     : status === 'fail'
       ? 'traj-result-fail'
       : 'traj-result-unknown';
+  const sourceAttempts = MemGUITraj.attemptsForTask(sourceTask || task);
+  const attemptLabel = sourceAttempts.length > 1 && task?.label
+    ? `<span class="arena-attempt-label">${MemGUITraj.escHtml(task.label)}</span>`
+    : '';
   return `
     <section class="arena-col">
       <div class="arena-col-head">
-        <span class="arena-col-name">${MemGUITraj.escHtml(agent.name)}</span>
-        <span class="traj-result ${badgeClass}">${text}</span>
+        <span class="arena-col-name">${MemGUITraj.escHtml(agent.name)}${attemptLabel}</span>
+        <span class="traj-result ${badgeClass}">${MemGUITraj.escHtml(text)}</span>
       </div>
       <div class="arena-col-body" data-arena-body="${side}">
         ${MemGUITraj.renderTaskHtml(task, meta, side)}
       </div>
     </section>
   `;
+}
+
+function updateArenaExpandAll(container) {
+  const button = container.querySelector('[data-arena-expand-all]');
+  if (!button) return;
+  const blocks = container.querySelectorAll('.traj-screenshot-block');
+  if (!blocks.length) {
+    button.hidden = true;
+    return;
+  }
+  button.hidden = false;
+  button.textContent = [...blocks].every((block) => block.open) ? 'Collapse all' : 'Expand all';
 }

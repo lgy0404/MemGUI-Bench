@@ -40,6 +40,7 @@ config.yaml
 
 # Runtime outputs.
 traj_logs/
+docs/trajs/
 logs/
 results/
 screenshots/

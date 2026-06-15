@@ -27,19 +27,34 @@
       if (onProgress && total) onProgress(loaded / total);
     }
     const rawBlob = new Blob(rawChunks);
-    if (!('DecompressionStream' in window)) {
+
+    const parseRawJson = async () => JSON.parse(await rawBlob.text());
+    if ('DecompressionStream' in window) {
+      try {
+        const ds = new DecompressionStream('gzip');
+        const decompressed = rawBlob.stream().pipeThrough(ds);
+        const reader = decompressed.getReader();
+        const chunks = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+        return JSON.parse(await new Blob(chunks).text());
+      } catch (error) {
+        try {
+          return await parseRawJson();
+        } catch (rawError) {
+          throw error;
+        }
+      }
+    }
+
+    try {
+      return await parseRawJson();
+    } catch (error) {
       throw new Error('This browser does not support gzip decompression');
     }
-    const ds = new DecompressionStream('gzip');
-    const decompressed = rawBlob.stream().pipeThrough(ds);
-    const reader = decompressed.getReader();
-    const chunks = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-    }
-    return JSON.parse(await new Blob(chunks).text());
   }
 
   async function getTrajectoryData(trajFile, onProgress) {
@@ -56,6 +71,7 @@
       video.preload = 'auto';
       video.muted = true;
       video.playsInline = true;
+      video.crossOrigin = 'anonymous';
       video.src = url;
       await new Promise((resolve, reject) => {
         video.addEventListener('loadedmetadata', resolve, { once: true });
@@ -170,17 +186,89 @@
     drawActionOverlay(ctx, action, scaleX, scaleY);
   }
 
-  function taskScore(task) {
-    if (!task || !task.result) return null;
-    const match = String(task.result).match(/score:\s*([\d.]+)/i);
+  function scoreFromResult(result) {
+    if (!result) return null;
+    const match = String(result).match(/score:\s*([\d.]+)/i);
     return match ? Number(match[1]) : null;
+  }
+
+  function attemptsForTask(task) {
+    if (!task || typeof task !== 'object') return [];
+    const attempts = Array.isArray(task.attempts) && task.attempts.length ? task.attempts : [task];
+    return attempts
+      .filter((attempt) => attempt && typeof attempt === 'object')
+      .map((attempt, index) => ({
+        ...attempt,
+        label: attempt.label || `Attempt ${attempt.attempt_num || index + 1}`,
+        attempt_num: attempt.attempt_num ?? index + 1,
+      }));
+  }
+
+  function taskScore(task) {
+    const scores = attemptsForTask(task)
+      .map((attempt) => scoreFromResult(attempt.result))
+      .filter((score) => score !== null && Number.isFinite(score));
+    if (scores.length) return Math.max(...scores);
+    return scoreFromResult(task?.result);
+  }
+
+  function primaryAttemptIndex(task) {
+    const attempts = attemptsForTask(task);
+    if (!attempts.length) return 0;
+    const explicit = Number(task?.primary_attempt_index);
+    if (Number.isInteger(explicit) && explicit >= 0 && explicit < attempts.length) return explicit;
+
+    let bestIndex = 0;
+    let bestScore = -Infinity;
+    attempts.forEach((attempt, index) => {
+      const score = scoreFromResult(attempt.result);
+      if (score !== null && Number.isFinite(score) && score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    });
+    return bestIndex;
+  }
+
+  function taskForAttempt(task, attemptIndex = null) {
+    const attempts = attemptsForTask(task);
+    if (!attempts.length) return task;
+    const fallback = primaryAttemptIndex(task);
+    const numeric = Number(attemptIndex);
+    const index = Number.isInteger(numeric) && numeric >= 0 && numeric < attempts.length ? numeric : fallback;
+    return attempts[index] || attempts[fallback] || attempts[0];
+  }
+
+  function taskStatus(task) {
+    const score = taskScore(task);
+    if (score === 1) return 'pass';
+    if (score === 0) return 'fail';
+    return 'unknown';
+  }
+
+  function statusText(task) {
+    const status = taskStatus(task);
+    if (status === 'pass') return 'Pass';
+    if (status === 'fail') return 'Fail';
+    return 'Unknown';
+  }
+
+  function attemptSummary(task) {
+    const attempts = attemptsForTask(task);
+    if (attempts.length <= 1) return statusText(task);
+    const passed = attempts.filter((attempt) => scoreFromResult(attempt.result) === 1).length;
+    return `${statusText(task)} (${passed}/${attempts.length} pass)`;
+  }
+
+  function stepCount(task) {
+    return Array.isArray(task?.traj) ? task.traj.length : 0;
   }
 
   function scoreBadge(task) {
     const score = taskScore(task);
     if (score === 1) return '<span class="traj-result traj-result-pass">Pass</span>';
     if (score === 0) return '<span class="traj-result traj-result-fail">Fail</span>';
-    return '';
+    return '<span class="traj-result traj-result-unknown">Unknown</span>';
   }
 
   function videoUrlFor(trajFile, meta) {
@@ -293,6 +381,7 @@
           </div>
           <div class="traj-controls">
             <select id="trajTaskSelect" class="form-select form-select-sm"></select>
+            <select id="trajAttemptSelect" class="form-select form-select-sm traj-attempt-select" hidden></select>
             <span id="trajResultSlot"></span>
             <button type="button" class="traj-expand-all" id="trajExpandAll">Expand all</button>
           </div>
@@ -318,6 +407,7 @@
       title: modal.querySelector('#trajModalTitle'),
       subtitle: modal.querySelector('#trajModalSubtitle'),
       taskSelect: modal.querySelector('#trajTaskSelect'),
+      attemptSelect: modal.querySelector('#trajAttemptSelect'),
       resultSlot: modal.querySelector('#trajResultSlot'),
       loading: modal.querySelector('#trajLoading'),
       loadingText: modal.querySelector('#trajLoadingText'),
@@ -357,6 +447,8 @@
     state.title.textContent = `${modelName || 'Agent'} Trajectories`;
     state.subtitle.textContent = trajFile;
     state.taskSelect.innerHTML = '';
+    state.attemptSelect.innerHTML = '';
+    state.attemptSelect.hidden = true;
     state.resultSlot.innerHTML = '';
     state.steps.innerHTML = '';
     state.loading.hidden = false;
@@ -385,21 +477,35 @@
     taskNames.forEach((taskName) => {
       const option = document.createElement('option');
       option.value = taskName;
-      option.textContent = taskName;
+      option.textContent = `${taskName} - ${attemptSummary(data[taskName])}`;
       state.taskSelect.appendChild(option);
     });
 
-    const renderTask = (taskName) => {
+    const populateAttempts = (task) => {
+      const attempts = attemptsForTask(task);
+      state.attemptSelect.innerHTML = '';
+      state.attemptSelect.hidden = attempts.length <= 1;
+      attempts.forEach((attempt, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = `${attempt.label} - ${statusText(attempt)} - ${stepCount(attempt)} steps`;
+        state.attemptSelect.appendChild(option);
+      });
+      state.attemptSelect.value = String(primaryAttemptIndex(task));
+    };
+
+    const renderTask = (taskName, attemptIndex = null) => {
       const task = data[taskName];
+      const selectedTask = taskForAttempt(task, attemptIndex);
       const myGeneration = ++renderGeneration;
-      state.resultSlot.innerHTML = scoreBadge(task);
-      state.steps.innerHTML = renderTaskHtml(task, meta);
+      state.resultSlot.innerHTML = scoreBadge(selectedTask);
+      state.steps.innerHTML = renderTaskHtml(selectedTask, meta);
       updateExpandAll(state.steps, state.expandAll);
       if (videoUrl && meta) {
         const videoPromise = loadVideo(videoUrl);
         videoPromise.then(() => {
           if (myGeneration !== renderGeneration) return;
-          renderCanvases(state.steps, task, meta, videoPromise);
+          renderCanvases(state.steps, selectedTask, meta, videoPromise);
         }).catch(() => {
           state.steps.querySelectorAll('.traj-screenshot-spinner').forEach((el) => {
             el.innerHTML = '<i class="bi bi-image"></i> Screenshot unavailable';
@@ -408,8 +514,16 @@
       }
     };
 
-    state.taskSelect.onchange = () => renderTask(state.taskSelect.value);
-    if (taskNames.length > 0) renderTask(taskNames[0]);
+    state.taskSelect.onchange = () => {
+      const task = data[state.taskSelect.value];
+      populateAttempts(task);
+      renderTask(state.taskSelect.value, Number(state.attemptSelect.value));
+    };
+    state.attemptSelect.onchange = () => renderTask(state.taskSelect.value, Number(state.attemptSelect.value));
+    if (taskNames.length > 0) {
+      populateAttempts(data[taskNames[0]]);
+      renderTask(taskNames[0], Number(state.attemptSelect.value));
+    }
   }
 
   function closeTrajModal() {
@@ -444,7 +558,12 @@
     renderTaskHtml,
     renderCanvases,
     taskScore,
+    taskStatus,
+    statusText,
     scoreBadge,
+    attemptsForTask,
+    primaryAttemptIndex,
+    taskForAttempt,
     videoUrlFor,
     openTrajModal,
   };

@@ -31,12 +31,19 @@ def _write_frame(path: Path, color: tuple[int, int, int], label: str) -> None:
     image.save(path)
 
 
-def _make_legacy_attempt(root: Path, task: str, agent: str, score: int, screenshot_style: str = "raw") -> None:
-    attempt = root / "_memgui_eval" / task / agent / "attempt_1"
+def _make_legacy_attempt(
+    root: Path,
+    task: str,
+    agent: str,
+    score: int,
+    screenshot_style: str = "raw",
+    attempt_num: int = 1,
+) -> None:
+    attempt = root / "_memgui_eval" / task / agent / f"attempt_{attempt_num}"
     log = [
         {
             "step": 1,
-            "prediction": f"<think>Inspect {task}</think>Tap the primary target.",
+            "prediction": f"<think>Inspect {task} attempt {attempt_num}</think>Tap the primary target.",
             "action": ["click", {"detail_type": "coordinates", "detail": [320, 760]}],
         },
         {
@@ -46,13 +53,14 @@ def _make_legacy_attempt(root: Path, task: str, agent: str, score: int, screensh
         },
     ]
     _write_json(attempt / "log.json", log)
-    _write_json(attempt / "final_decision.json", {"decision": score, "reason": f"{task} scored {score}"})
+    _write_json(attempt / "final_decision.json", {"decision": score, "reason": f"{task} attempt {attempt_num} scored {score}"})
+    tone = 40 * attempt_num
     if screenshot_style == "single_actions":
-        _write_frame(attempt / "single_actions" / "step_1.png", (32, 84, 147), f"{task} step 1")
-        _write_frame(attempt / "single_actions" / "step_2.png", (9, 120, 107), f"{task} step 2")
+        _write_frame(attempt / "single_actions" / "step_1.png", (32 + tone, 84, 147), f"{task} a{attempt_num} step 1")
+        _write_frame(attempt / "single_actions" / "step_2.png", (9, 120 + tone, 107), f"{task} a{attempt_num} step 2")
     else:
-        _write_frame(attempt / "0.png", (32, 84, 147), f"{task} frame 0")
-        _write_frame(attempt / "1.png", (9, 120, 107), f"{task} frame 1")
+        _write_frame(attempt / "0.png", (32 + tone, 84, 147), f"{task} a{attempt_num} frame 0")
+        _write_frame(attempt / "1.png", (9, 120 + tone, 107), f"{task} a{attempt_num} frame 1")
 
 
 def _make_legacy_zip(tmpdir: Path) -> Path:
@@ -61,11 +69,14 @@ def _make_legacy_zip(tmpdir: Path) -> Path:
     _make_legacy_attempt(source, "smoke_task_pass", agent, 1)
     _make_legacy_attempt(source, "smoke_task_fail", agent, 0)
     _make_legacy_attempt(source, "smoke_task_single_actions", agent, 1, screenshot_style="single_actions")
+    _make_legacy_attempt(source, "smoke_task_multi", agent, 0, attempt_num=1)
+    _make_legacy_attempt(source, "smoke_task_multi", agent, 1, attempt_num=2)
     results = (
         "task_identifier,task_description\n"
         "smoke_task_pass,Open the app and complete the pass task\n"
         "smoke_task_fail,Open the app and complete the fail task\n"
         "smoke_task_single_actions,Open the app and complete the fallback screenshot task\n"
+        "smoke_task_multi,Open the app and complete one of several attempts\n"
     )
     (source / "_memgui_eval" / "results.csv").write_text(results, encoding="utf-8")
 
@@ -132,7 +143,7 @@ def main() -> int:
         checks = [
             (converted.exists(), "converted legacy directory exists"),
             ((converted / "metadata.json").exists(), "converted metadata exists"),
-            (len(tasks) == 3, "three legacy tasks bundled"),
+            (len(tasks) == 4, "four legacy tasks bundled"),
             (isinstance(meta, dict) and meta.get("video_file") == "smoke-agent.mp4", "local MP4 metadata exists"),
             ((output_dir / "smoke-agent.mp4").exists(), "local MP4 file exists"),
             ((output_dir / "index.json").exists(), "manifest written next to output"),
@@ -149,11 +160,33 @@ def main() -> int:
                 print(f"MISS  {task_name}: expected two trajectory steps")
                 ok = False
                 continue
-            has_goal = all(bool(step.get("task_goal")) for step in traj if isinstance(step, dict))
-            has_frames = all(isinstance(step.get("frame_index"), int) for step in traj if isinstance(step, dict))
+            attempts = task.get("attempts") if isinstance(task, dict) else None
+            attempts = attempts if isinstance(attempts, list) and attempts else [task]
+            expected_attempts = 2 if task_name == "smoke_task_multi" else 1
+            has_attempt_count = len(attempts) == expected_attempts
+            primary_index = task.get("primary_attempt_index") if isinstance(task, dict) else None
+            has_primary = task_name != "smoke_task_multi" or primary_index == 1
+            has_best_result = task_name != "smoke_task_multi" or "score: 1.0" in str(task.get("result"))
+            has_goal = all(
+                bool(step.get("task_goal"))
+                for attempt in attempts
+                if isinstance(attempt, dict)
+                for step in attempt.get("traj", [])
+                if isinstance(step, dict)
+            )
+            has_frames = all(
+                isinstance(step.get("frame_index"), int)
+                for attempt in attempts
+                if isinstance(attempt, dict)
+                for step in attempt.get("traj", [])
+                if isinstance(step, dict)
+            )
+            print(f"{'OK' if has_attempt_count else 'MISS'}  {task_name}: expected {expected_attempts} bundled attempt(s)")
+            print(f"{'OK' if has_primary else 'MISS'}  {task_name}: primary attempt points to best score")
+            print(f"{'OK' if has_best_result else 'MISS'}  {task_name}: aggregate result reflects best attempt")
             print(f"{'OK' if has_goal else 'MISS'}  {task_name}: task goals filled from legacy catalog")
             print(f"{'OK' if has_frames else 'MISS'}  {task_name}: screenshot frame indexes assigned")
-            ok &= has_goal and has_frames
+            ok &= has_attempt_count and has_primary and has_best_result and has_goal and has_frames
 
         return 0 if ok else 1
 

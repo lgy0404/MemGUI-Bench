@@ -194,6 +194,11 @@ function setupEventListeners() {
     updateSortOptions(currentTab);
     renderTables();
   });
+
+  const shareButton = document.getElementById('shareLeaderboard');
+  if (shareButton) {
+    shareButton.addEventListener('click', shareLeaderboardSnapshot);
+  }
   
 }
 
@@ -218,6 +223,152 @@ function setActiveResultView(view) {
   if (subtitle) subtitle.textContent = meta.subtitle;
 
   renderTables();
+}
+
+function inlineSnapshotStyles(source, clone) {
+  if (!(source instanceof Element) || !(clone instanceof Element)) return;
+  const computed = window.getComputedStyle(source);
+  for (let index = 0; index < computed.length; index += 1) {
+    const property = computed[index];
+    clone.style.setProperty(property, computed.getPropertyValue(property), computed.getPropertyPriority(property));
+  }
+  if (computed.position === 'sticky' || computed.position === 'fixed') {
+    clone.style.position = 'static';
+  }
+  clone.style.animation = 'none';
+  clone.style.transition = 'none';
+
+  const sourceChildren = Array.from(source.children);
+  const cloneChildren = Array.from(clone.children);
+  sourceChildren.forEach((child, index) => inlineSnapshotStyles(child, cloneChildren[index]));
+}
+
+function removeSnapshotExcluded(clone) {
+  clone.querySelectorAll('[data-snapshot-exclude]').forEach((node) => node.remove());
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
+}
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Failed to create PNG blob'));
+    }, 'image/png');
+  });
+}
+
+async function renderElementToPngBlob(element) {
+  const rect = element.getBoundingClientRect();
+  const width = Math.ceil(Math.max(element.scrollWidth, rect.width));
+  const height = Math.ceil(Math.max(element.scrollHeight, rect.height));
+  const clone = element.cloneNode(true);
+  inlineSnapshotStyles(element, clone);
+  removeSnapshotExcluded(clone);
+  clone.style.width = `${width}px`;
+  clone.style.maxWidth = 'none';
+  clone.style.margin = '0';
+  clone.style.transform = 'none';
+
+  const wrapper = document.createElement('div');
+  wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+  wrapper.style.width = `${width}px`;
+  wrapper.style.minHeight = `${height}px`;
+  wrapper.style.background = '#ffffff';
+  wrapper.appendChild(clone);
+
+  const serialized = new XMLSerializer().serializeToString(wrapper);
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <foreignObject x="0" y="0" width="${width}" height="${height}">${serialized}</foreignObject>
+    </svg>`;
+  const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+  try {
+    const image = await loadImage(svgUrl);
+    const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(width * scale);
+    canvas.height = Math.ceil(height * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.drawImage(image, 0, 0, width, height);
+    return await canvasToBlob(canvas);
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+}
+
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function setShareButtonState(button, text, isBusy = false) {
+  const label = button.querySelector('span');
+  if (label) label.textContent = text;
+  button.disabled = isBusy;
+}
+
+async function shareLeaderboardSnapshot() {
+  const button = document.getElementById('shareLeaderboard');
+  const target = document.querySelector('.home-results-card');
+  if (!button || !target) return;
+
+  setShareButtonState(button, 'Generating', true);
+  try {
+    const blob = await renderElementToPngBlob(target);
+    const date = new Date().toISOString().slice(0, 10);
+    const fileName = `memgui-bench-${currentTab}-leaderboard-${date}.png`;
+    const file = new File([blob], fileName, { type: 'image/png' });
+    const title = `MemGUI-Bench ${resultViewMeta[currentTab]?.title || 'Leaderboard'}`;
+
+    if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+      try {
+        await navigator.share({ title, text: title, files: [file] });
+        setShareButtonState(button, 'Shared');
+        return;
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          setShareButtonState(button, 'Canceled');
+          return;
+        }
+        console.warn('Native share failed; falling back to clipboard or download.', error);
+      }
+    }
+
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        setShareButtonState(button, 'Copied');
+        return;
+      } catch (error) {
+        console.warn('Clipboard write failed; falling back to download.', error);
+      }
+    }
+
+    downloadBlob(blob, fileName);
+    setShareButtonState(button, 'Downloaded');
+  } catch (error) {
+    console.error('Failed to generate leaderboard snapshot:', error);
+    setShareButtonState(button, 'Failed');
+  } finally {
+    setTimeout(() => setShareButtonState(button, 'Share LB'), 1600);
+  }
 }
 
 // Filter and sort data
@@ -429,7 +580,7 @@ function buildAgentActionLinks(agent) {
     actionLinks += `<a href="${agent.codeLink}" target="_blank" class="action-link"><i class="bi bi-github"></i> Code</a>`;
   }
   if (hasTrajectoryBundle(agent)) {
-    actionLinks += `<button type="button" class="action-link traj-link" data-traj-file="${escapeAttr(agent.trajFile)}" data-model="${escapeAttr(agent.name)}"><i class="bi bi-signpost-split"></i> Traj</button>`;
+    actionLinks += `<button type="button" class="action-link traj-link" data-traj-file="${escapeAttr(trajectoryBundleUrl(agent))}" data-model="${escapeAttr(agent.name)}"><i class="bi bi-signpost-split"></i> Traj</button>`;
     actionLinks += `<a href="arena.html?model=${encodeURIComponent(agent.name)}" class="action-link arena-link"><i class="bi bi-columns-gap"></i> Arena</a>`;
   }
   return actionLinks;
@@ -861,16 +1012,22 @@ function createCrossAppTableHTML(data) {
   
   let html = `
     <table class="leaderboard-table crossapp-table">
+      <colgroup>
+        <col class="crossapp-rank-col">
+        <col class="crossapp-model-col">
+        <col class="crossapp-type-col">
+        ${Array.from({ length: 15 }, () => '<col class="crossapp-score-col">').join('')}
+      </colgroup>
       <thead>
         <tr class="header-group">
           <th rowspan="2">Rank</th>
           <th rowspan="2">Model & Date</th>
           <th rowspan="2">Type</th>
-          <th colspan="3">1 App (${TASK_COUNTS.crossApp.app1} tasks)</th>
-          <th colspan="3">2 Apps (${TASK_COUNTS.crossApp.app2} tasks)</th>
-          <th colspan="3">3 Apps (${TASK_COUNTS.crossApp.app3} tasks)</th>
-          <th colspan="3">4 Apps (${TASK_COUNTS.crossApp.app4} tasks)</th>
-          <th colspan="3">Avg (${TASK_COUNTS.total} tasks)</th>
+          <th colspan="3" title="${TASK_COUNTS.crossApp.app1} tasks">1 App (${TASK_COUNTS.crossApp.app1})</th>
+          <th colspan="3" title="${TASK_COUNTS.crossApp.app2} tasks">2 Apps (${TASK_COUNTS.crossApp.app2})</th>
+          <th colspan="3" title="${TASK_COUNTS.crossApp.app3} tasks">3 Apps (${TASK_COUNTS.crossApp.app3})</th>
+          <th colspan="3" title="${TASK_COUNTS.crossApp.app4} tasks">4 Apps (${TASK_COUNTS.crossApp.app4})</th>
+          <th colspan="3" title="${TASK_COUNTS.total} tasks">Avg (${TASK_COUNTS.total})</th>
         </tr>
         <tr class="header-subgroup">
           <th class="${sc('app1_p1')}">p@1</th><th class="${sc('app1_p3')}">p@3</th><th class="${sc('app1_irr')}">IRR</th>
@@ -968,7 +1125,7 @@ function createCrossAppRow(agent, bestValues, rank, sortedCol = '') {
     <tr class="${isFirst ? 'first-rank' : ''}">
       <td class="rank-cell"><span class="rank-badge ${rankBadgeClass}">${rank}</span></td>
       <td class="model-cell">
-        <div class="model-name">${displayName}<div class="tags">${tags}</div></div>
+        <div class="model-name"><span class="crossapp-model-label">${displayName}</span><div class="tags">${tags}</div></div>
         <div class="model-meta">
           <span class="model-institution">${agent.institution}</span>
           <span class="model-date">${formatDate(agent.date)}</span>

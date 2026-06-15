@@ -248,11 +248,22 @@ button.arena-matrix-cell {
   background: #fbfdff;
 }
 
+.arena-comparison-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .arena-comparison-head h2 {
   margin: 0;
   color: #0f172a;
   font-size: 1rem;
   font-weight: 800;
+}
+
+.arena-expand-all {
+  min-height: 28px;
 }
 
 .arena-goal {
@@ -287,12 +298,21 @@ button.arena-matrix-cell {
 }
 
 .arena-col-name {
+  display: block;
   min-width: 0;
   overflow: hidden;
   color: #0f172a;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.arena-attempt-label {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
 .arena-col-body {

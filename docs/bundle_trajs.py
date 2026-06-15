@@ -41,6 +41,14 @@ class LegacyAttempt:
     attempt_dir: Path
 
 
+@dataclass
+class TaskAttemptDir:
+    task_name: str
+    label: str
+    attempt_num: int | None
+    path: Path
+
+
 def _load_json(path: Path) -> Any:
     with path.open(encoding="utf-8") as file:
         return json.load(file)
@@ -162,24 +170,28 @@ def _infer_legacy_attempt(path: Path, root: Path) -> LegacyAttempt | None:
             task_name = attempt_dir.parent.parent.name
 
     summary = _safe_json_load(attempt_dir / "evaluation_summary.json")
-    if isinstance(summary, dict) and summary.get("task_identifier"):
+    if isinstance(summary, dict) and summary.get("task_identifier") and not re.match(r"^\d{3}-", task_name):
         task_name = str(summary["task_identifier"])
 
     return LegacyAttempt(task_name, agent_name, attempt_num, attempt_dir)
 
 
-def discover_legacy_attempts(root: Path, attempt_num: int = 1) -> list[LegacyAttempt]:
+def discover_legacy_attempts(root: Path, attempt_num: int | None = None) -> list[LegacyAttempt]:
     attempts: list[LegacyAttempt] = []
     for log_path in root.rglob("log.json"):
         if any(part in {"single_actions", "visualize_actions", "puzzle"} for part in log_path.parts):
             continue
         attempt = _infer_legacy_attempt(log_path, root)
-        if attempt and attempt.attempt_num == attempt_num:
+        if attempt and (attempt_num is None or attempt.attempt_num == attempt_num):
             attempts.append(attempt)
+
+    attempts = sorted(attempts, key=lambda item: (item.task_name, item.attempt_num, str(item.attempt_dir)))
+    if attempt_num is None:
+        return attempts
 
     seen: set[str] = set()
     unique: list[LegacyAttempt] = []
-    for attempt in sorted(attempts, key=lambda item: (item.task_name, str(item.attempt_dir))):
+    for attempt in attempts:
         if attempt.task_name in seen:
             continue
         seen.add(attempt.task_name)
@@ -261,11 +273,21 @@ def _legacy_screenshot_candidates(attempt_dir: Path, task_name: str, step_num: i
     ]
 
 
-def convert_legacy_run(source_dir: Path, output_dir: Path, attempt_num: int = 1) -> Path:
+def convert_legacy_run(source_dir: Path, output_dir: Path, attempt_num: int | None = None) -> Path:
     attempts = discover_legacy_attempts(source_dir, attempt_num=attempt_num)
     if not attempts:
-        raise ValueError(f"No legacy attempt_{attempt_num} log.json files found under {source_dir}")
+        attempt_desc = "legacy attempt log.json files" if attempt_num is None else f"legacy attempt_{attempt_num} log.json files"
+        raise ValueError(f"No {attempt_desc} found under {source_dir}")
     task_catalog = _load_legacy_task_catalog(source_dir)
+    if task_catalog:
+        catalog_task_ids = set(task_catalog)
+        before_count = len(attempts)
+        attempts = [attempt for attempt in attempts if attempt.task_name in catalog_task_ids]
+        skipped_count = before_count - len(attempts)
+        if skipped_count:
+            print(f"Skipped {skipped_count} legacy attempts not listed in results.csv")
+        if not attempts:
+            raise ValueError(f"No legacy attempts under {source_dir} matched results.csv task identifiers")
 
     if output_dir.exists():
         shutil.rmtree(output_dir)
@@ -275,7 +297,7 @@ def convert_legacy_run(source_dir: Path, output_dir: Path, attempt_num: int = 1)
         "suite_family": "memgui_bench",
         "source_format": "legacy_memgui_eval",
         "source_dir": str(source_dir),
-        "attempt_num": attempt_num,
+        "attempt_num": "all" if attempt_num is None else attempt_num,
     }
     (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
@@ -284,7 +306,7 @@ def convert_legacy_run(source_dir: Path, output_dir: Path, attempt_num: int = 1)
         if not isinstance(log_data, list):
             continue
         task_goal = _legacy_task_goal(attempt.attempt_dir, attempt.task_name, task_catalog)
-        task_dir = output_dir / attempt.task_name
+        task_dir = output_dir / attempt.task_name / f"attempt_{attempt.attempt_num}"
         screenshots_dir = task_dir / "screenshots"
         _ensure_dir(screenshots_dir)
 
@@ -332,7 +354,8 @@ def convert_legacy_run(source_dir: Path, output_dir: Path, attempt_num: int = 1)
         if result_text:
             (task_dir / "result.txt").write_text(result_text, encoding="utf-8")
 
-    print(f"Converted {len(attempts)} legacy tasks -> {output_dir}")
+    task_count = len({attempt.task_name for attempt in attempts})
+    print(f"Converted {len(attempts)} legacy attempts across {task_count} tasks -> {output_dir}")
     return output_dir
 
 
@@ -398,13 +421,72 @@ def _find_screenshot(screenshots_dir: Path, task_name: str, step: int) -> Path |
     return None
 
 
-def _iter_task_dirs(traj_dir: Path) -> list[Path]:
-    task_dirs = []
+def _attempt_num_from_name(name: str) -> int | None:
+    match = re.match(r"attempt_(\d+)$", name)
+    return int(match.group(1)) if match else None
+
+
+def _infer_task_attempt_dir(traj_path: Path, root: Path) -> TaskAttemptDir:
+    task_path = traj_path.parent
+    rel_parts = task_path.relative_to(root).parts
+
+    if len(rel_parts) >= 3 and rel_parts[0] == "_attempt_trajs":
+        attempt_num = _attempt_num_from_name(rel_parts[2])
+        return TaskAttemptDir(
+            task_name=rel_parts[1],
+            label=f"Attempt {attempt_num or rel_parts[2]}",
+            attempt_num=attempt_num,
+            path=task_path,
+        )
+
+    attempt_num = _attempt_num_from_name(task_path.name)
+    if attempt_num is not None and task_path.parent != root:
+        return TaskAttemptDir(
+            task_name=task_path.parent.name,
+            label=f"Attempt {attempt_num}",
+            attempt_num=attempt_num,
+            path=task_path,
+        )
+
+    return TaskAttemptDir(
+        task_name=task_path.name,
+        label="Attempt 1",
+        attempt_num=1,
+        path=task_path,
+    )
+
+
+def _iter_task_attempt_dirs(traj_dir: Path) -> list[TaskAttemptDir]:
+    attempts = []
     for traj_path in traj_dir.rglob("traj.json"):
-        if ".hfd" in traj_path.parts:
+        if ".hfd" in traj_path.parts or "_memgui_eval" in traj_path.parts:
             continue
-        task_dirs.append(traj_path.parent)
-    return sorted(task_dirs)
+        attempts.append(_infer_task_attempt_dir(traj_path, traj_dir))
+    return sorted(attempts, key=lambda item: (item.task_name, item.attempt_num or 9999, str(item.path)))
+
+
+def _score_from_result_text(result: str | None) -> float | None:
+    if not isinstance(result, str):
+        return None
+    for line in result.splitlines():
+        key, sep, value = line.partition(":")
+        if sep and key.strip().lower() == "score":
+            try:
+                return float(value.strip())
+            except ValueError:
+                return None
+    return None
+
+
+def _primary_attempt_index(attempts: list[dict[str, Any]]) -> int:
+    best_index = 0
+    best_score = -1.0
+    for index, attempt in enumerate(attempts):
+        score = _score_from_result_text(attempt.get("result"))
+        if score is not None and score > best_score:
+            best_score = score
+            best_index = index
+    return best_index
 
 
 def bundle_mobileworld_run(
@@ -418,17 +500,16 @@ def bundle_mobileworld_run(
         from PIL import Image  # noqa: F401
 
     combined: dict[str, Any] = {}
+    task_attempts: dict[str, list[dict[str, Any]]] = {}
     frames: list[Path] = []
     original_size: tuple[int, int] | None = None
     display_size: tuple[int, int] | None = None
-    legacy_attempts = {
-        attempt.task_name: attempt
-        for attempt in discover_legacy_attempts(traj_dir, attempt_num=1)
-    }
-    task_catalog = _load_legacy_task_catalog(traj_dir) if legacy_attempts else {}
+    task_catalog = _load_legacy_task_catalog(traj_dir)
 
-    for task_path in _iter_task_dirs(traj_dir):
-        if "_backup_" in task_path.name:
+    for attempt_info in _iter_task_attempt_dirs(traj_dir):
+        task_path = attempt_info.path
+        task_name = attempt_info.task_name
+        if "_backup_" in task_path.parts:
             continue
         traj_file = task_path / "traj.json"
         traj_data = _load_json(traj_file)
@@ -436,7 +517,7 @@ def bundle_mobileworld_run(
         steps = entry.get("traj", []) if isinstance(entry, dict) else []
         if not isinstance(steps, list):
             continue
-        fallback_goal = _task_goal_from_catalog(task_path.name, task_catalog)
+        fallback_goal = _task_goal_from_catalog(task_name, task_catalog)
         if fallback_goal:
             for step in steps:
                 if isinstance(step, dict) and not step.get("task_goal"):
@@ -448,7 +529,7 @@ def bundle_mobileworld_run(
                 if not isinstance(step, dict):
                     continue
                 step_num = int(step.get("step") or 0)
-                img_path = _find_screenshot(screenshots_dir, task_path.name, step_num)
+                img_path = _find_screenshot(screenshots_dir, task_name, step_num)
                 if img_path:
                     if original_size is None:
                         from PIL import Image
@@ -467,17 +548,25 @@ def bundle_mobileworld_run(
         result_file = task_path / "result.txt"
         if result_file.exists():
             result = result_file.read_text(encoding="utf-8").strip()
-        elif task_path.name in legacy_attempts:
-            result = _legacy_result_text(
-                legacy_attempts[task_path.name].attempt_dir,
-                task_path.name,
-                task_catalog,
-            )
 
-        combined[task_path.name] = {
+        task_attempts.setdefault(task_name, []).append({
+            "label": attempt_info.label,
+            "attempt_num": attempt_info.attempt_num,
             "traj": steps,
             "token_usage": entry.get("token_usage", {}) if isinstance(entry, dict) else {},
             "result": result,
+        })
+
+    for task_name, attempts in sorted(task_attempts.items()):
+        primary_index = _primary_attempt_index(attempts)
+        primary = attempts[primary_index]
+        combined[task_name] = {
+            "traj": primary.get("traj", []),
+            "token_usage": primary.get("token_usage", {}),
+            "result": primary.get("result"),
+            "attempts": attempts,
+            "attempt_count": len(attempts),
+            "primary_attempt_index": primary_index,
         }
 
     video_ref = None
@@ -585,13 +674,14 @@ def _encode_video(frame_paths: list[Path], video_output: Path, original_size: tu
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def prepare_input(input_path: Path, converted_root: Path, attempt_num: int) -> Path:
+def prepare_input(input_path: Path, converted_root: Path, attempt_num: int | None) -> Path:
     source_dir = extract_zip_if_needed(input_path)
     if has_mobileworld_tasks(source_dir):
         return source_dir
     attempts = discover_legacy_attempts(source_dir, attempt_num=attempt_num)
     if not attempts:
-        raise ValueError(f"No MobileWorld traj.json or legacy log.json files found under {source_dir}")
+        attempt_desc = "legacy log.json files" if attempt_num is None else f"legacy attempt_{attempt_num} log.json files"
+        raise ValueError(f"No MobileWorld traj.json or {attempt_desc} found under {source_dir}")
     output_dir = converted_root / source_dir.name
     return convert_legacy_run(source_dir, output_dir, attempt_num=attempt_num)
 
@@ -601,7 +691,12 @@ def main() -> None:
     parser.add_argument("input", help="Trajectory run directory or .zip archive")
     parser.add_argument("-o", "--output", help="Output .json.gz path")
     parser.add_argument("--with-screenshots", action="store_true", help="Bundle screenshots into an MP4")
-    parser.add_argument("--attempt-num", type=int, default=1, help="Legacy attempt number to bundle")
+    parser.add_argument(
+        "--attempt-num",
+        type=int,
+        default=0,
+        help="Legacy attempt number to bundle. Use 0 to bundle all attempts.",
+    )
     parser.add_argument(
         "--converted-root",
         default="traj_logs/_converted_mobileworld",
@@ -619,7 +714,8 @@ def main() -> None:
         sys.exit(f"Error: {input_path} does not exist")
 
     output = Path(args.output) if args.output else Path("docs/trajs") / f"{input_path.stem}.json.gz"
-    prepared_dir = prepare_input(input_path, Path(args.converted_root), args.attempt_num)
+    attempt_num = None if args.attempt_num <= 0 else args.attempt_num
+    prepared_dir = prepare_input(input_path, Path(args.converted_root), attempt_num)
     bundle_mobileworld_run(
         prepared_dir,
         output,

@@ -37,6 +37,24 @@ def _task_score(result: object) -> float | None:
     return None
 
 
+def _task_attempts(task: dict[str, object]) -> list[dict[str, object]]:
+    attempts = task.get("attempts")
+    if isinstance(attempts, list) and attempts:
+        return [attempt for attempt in attempts if isinstance(attempt, dict)]
+    return [task]
+
+
+def _aggregate_task_score(task: dict[str, object]) -> float | None:
+    scores = [
+        score
+        for score in (_task_score(attempt.get("result")) for attempt in _task_attempts(task))
+        if score is not None
+    ]
+    if scores:
+        return max(scores)
+    return _task_score(task.get("result"))
+
+
 def _read_manifest() -> set[str] | None:
     manifest_path = TRAJ_DIR / "index.json"
     if not manifest_path.exists():
@@ -149,26 +167,47 @@ def verify_bundle(path: Path, manifest_files: set[str] | None = None) -> bool:
             continue
         traj = task.get("traj")
         if not isinstance(traj, list) or not traj:
-            print(f"{path.name}: task {task_name} has no steps", file=sys.stderr)
+            print(f"{path.name}: task {task_name} has no primary steps", file=sys.stderr)
             ok = False
             continue
-        score = _task_score(task.get("result"))
+        attempts = _task_attempts(task)
+        if task.get("attempts") is not None:
+            raw_attempts = task.get("attempts")
+            if not isinstance(raw_attempts, list) or len(attempts) != len(raw_attempts) or not attempts:
+                print(f"{path.name}: task {task_name} has invalid attempts", file=sys.stderr)
+                ok = False
+            primary_index = task.get("primary_attempt_index")
+            if not isinstance(primary_index, int) or primary_index < 0 or primary_index >= len(attempts):
+                print(f"{path.name}: task {task_name} has invalid primary_attempt_index", file=sys.stderr)
+                ok = False
+            attempt_count = task.get("attempt_count")
+            if isinstance(attempt_count, int) and attempt_count != len(attempts):
+                print(f"{path.name}: task {task_name} attempt_count mismatch", file=sys.stderr)
+                ok = False
+        score = _aggregate_task_score(task)
         if score not in {0.0, 1.0}:
             unscored_tasks += 1
-        step_count += len(traj)
-        for index, step in enumerate(traj):
-            if not isinstance(step, dict):
-                print(f"{path.name}: task {task_name} step {index} is not an object", file=sys.stderr)
+
+        for attempt_index, attempt in enumerate(attempts, start=1):
+            attempt_traj = attempt.get("traj")
+            if not isinstance(attempt_traj, list) or not attempt_traj:
+                print(f"{path.name}: task {task_name} attempt {attempt_index} has no steps", file=sys.stderr)
                 ok = False
                 continue
-            frame_index = step.get("frame_index")
-            if frame_index is None:
-                continue
-            if not isinstance(frame_index, int) or frame_index < 0:
-                print(f"{path.name}: task {task_name} step {index} has invalid frame_index", file=sys.stderr)
-                ok = False
-            else:
-                frame_indices.append(frame_index)
+            step_count += len(attempt_traj)
+            for index, step in enumerate(attempt_traj):
+                if not isinstance(step, dict):
+                    print(f"{path.name}: task {task_name} attempt {attempt_index} step {index} is not an object", file=sys.stderr)
+                    ok = False
+                    continue
+                frame_index = step.get("frame_index")
+                if frame_index is None:
+                    continue
+                if not isinstance(frame_index, int) or frame_index < 0:
+                    print(f"{path.name}: task {task_name} attempt {attempt_index} step {index} has invalid frame_index", file=sys.stderr)
+                    ok = False
+                else:
+                    frame_indices.append(frame_index)
 
     total_frames = meta.get("total_frames") if isinstance(meta.get("total_frames"), int) else None
     if total_frames is not None:
