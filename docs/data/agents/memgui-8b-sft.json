@@ -1,0 +1,70 @@
+{
+  "name": "MemGUI-8B-SFT",
+  "backbone": "Qwen3-VL-8B-Instruct",
+  "type": "Agent-as-a-Model",
+  "institution": "Kuaishou",
+  "date": "2026-05-08",
+  "paperLink": "https://arxiv.org/abs/2602.06075",
+  "codeLink": "https://github.com/lgy0404/MemGUI-Bench",
+  "trajFile": "trajs/memgui-8b-sft.json.gz",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {
+      "p1": 39.3,
+      "p3": 64.3,
+      "irr": 36.3
+    },
+    "app2": {
+      "p1": 21.4,
+      "p3": 32.1,
+      "irr": 34.1
+    },
+    "app3": {
+      "p1": 17.6,
+      "p3": 23.5,
+      "irr": 24.8
+    },
+    "app4": {
+      "p1": 10.0,
+      "p3": 20.0,
+      "irr": 17.1
+    }
+  },
+  "difficulty": {
+    "easy": {
+      "p1": 25.0,
+      "p3": 39.6,
+      "irr": 20.5
+    },
+    "medium": {
+      "p1": 23.8,
+      "p3": 33.3,
+      "irr": 36.46
+    },
+    "hard": {
+      "p1": 21.1,
+      "p3": 34.2,
+      "irr": 32.58
+    }
+  },
+  "avg": {
+    "p1": 23.4,
+    "p3": 35.9
+  },
+  "metrics": {
+    "shortTerm": {
+      "irr": 30.2,
+      "mtpr": 0.37,
+      "stepRatio": 1.35,
+      "timePerStep": 16.5,
+      "costPerStep": 0.4619
+    },
+    "longTerm": {
+      "frr": 14.3,
+      "stepRatio": 1.51,
+      "timePerStep": 17.1,
+      "costPerStep": 0.4486
+    }
+  }
+}

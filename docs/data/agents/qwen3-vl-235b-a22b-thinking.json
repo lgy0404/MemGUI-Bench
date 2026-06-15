@@ -6,6 +6,7 @@
   "date": "2026-02-25",
   "paperLink": "https://arxiv.org/abs/2511.21631",
   "codeLink": "https://github.com/QwenLM/Qwen3-VL",
+  "trajFile": "trajs/qwen3-vl-235b-a22b-thinking.json.gz",
   "hasUITree": false,
   "hasLongTermMemory": false,
   "crossApp": {

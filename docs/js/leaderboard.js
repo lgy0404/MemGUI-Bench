@@ -278,8 +278,8 @@ function activeFilterSummaryParts() {
   return parts;
 }
 
-function snapshotStatusText() {
-  const filteredCount = getFilteredData().length;
+function snapshotStatusText(filteredData = getFilteredData()) {
+  const filteredCount = filteredData.length;
   const totalCount = leaderboardData?.agents?.length || filteredCount;
   const count = totalCount === filteredCount
     ? `${filteredCount} agents`
@@ -287,9 +287,9 @@ function snapshotStatusText() {
   return `${count} · ${activeFilterSummaryParts().join(' · ')}`;
 }
 
-function addSnapshotStatus(clone) {
+function addSnapshotStatus(clone, filteredData) {
   const status = document.createElement('div');
-  status.textContent = snapshotStatusText();
+  status.textContent = snapshotStatusText(filteredData);
   status.style.margin = '10px 0 14px';
   status.style.padding = '8px 10px';
   status.style.border = '1px solid #dbe4f0';
@@ -324,14 +324,14 @@ function canvasToBlob(canvas) {
   });
 }
 
-async function renderElementToPngBlob(element) {
+async function renderElementToPngBlob(element, filteredData) {
   const rect = element.getBoundingClientRect();
   const width = Math.ceil(Math.max(element.scrollWidth, rect.width));
   const height = Math.ceil(Math.max(element.scrollHeight, rect.height) + 48);
   const clone = element.cloneNode(true);
   inlineSnapshotStyles(element, clone);
   removeSnapshotExcluded(clone);
-  addSnapshotStatus(clone);
+  addSnapshotStatus(clone, filteredData);
   clone.style.width = `${width}px`;
   clone.style.maxWidth = 'none';
   clone.style.margin = '0';
@@ -508,11 +508,50 @@ function drawSnapshotText(ctx, lines, x, y, width, height, options = {}) {
   });
 }
 
-async function renderLeaderboardTableToPngBlob() {
-  const table = document.querySelector('.home-result-panel.active table.leaderboard-table');
-  if (!table) throw new Error('No active leaderboard table found');
+function createResultTableHTML(tab, data) {
+  if (tab === 'difficulty') return createDifficultyTableHTML(data);
+  if (tab === 'crossapp') return createCrossAppTableHTML(data);
+  if (tab === 'efficiency') return createEfficiencyTableHTML(data);
+  return createTableHTML(data);
+}
 
-  const model = buildSnapshotTableModel(table);
+function activeTableMatchesData(table, filteredData) {
+  const renderedRows = table?.tBodies?.[0]?.rows?.length ?? 0;
+  return renderedRows === filteredData.length;
+}
+
+function createDetachedSnapshotTable(filteredData) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'leaderboard-table-wrapper';
+  wrapper.style.position = 'fixed';
+  wrapper.style.left = '-10000px';
+  wrapper.style.top = '0';
+  wrapper.style.width = 'max-content';
+  wrapper.style.maxWidth = 'none';
+  wrapper.style.visibility = 'hidden';
+  wrapper.innerHTML = createResultTableHTML(currentTab, filteredData);
+  document.body.appendChild(wrapper);
+  return {
+    table: wrapper.querySelector('table.leaderboard-table'),
+    cleanup: () => wrapper.remove(),
+  };
+}
+
+async function renderLeaderboardTableToPngBlob(filteredData = getFilteredData()) {
+  const table = document.querySelector('.home-result-panel.active table.leaderboard-table');
+  let cleanup = null;
+  let snapshotTable = table;
+  if (!snapshotTable || !activeTableMatchesData(snapshotTable, filteredData)) {
+    const detached = createDetachedSnapshotTable(filteredData);
+    snapshotTable = detached.table;
+    cleanup = detached.cleanup;
+  }
+  if (!snapshotTable) {
+    if (cleanup) cleanup();
+    throw new Error('No active leaderboard table found');
+  }
+
+  const model = buildSnapshotTableModel(snapshotTable);
   const margin = 28;
   const titleHeight = 112;
   const footerHeight = 30;
@@ -539,7 +578,7 @@ async function renderLeaderboardTableToPngBlob() {
   ctx.fillText(`${viewMeta.title} · ${viewMeta.subtitle}`, margin, 67);
   ctx.fillStyle = '#475569';
   ctx.font = '600 13px Arial, sans-serif';
-  ctx.fillText(snapshotStatusText(), margin, 92);
+  ctx.fillText(snapshotStatusText(filteredData), margin, 92);
 
   const xOffsets = [margin];
   for (let index = 1; index < model.colWidths.length; index += 1) {
@@ -584,7 +623,11 @@ async function renderLeaderboardTableToPngBlob() {
   ctx.textAlign = 'right';
   ctx.fillText(`Generated ${new Date().toISOString().slice(0, 10)}`, width - margin, height - 14);
 
-  return canvasToBlob(canvas);
+  try {
+    return await canvasToBlob(canvas);
+  } finally {
+    if (cleanup) cleanup();
+  }
 }
 
 function setShareButtonState(button, text, isBusy = false) {
@@ -601,15 +644,16 @@ async function shareLeaderboardSnapshot() {
   setShareButtonState(button, 'Generating', true);
   try {
     syncFiltersFromControls();
-    renderTables();
+    const filteredData = getFilteredData();
+    renderTables(filteredData);
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
     let blob;
     try {
-      blob = await renderElementToPngBlob(target);
+      blob = await renderElementToPngBlob(target, filteredData);
     } catch (error) {
       console.warn('DOM snapshot failed; falling back to canvas table renderer.', error);
-      blob = await renderLeaderboardTableToPngBlob();
+      blob = await renderLeaderboardTableToPngBlob(filteredData);
     }
     const date = new Date().toISOString().slice(0, 10);
     const fileName = `memgui-bench-${currentTab}-leaderboard-${date}.png`;
@@ -866,9 +910,7 @@ function buildAgentActionLinks(agent) {
 }
 
 // Render tables
-function renderTables() {
-  const filteredData = getFilteredData();
-  
+function renderTables(filteredData = getFilteredData()) {
   // Update result count
   const totalCount = leaderboardData ? leaderboardData.agents.length : 0;
   const countEl = document.getElementById('resultCount');

@@ -14,7 +14,10 @@ TRAJ_AGENTS = [
     "agent-s2",
     "gui-owl-7b",
     "m3a",
+    "memgui-8b-sft",
+    "memgui-agent-235b",
     "mobile-agent-e",
+    "qwen3-vl-235b-a22b-thinking",
     "qwen3-vl-8b-instruct",
     "t3a",
 ]
