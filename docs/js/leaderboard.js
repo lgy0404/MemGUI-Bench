@@ -247,6 +247,65 @@ function removeSnapshotExcluded(clone) {
   clone.querySelectorAll('[data-snapshot-exclude]').forEach((node) => node.remove());
 }
 
+function selectedOptionText(selectId, fallback = '') {
+  const select = document.getElementById(selectId);
+  return select?.selectedOptions?.[0]?.textContent?.trim() || fallback;
+}
+
+function syncFiltersFromControls() {
+  const agentType = document.getElementById('agentTypeFilter');
+  const uiTree = document.getElementById('filterUITree');
+  const ltm = document.getElementById('filterLTM');
+  const sortBy = document.getElementById('sortBy');
+  if (agentType) currentFilters.agentType = agentType.value;
+  if (uiTree) currentFilters.uiTree = uiTree.value;
+  if (ltm) currentFilters.ltm = ltm.value;
+  if (sortBy) currentFilters.sortBy = sortBy.value;
+}
+
+function activeFilterSummaryParts() {
+  const parts = [];
+  if (currentFilters.agentType !== 'all') {
+    parts.push(`Type: ${selectedOptionText('agentTypeFilter', currentFilters.agentType)}`);
+  }
+  if (currentFilters.uiTree !== 'all') {
+    parts.push(`UI Tree: ${selectedOptionText('filterUITree', currentFilters.uiTree)}`);
+  }
+  if (currentFilters.ltm !== 'all') {
+    parts.push(`LTM: ${selectedOptionText('filterLTM', currentFilters.ltm)}`);
+  }
+  parts.push(`Sort: ${selectedOptionText('sortBy', currentFilters.sortBy)}`);
+  return parts;
+}
+
+function snapshotStatusText() {
+  const filteredCount = getFilteredData().length;
+  const totalCount = leaderboardData?.agents?.length || filteredCount;
+  const count = totalCount === filteredCount
+    ? `${filteredCount} agents`
+    : `Showing ${filteredCount} of ${totalCount} agents`;
+  return `${count} · ${activeFilterSummaryParts().join(' · ')}`;
+}
+
+function addSnapshotStatus(clone) {
+  const status = document.createElement('div');
+  status.textContent = snapshotStatusText();
+  status.style.margin = '10px 0 14px';
+  status.style.padding = '8px 10px';
+  status.style.border = '1px solid #dbe4f0';
+  status.style.borderRadius = '8px';
+  status.style.background = '#f8fafc';
+  status.style.color = '#475569';
+  status.style.font = '600 13px Arial, sans-serif';
+  status.style.lineHeight = '1.35';
+  const heading = clone.querySelector('.home-table-heading');
+  if (heading) {
+    heading.insertAdjacentElement('afterend', status);
+  } else {
+    clone.insertBefore(status, clone.firstChild);
+  }
+}
+
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -268,10 +327,11 @@ function canvasToBlob(canvas) {
 async function renderElementToPngBlob(element) {
   const rect = element.getBoundingClientRect();
   const width = Math.ceil(Math.max(element.scrollWidth, rect.width));
-  const height = Math.ceil(Math.max(element.scrollHeight, rect.height));
+  const height = Math.ceil(Math.max(element.scrollHeight, rect.height) + 48);
   const clone = element.cloneNode(true);
   inlineSnapshotStyles(element, clone);
   removeSnapshotExcluded(clone);
+  addSnapshotStatus(clone);
   clone.style.width = `${width}px`;
   clone.style.maxWidth = 'none';
   clone.style.margin = '0';
@@ -318,6 +378,215 @@ function downloadBlob(blob, fileName) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function textForSnapshotCell(cell) {
+  if (cell.classList.contains('model-cell')) {
+    const name = cell.querySelector('.model-name-main, .agent-name-compact, .model-name')?.textContent || '';
+    const backbone = cell.querySelector('.model-backbone-inline, .model-backbone')?.textContent || '';
+    const institution = cell.querySelector('.model-institution-text, .model-institution')?.textContent || '';
+    const date = cell.querySelector('.model-date-text, .model-date')?.textContent || '';
+    const lines = [`${name} ${backbone}`.trim()];
+    const meta = [institution.trim(), date.trim()].filter(Boolean).join(' · ');
+    if (meta) lines.push(meta);
+    return lines.filter(Boolean);
+  }
+  return [cell.textContent.replace(/\s+/g, ' ').trim()].filter(Boolean);
+}
+
+function buildSnapshotTableModel(table) {
+  const rows = Array.from(table.rows);
+  const colWidths = [];
+  const rowHeights = [];
+  const activeRowspans = [];
+  const cells = [];
+
+  rows.forEach((row, rowIndex) => {
+    let colIndex = 0;
+    while (activeRowspans[colIndex] > 0) colIndex += 1;
+    rowHeights[rowIndex] = Math.max(row.getBoundingClientRect().height || 0, 34);
+
+    Array.from(row.cells).forEach((cell) => {
+      while (activeRowspans[colIndex] > 0) colIndex += 1;
+      const colspan = Number(cell.colSpan) || 1;
+      const rowspan = Number(cell.rowSpan) || 1;
+      const rect = cell.getBoundingClientRect();
+      const width = Math.max(rect.width || 0, cell.scrollWidth || 0, 64);
+      const height = Math.max(rect.height || 0, cell.scrollHeight || 0, 34);
+      const perCol = Math.max(48, width / colspan);
+      const perRow = Math.max(28, height / rowspan);
+
+      for (let offset = 0; offset < colspan; offset += 1) {
+        const column = colIndex + offset;
+        colWidths[column] = Math.max(colWidths[column] || 0, perCol);
+      }
+      for (let offset = 0; offset < rowspan; offset += 1) {
+        const rowSlot = rowIndex + offset;
+        rowHeights[rowSlot] = Math.max(rowHeights[rowSlot] || 0, perRow);
+      }
+      for (let offset = 0; offset < colspan; offset += 1) {
+        activeRowspans[colIndex + offset] = Math.max(activeRowspans[colIndex + offset] || 0, rowspan);
+      }
+
+      cells.push({
+        cell,
+        rowIndex,
+        colIndex,
+        colspan,
+        rowspan,
+        isHeader: cell.tagName.toLowerCase() === 'th',
+        lines: textForSnapshotCell(cell),
+        className: cell.className || '',
+        rowClassName: row.className || '',
+      });
+      colIndex += colspan;
+    });
+
+    for (let index = 0; index < activeRowspans.length; index += 1) {
+      if (activeRowspans[index] > 0) activeRowspans[index] -= 1;
+    }
+  });
+
+  return {
+    cells,
+    colWidths: colWidths.map((width, index) => {
+      if (index === 0) return Math.max(58, Math.min(width, 76));
+      if (index === 1) return Math.max(240, Math.min(width, 340));
+      return Math.max(74, Math.min(width, 126));
+    }),
+    rowHeights: rowHeights.map((height, index) => Math.max(index < 2 ? 36 : 46, Math.min(height, 72))),
+  };
+}
+
+function snapshotCellFill(cellInfo) {
+  const classes = `${cellInfo.className} ${cellInfo.rowClassName}`;
+  if (cellInfo.isHeader) {
+    return classes.includes('header-group') ? '#e9eef6' : '#f8fafc';
+  }
+  if (classes.includes('best') || classes.includes('best-efficiency')) return '#dcfce7';
+  if (classes.includes('second')) return '#e0e7ff';
+  if (classes.includes('sorted-column')) return '#fff7d6';
+  if (classes.includes('first-rank')) return '#fff8db';
+  if (classes.includes('zero')) return '#fef2f2';
+  return '#ffffff';
+}
+
+function snapshotTextColor(cellInfo) {
+  const classes = cellInfo.className || '';
+  if (classes.includes('na')) return '#94a3b8';
+  if (classes.includes('zero')) return '#b91c1c';
+  if (cellInfo.isHeader) return '#0f172a';
+  return '#1f2937';
+}
+
+function fitSnapshotText(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let trimmed = text;
+  while (trimmed.length > 1 && ctx.measureText(`${trimmed}...`).width > maxWidth) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return `${trimmed}...`;
+}
+
+function drawSnapshotText(ctx, lines, x, y, width, height, options = {}) {
+  const paddingX = options.paddingX ?? 10;
+  const lineHeight = options.lineHeight ?? 16;
+  const align = options.align || 'center';
+  const visibleLines = lines.length ? lines : ['-'];
+  const totalHeight = Math.min(visibleLines.length, 2) * lineHeight;
+  let textY = y + Math.max(lineHeight, (height - totalHeight) / 2 + lineHeight - 2);
+
+  ctx.textAlign = align;
+  ctx.textBaseline = 'alphabetic';
+  const textX = align === 'left' ? x + paddingX : x + width / 2;
+  const maxWidth = width - paddingX * 2;
+  visibleLines.slice(0, 2).forEach((line, index) => {
+    ctx.fillText(fitSnapshotText(ctx, line, maxWidth), textX, textY);
+    if (index === 0 && visibleLines.length > 1) {
+      ctx.font = '400 12px Arial, sans-serif';
+      ctx.fillStyle = '#64748b';
+    }
+    textY += lineHeight;
+  });
+}
+
+async function renderLeaderboardTableToPngBlob() {
+  const table = document.querySelector('.home-result-panel.active table.leaderboard-table');
+  if (!table) throw new Error('No active leaderboard table found');
+
+  const model = buildSnapshotTableModel(table);
+  const margin = 28;
+  const titleHeight = 112;
+  const footerHeight = 30;
+  const tableWidth = model.colWidths.reduce((sum, width) => sum + width, 0);
+  const tableHeight = model.rowHeights.reduce((sum, height) => sum + height, 0);
+  const width = Math.ceil(tableWidth + margin * 2);
+  const height = Math.ceil(titleHeight + tableHeight + footerHeight + margin);
+  const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(width * scale);
+  canvas.height = Math.ceil(height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+
+  const viewMeta = resultViewMeta[currentTab] || resultViewMeta.main;
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '700 28px Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('MemGUI-Bench Leaderboard', margin, 42);
+  ctx.fillStyle = '#64748b';
+  ctx.font = '400 15px Arial, sans-serif';
+  ctx.fillText(`${viewMeta.title} · ${viewMeta.subtitle}`, margin, 67);
+  ctx.fillStyle = '#475569';
+  ctx.font = '600 13px Arial, sans-serif';
+  ctx.fillText(snapshotStatusText(), margin, 92);
+
+  const xOffsets = [margin];
+  for (let index = 1; index < model.colWidths.length; index += 1) {
+    xOffsets[index] = xOffsets[index - 1] + model.colWidths[index - 1];
+  }
+  const yOffsets = [titleHeight];
+  for (let index = 1; index < model.rowHeights.length; index += 1) {
+    yOffsets[index] = yOffsets[index - 1] + model.rowHeights[index - 1];
+  }
+
+  model.cells.forEach((cellInfo) => {
+    const x = xOffsets[cellInfo.colIndex];
+    const y = yOffsets[cellInfo.rowIndex];
+    const cellWidth = model.colWidths
+      .slice(cellInfo.colIndex, cellInfo.colIndex + cellInfo.colspan)
+      .reduce((sum, value) => sum + value, 0);
+    const cellHeight = model.rowHeights
+      .slice(cellInfo.rowIndex, cellInfo.rowIndex + cellInfo.rowspan)
+      .reduce((sum, value) => sum + value, 0);
+
+    ctx.fillStyle = snapshotCellFill(cellInfo);
+    ctx.fillRect(x, y, cellWidth, cellHeight);
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, cellWidth, cellHeight);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x + 1, y + 1, cellWidth - 2, cellHeight - 2);
+    ctx.clip();
+    ctx.fillStyle = snapshotTextColor(cellInfo);
+    ctx.font = cellInfo.isHeader ? '700 13px Arial, sans-serif' : '600 13px Arial, sans-serif';
+    drawSnapshotText(ctx, cellInfo.lines, x, y, cellWidth, cellHeight, {
+      align: cellInfo.className.includes('model-cell') ? 'left' : 'center',
+      lineHeight: cellInfo.className.includes('model-cell') ? 16 : 17,
+    });
+    ctx.restore();
+  });
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '400 12px Arial, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(`Generated ${new Date().toISOString().slice(0, 10)}`, width - margin, height - 14);
+
+  return canvasToBlob(canvas);
+}
+
 function setShareButtonState(button, text, isBusy = false) {
   const label = button.querySelector('span');
   if (label) label.textContent = text;
@@ -331,13 +600,23 @@ async function shareLeaderboardSnapshot() {
 
   setShareButtonState(button, 'Generating', true);
   try {
-    const blob = await renderElementToPngBlob(target);
+    syncFiltersFromControls();
+    renderTables();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    let blob;
+    try {
+      blob = await renderElementToPngBlob(target);
+    } catch (error) {
+      console.warn('DOM snapshot failed; falling back to canvas table renderer.', error);
+      blob = await renderLeaderboardTableToPngBlob();
+    }
     const date = new Date().toISOString().slice(0, 10);
     const fileName = `memgui-bench-${currentTab}-leaderboard-${date}.png`;
-    const file = new File([blob], fileName, { type: 'image/png' });
+    const file = typeof File === 'function' ? new File([blob], fileName, { type: 'image/png' }) : null;
     const title = `MemGUI-Bench ${resultViewMeta[currentTab]?.title || 'Leaderboard'}`;
 
-    if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+    if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
       try {
         await navigator.share({ title, text: title, files: [file] });
         setShareButtonState(button, 'Shared');
