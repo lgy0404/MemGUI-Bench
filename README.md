@@ -476,14 +476,11 @@ See [submission guide](https://lgy0404.github.io/MemGUI-Bench/submission.html) f
 ## 📝 Citation
 
 ```bibtex
-@misc{liu2026memguibenchbenchmarkingmemorymobile,
+@article{liu2026memgui,
   title={MemGUI-Bench: Benchmarking Memory of Mobile GUI Agents in Dynamic Environments},
-  author={Guangyi Liu and Pengxiang Zhao and Yaozhen Liang and Qinyi Luo and Shunye Tang and Yuxiang Chai and Weifeng Lin and Han Xiao and WenHao Wang and Siheng Chen and Zhengxi Lu and Gao Wu and Hao Wang and Liang Liu and Yong Liu},
-  year={2026},
-  eprint={2602.06075},
-  archivePrefix={arXiv},
-  primaryClass={cs.DC},
-  url={https://arxiv.org/abs/2602.06075},
+  author={Liu, Guangyi and Zhao, Pengxiang and Liang, Yaozhen and Luo, Qinyi and Tang, Shunye and Chai, Yuxiang and Lin, Weifeng and Xiao, Han and Wang, WenHao and Chen, Siheng and others},
+  journal={arXiv preprint arXiv:2602.06075},
+  year={2026}
 }
 ```
 
