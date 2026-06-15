@@ -389,6 +389,7 @@ Create or update a metadata JSON under `docs/data/agents/`:
   "date": "2026-02-03",
   "paperLink": "https://arxiv.org/...",
   "codeLink": "https://github.com/...",
+  "trajFile": "trajs/your-agent-name.json.gz",
   "hasUITree": true,
   "hasLongTermMemory": false
 }
@@ -396,19 +397,32 @@ Create or update a metadata JSON under `docs/data/agents/`:
 
 Submit via Pull Request to [lgy0404/MemGUI-Bench](https://github.com/lgy0404/MemGUI-Bench) → `docs/data/agents/`
 
+Use `trajFile` only when you also submit the matching trajectory preview pair.
+
 ### 2. Upload Trajectories (Optional but Recommended)
 
-Compress and submit via PR to [lgy0404/memgui-bench-trajs](https://huggingface.co/datasets/lgy0404/memgui-bench-trajs):
+Generate the static trajectory preview bundle and submit the two output files
+via PR to [lgy0404/memgui-bench-trajs](https://huggingface.co/datasets/lgy0404/memgui-bench-trajs):
 
 ```bash
-# Compress MobileWorld trajectory folder
-cd traj_logs && zip -r your-agent-name.zip memgui-run-name
+# Generate the preview bundle from your local run
+python3 docs/bundle_trajs.py traj_logs/memgui-run-name \
+  -o docs/trajs/your-agent-name.json.gz \
+  --with-screenshots
+
+# This creates:
+#   docs/trajs/your-agent-name.json.gz
+#   docs/trajs/your-agent-name.mp4
 
 # Upload via HuggingFace Web UI:
 # 1. Go to https://huggingface.co/datasets/lgy0404/memgui-bench-trajs
 # 2. Click "Community" → "New Pull Request" → "Upload files"
-# 3. Upload your zip file and submit the PR
+# 3. Upload both files to site/trajs/ and submit the PR
 ```
+
+Use the same lowercase hyphenated `your-agent-name` as your
+`docs/data/agents/your-agent-name.json` file. Maintainers will review the pair
+and update the public trajectory manifest after acceptance.
 
 See [submission guide](https://lgy0404.github.io/MemGUI-Bench/submission.html) for details.
 

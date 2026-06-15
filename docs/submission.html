@@ -76,7 +76,7 @@
           <div class="step-card">
             <div class="step-number">3</div>
             <h4>Submit via GitHub</h4>
-            <p>Submit the results JSON via GitHub PR. Optionally upload the zipped <code>traj_logs</code> run to HuggingFace.</p>
+            <p>Submit the results JSON via GitHub PR. Optionally upload the generated <code>.json.gz</code> and <code>.mp4</code> trajectory preview files to HuggingFace.</p>
           </div>
         </div>
       </div>
@@ -102,12 +102,12 @@
 
       <div class="method-card">
         <h4><i class="bi bi-database"></i> Trajectories → HuggingFace Dataset</h4>
-            <p>Upload your execution trajectories via Pull Request:</p>
+            <p>Upload the static trajectory preview files via HuggingFace Pull Request:</p>
             <ol>
-              <li>Compress your local run folder: <code>cd traj_logs &amp;&amp; zip -r your-agent-name.zip {run-name}</code></li>
+              <li>Generate <code>docs/trajs/{agent-id}.json.gz</code> and <code>docs/trajs/{agent-id}.mp4</code> from your run</li>
               <li>Go to <a href="https://huggingface.co/datasets/lgy0404/memgui-bench-trajs" target="_blank">lgy0404/memgui-bench-trajs</a></li>
               <li>Click <strong>Community</strong> tab → <strong>New Pull Request</strong> → <strong>Upload files</strong></li>
-              <li>Upload your zip file and submit the PR</li>
+              <li>Upload both files under <code>site/trajs/</code> and submit the PR</li>
         </ol>
       </div>
     </section>
@@ -139,6 +139,7 @@
   "date": "",                         // Submission date (YYYY-MM-DD)
   "paperLink": "",                    // Paper URL (arxiv, etc.)
   "codeLink": "",                     // Code repository URL
+  "trajFile": "trajs/your-agent-name.json.gz", // Optional; include when trajectory preview files are submitted
   "hasUITree": false,                 // true if agent uses UI tree/accessibility tree
   "hasLongTermMemory": false,         // true if agent has long-term memory capability
   
@@ -183,6 +184,7 @@
           <tr><td><code>date</code></td><td>Submission date</td><td>"2026-02-03"</td></tr>
           <tr><td><code>paperLink</code></td><td>Paper URL</td><td>"https://arxiv.org/abs/..."</td></tr>
           <tr><td><code>codeLink</code></td><td>Code repository</td><td>"https://github.com/..."</td></tr>
+          <tr><td><code>trajFile</code></td><td>Logical trajectory bundle path, only when preview files are submitted</td><td>"trajs/your-agent-name.json.gz"</td></tr>
           <tr><td><code>hasUITree</code></td><td>Uses accessibility tree?</td><td>true / false</td></tr>
           <tr><td><code>hasLongTermMemory</code></td><td>Has long-term memory?</td><td>true / false</td></tr>
         </table>
@@ -233,27 +235,33 @@
       </div>
 
       <h4>Upload to HuggingFace</h4>
-          <p>Compress your local trajectory folder and submit via Pull Request to <a href="https://huggingface.co/datasets/lgy0404/memgui-bench-trajs" target="_blank">lgy0404/memgui-bench-trajs</a>:</p>
+          <p>Generate the static trajectory preview bundle and submit the two output files via Pull Request to <a href="https://huggingface.co/datasets/lgy0404/memgui-bench-trajs" target="_blank">lgy0404/memgui-bench-trajs</a>:</p>
       
       <div class="code-block">
-<pre><code># Step 1: Compress the local MobileWorld trajectory folder
-cd traj_logs
-zip -r your-agent-name.zip your-run-name
+<pre><code># Step 1: Generate the static preview bundle
+python3 docs/bundle_trajs.py traj_logs/your-run-name \
+  -o docs/trajs/your-agent-name.json.gz \
+  --with-screenshots
+
+# This creates:
+#   docs/trajs/your-agent-name.json.gz
+#   docs/trajs/your-agent-name.mp4
 
 # Step 2: Upload via HuggingFace Web UI
 # 1. Go to https://huggingface.co/datasets/lgy0404/memgui-bench-trajs
 # 2. Click "Community" tab → "New Pull Request" → "Upload files"
-# 3. Upload your zip file and submit the PR</code></pre>
+# 3. Upload both files to site/trajs/ and submit the PR</code></pre>
           </div>
 
           <div class="info-box">
-            <h5><i class="bi bi-file-zip"></i> File Naming Convention</h5>
-            <p>Name your zip file to match your agent JSON filename (lowercase with hyphens), e.g.:</p>
+            <h5><i class="bi bi-file-earmark-play"></i> File Naming Convention</h5>
+            <p>Name both preview files to match your agent JSON filename (lowercase with hyphens), e.g.:</p>
             <ul>
-              <li><code>m3a.zip</code></li>
-              <li><code>appagent.zip</code></li>
-              <li><code>mobile-agent-v2.zip</code></li>
+              <li><code>docs/trajs/m3a.json.gz</code> and <code>docs/trajs/m3a.mp4</code></li>
+              <li><code>docs/trajs/appagent.json.gz</code> and <code>docs/trajs/appagent.mp4</code></li>
+              <li><code>docs/trajs/mobile-agent-v2.json.gz</code> and <code>docs/trajs/mobile-agent-v2.mp4</code></li>
             </ul>
+            <p>Do not submit raw <code>traj_logs</code> zip files for leaderboard previews. Maintainers will review the PR and update the public manifest after the files are accepted.</p>
       </div>
     </section>
 
@@ -280,7 +288,7 @@ zip -r your-agent-name.zip your-run-name
           <div class="process-icon"><i class="bi bi-3-circle-fill"></i></div>
           <div class="process-content">
             <h5>Results Verification</h5>
-            <p>If trajectories are provided on HuggingFace, we run spot-checks using MemGUI-Eval.</p>
+            <p>If trajectory preview files are provided on HuggingFace, we validate the bundle and inspect random task traces.</p>
           </div>
         </div>
         <div class="process-step">
@@ -359,7 +367,7 @@ zip -r your-agent-name.zip your-run-name
               We perform the following verification steps:
               <ol>
                 <li>Check format compliance and metric calculations</li>
-                <li>If trajectories are provided on HuggingFace, run MemGUI-Eval on a random sample (10-20% of tasks)</li>
+                <li>If trajectory preview files are provided on HuggingFace, validate the <code>.json.gz</code>/<code>.mp4</code> pair and inspect random task traces</li>
                 <li>Compare against known baselines for sanity checks</li>
                 <li>For significant improvements, we may request additional evidence or reproduction instructions</li>
               </ol>

@@ -127,6 +127,16 @@ hf upload lgy0404/memgui-bench-trajs docs/trajs site/trajs \
   --commit-message "Add website trajectory preview bundles"
 ```
 
+External leaderboard submissions should provide the generated preview pair,
+not raw trajectory zips:
+
+- `docs/trajs/<agent-id>.json.gz`
+- `docs/trajs/<agent-id>.mp4`
+
+Those files are uploaded to the dataset under `site/trajs/`. The agent id should
+match the corresponding `docs/data/agents/<agent-id>.json` file. Maintainers
+update the public `site/trajs/index.json` manifest after review.
+
 The main download script stores source zips in `traj_logs/`, downloads agents in
 parallel by default, converts legacy MemGUI-Eval logs when needed, and writes
 final `.json.gz` plus `.mp4` bundles to the ignored local `docs/trajs/`
