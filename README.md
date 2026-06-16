@@ -47,12 +47,13 @@
 ---
 
 ## 📢 Updates
-- **2026-06-11**: 🚀 Merged [PR #3](https://github.com/lgy0404/MemGUI-Bench/pull/3), refactoring MemGUI-Bench to a [MobileWorld](https://github.com/Tongyi-MAI/MobileWorld)-style runtime and trajectory viewer. We will release more frontier model evaluation results on MemGUI-Bench soon!
-- **2026-02-15**: 🎉 MemGUI-Bench adopted by [Mobile-Agent-v3.5](https://github.com/X-PLUG/MobileAgent)! Congrats to the Tongyi Lab team for achieving **27.1%** on Easy tasks with GUI-Owl-1.5-32B. We welcome more agents to challenge the full benchmark! 🚀
-- **2026-02-09**: 🗂️ Benchmark tasks now available on HuggingFace: [lgy0404/MemGUI-Bench](https://huggingface.co/datasets/lgy0404/MemGUI-Bench) 
-- **2026-02-09**: 📄 Paper released on arXiv! Check out our paper: [arXiv:2602.06075](https://arxiv.org/abs/2602.06075) 
-- **2026-02-03**: Initial release of MemGUI-Bench benchmark. Check out our [website](https://lgy0404.github.io/MemGUI-Bench/).
 
+- **2026-06-16**: 📣 Preview: MemGUI-Agent shows promising results on long-horizon GUI agent tasks. The [leaderboard](https://lgy0404.github.io/MemGUI-Bench/) has been updated with evaluation results and trajectory previews. Paper is coming!
+- **2026-06-11**: 🚀 Refactoring MemGUI-Bench to a [MobileWorld](https://github.com/Tongyi-MAI/MobileWorld)-style runtime and trajectory viewer. We will release more frontier model evaluation results on MemGUI-Bench soon!
+- **2026-02-15**: 🎉 MemGUI-Bench adopted by [Mobile-Agent-v3.5](https://github.com/X-PLUG/MobileAgent)! Congrats to the Tongyi Lab team for achieving **27.1%** on Easy tasks with GUI-Owl-1.5-32B. We welcome more agents to challenge the full benchmark! 🚀
+- **2026-02-09**: 🗂️ Benchmark tasks now available on HuggingFace: [lgy0404/MemGUI-Bench](https://huggingface.co/datasets/lgy0404/MemGUI-Bench)
+- **2026-02-09**: 📄 Paper released on arXiv! Check out our paper: [arXiv:2602.06075](https://arxiv.org/abs/2602.06075)
+- **2026-02-03**: Initial release of MemGUI-Bench benchmark. Check out our [website](https://lgy0404.github.io/MemGUI-Bench/).
 
 ## 💾 Installation
 
@@ -93,10 +94,12 @@ cp .env.example .env
 Edit the `.env` file and configure the following parameters.
 
 **Required for Agent Evaluation:**
+
 - `BASE_URL`: OpenAI-compatible base URL for the agent model
 - `API_KEY`: API key for the agent model
 
 **Required for MemGUI-Eval:**
+
 - `MEMGUI_API_KEY`: API key for MemGUI-Eval
 - `MEMGUI_STEP_DESC_MODEL`: Step-description model
 - `MEMGUI_STEP_DESC_BASE_URL`: Optional step-description endpoint; leave empty to use `BASE_URL`
@@ -128,6 +131,7 @@ fair across submissions. During debugging, you may use other compatible models
 to reduce cost or latency.
 
 > **Note**:
+>
 > - `mg env run` mounts local `.env` into each container. `mg eval` runs on the
 >   host and writes trajectories directly into local `traj_logs/`.
 
@@ -148,6 +152,7 @@ sudo uv run mg env run --count 2
 ```
 
 This launches 2 ready MemGUI backend containers with:
+
 - `--count 2`: Number of parallel containers
 - `--launch-interval 30`: Default wait time between container launches
 - `--emulator-timeout 1200`: Default timeout for MemGUI AVD cold start
@@ -201,45 +206,45 @@ uv run mg eval \
 
 ### Available Commands
 
-| Command | Description |
-| ------- | ----------- |
-| `sudo uv run mg env check` | Check Docker/KVM/.env and pull the default prebuilt runtime image |
-| `sudo uv run mg env build` | Optional: build a local MobileWorld-compatible runtime image from the MemGUI base image |
-| `sudo uv run mg env run` | Launch backend container(s) with local `.env` mounted |
-| `sudo uv run mg env list` | List MemGUI-Bench containers |
-| `sudo uv run mg env exec` | Open a shell or run a command in a container for debugging |
-| `sudo uv run mg env rm` | Remove MemGUI-Bench containers |
-| `uv run mg env init` | Create `.env` from `.env.example` |
-| `uv run mg server` | Run the backend service inside a container; normally started by `mg env run` |
-| `sudo uv run mg eval` | Run execution/evaluation across MemGUI containers |
-| `uv run mg info task` | List or filter benchmark tasks |
-| `uv run mg info agent` | List configured agents |
-| `uv run mg info app` | Show app-level task counts |
-| `uv run mg logs view` | Launch the interactive trajectory viewer |
-| `uv run mg logs results` | Print the same compact MemGUI progress and summary metrics as `logs view` (`Evaluating`, `P@k`, `IRR`, `MTPR`, `FRR`) |
-| `uv run mg logs export` | Export a static HTML trajectory site |
+| Command                      | Description                                                                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `sudo uv run mg env check` | Check Docker/KVM/.env and pull the default prebuilt runtime image                                                                 |
+| `sudo uv run mg env build` | Optional: build a local MobileWorld-compatible runtime image from the MemGUI base image                                           |
+| `sudo uv run mg env run`   | Launch backend container(s) with local `.env` mounted                                                                           |
+| `sudo uv run mg env list`  | List MemGUI-Bench containers                                                                                                      |
+| `sudo uv run mg env exec`  | Open a shell or run a command in a container for debugging                                                                        |
+| `sudo uv run mg env rm`    | Remove MemGUI-Bench containers                                                                                                    |
+| `uv run mg env init`       | Create `.env` from `.env.example`                                                                                             |
+| `uv run mg server`         | Run the backend service inside a container; normally started by `mg env run`                                                    |
+| `sudo uv run mg eval`      | Run execution/evaluation across MemGUI containers                                                                                 |
+| `uv run mg info task`      | List or filter benchmark tasks                                                                                                    |
+| `uv run mg info agent`     | List configured agents                                                                                                            |
+| `uv run mg info app`       | Show app-level task counts                                                                                                        |
+| `uv run mg logs view`      | Launch the interactive trajectory viewer                                                                                          |
+| `uv run mg logs results`   | Print the same compact MemGUI progress and summary metrics as `logs view` (`Evaluating`, `P@k`, `IRR`, `MTPR`, `FRR`) |
+| `uv run mg logs export`    | Export a static HTML trajectory site                                                                                              |
 
 ### `mg eval` Arguments
 
-| Argument            | Default  | Description                                |
-| ------------------- | -------- | ------------------------------------------ |
-| `--agent-type` | required | Registered MobileWorld agent name or custom agent path |
-| `--model-name` | `.env`/agent default | Agent model name |
-| `--llm-base-url` | `.env`/agent default | OpenAI-compatible base URL |
-| `--api-key` | `API_KEY` | Agent API key |
-| `--task` / `--tasks` | all when omitted | Task id(s), comma-separated, or `ALL` |
-| `--task-file` / `--task-csv` | none | MemGUI CSV subset to run, e.g. `data/memgui-tasks-40.csv` |
-| `--difficulty` / `--task-difficulty` | none | MemGUI difficulty filter: `easy`/`medium`/`hard`, `1`/`2`/`3`, or `简单`/`中等`/`困难`; comma-separated values are supported |
-| `--pass-at-k` / `--attempts` | `1` | Run each MemGUI task until one attempt succeeds or K attempts are exhausted, then aggregate pass@K |
-| `--suite-family` | `memgui_bench` | Benchmark suite family |
-| `--log-file-root` | `./traj_logs` | Local root for MobileWorld trajectory logs |
-| `--aw-host` | auto | Comma-separated backend URL(s); auto-discovered when omitted |
-| `--max-round` / `--max-step` | MemGUI task budget | Maximum agent steps per task; omitted uses `int(golden_steps * 2.5 + 1)`, `-1` means unlimited |
-| `--step-wait-time` | `3.0` | Seconds to wait after each action before the next screenshot for MemGUI-Bench |
-| `--timeout` | none | Optional per-task timeout in seconds; timed-out tasks are recorded as failed and the run continues |
-| `--max-concurrency` | number of containers | Maximum concurrent tasks |
-| `--shuffle-tasks` | false | Shuffle task order before scheduling |
-| `--dry-run` | false | Resolve tasks/backends without execution |
+| Argument                                 | Default                | Description                                                                                                                                   |
+| ---------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--agent-type`                         | required               | Registered MobileWorld agent name or custom agent path                                                                                        |
+| `--model-name`                         | `.env`/agent default | Agent model name                                                                                                                              |
+| `--llm-base-url`                       | `.env`/agent default | OpenAI-compatible base URL                                                                                                                    |
+| `--api-key`                            | `API_KEY`            | Agent API key                                                                                                                                 |
+| `--task` / `--tasks`                 | all when omitted       | Task id(s), comma-separated, or `ALL`                                                                                                       |
+| `--task-file` / `--task-csv`         | none                   | MemGUI CSV subset to run, e.g.`data/memgui-tasks-40.csv`                                                                                    |
+| `--difficulty` / `--task-difficulty` | none                   | MemGUI difficulty filter:`easy`/`medium`/`hard`, `1`/`2`/`3`, or `简单`/`中等`/`困难`; comma-separated values are supported |
+| `--pass-at-k` / `--attempts`         | `1`                  | Run each MemGUI task until one attempt succeeds or K attempts are exhausted, then aggregate pass@K                                            |
+| `--suite-family`                       | `memgui_bench`       | Benchmark suite family                                                                                                                        |
+| `--log-file-root`                      | `./traj_logs`        | Local root for MobileWorld trajectory logs                                                                                                    |
+| `--aw-host`                            | auto                   | Comma-separated backend URL(s); auto-discovered when omitted                                                                                  |
+| `--max-round` / `--max-step`         | MemGUI task budget     | Maximum agent steps per task; omitted uses `int(golden_steps * 2.5 + 1)`, `-1` means unlimited                                            |
+| `--step-wait-time`                     | `3.0`                | Seconds to wait after each action before the next screenshot for MemGUI-Bench                                                                 |
+| `--timeout`                            | none                   | Optional per-task timeout in seconds; timed-out tasks are recorded as failed and the run continues                                            |
+| `--max-concurrency`                    | number of containers   | Maximum concurrent tasks                                                                                                                      |
+| `--shuffle-tasks`                      | false                  | Shuffle task order before scheduling                                                                                                          |
+| `--dry-run`                            | false                  | Resolve tasks/backends without execution                                                                                                      |
 
 ### Examples
 
