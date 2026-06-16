@@ -376,7 +376,7 @@ def _build_index_stats_html(stats: dict, suite_family: str) -> str:
         </div>
         <div class="stat-card">
             <div class="stat-value danger">{stats["stale"]}</div>
-            <div class="stat-label">Stale</div>
+            <div class="stat-label">Interrupted</div>
         </div>
         <div class="stat-card">
             <div class="stat-value success">{stats["success"]}</div>
@@ -436,6 +436,7 @@ def _generate_index_page(
             "Awaiting Eval": "neutral",
             "Running": "running",
             "Stale": "stale",
+            "Interrupted": "stale",
         }.get(task["status"], "neutral")
 
         screenshot_html = (
@@ -645,6 +646,7 @@ def _generate_task_page(
         "Awaiting Eval": "neutral",
         "Running": "running",
         "Stale": "stale",
+        "Interrupted": "stale",
     }.get(task_info["status"], "neutral")
 
     # Escape steps data for JS

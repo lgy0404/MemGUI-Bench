@@ -39,6 +39,7 @@ _MEMGUI_DIFFICULTY_ALIASES = {
     "困难": "3",
 }
 STALE_TASK_SECONDS = 600
+TERMINAL_RUN_STATUSES = {"completed", "failed", "interrupted", "cancelled", "stopped"}
 
 
 def parse_result_file(result_file: str) -> tuple[float | None, str | None]:
@@ -1164,7 +1165,7 @@ def get_task_status(task_folder: str) -> tuple[str, float | None, str | None]:
     - "Evaluating": MemGUI-Eval has created evaluator artifacts but no CSV result yet
     - "Awaiting Eval": MemGUI-Eval workspace exists but evaluation has not started
     - "Running": no result.txt and task activity updated within 10 minutes
-    - "Stale": no result.txt and task activity older than 10 minutes
+    - "Interrupted": no result.txt and the run has ended or task activity is stale
     """
     log_root, task_name, attempt_num = _task_folder_eval_lookup(task_folder)
     pending_eval_attempts = get_memgui_pending_eval_attempts(
@@ -1231,13 +1232,26 @@ def get_task_status(task_folder: str) -> tuple[str, float | None, str | None]:
         except OSError:
             pass
 
+    metadata = read_log_metadata(log_root)
+    run_status = str(metadata.get("run_status") or "").strip().lower()
+    if run_status in TERMINAL_RUN_STATUSES:
+        return (
+            "Interrupted",
+            None,
+            "Task has trajectory activity but no result.txt after the eval run ended",
+        )
+
     if latest_activity_time > 0:
         age_seconds = time.time() - latest_activity_time
         if age_seconds > STALE_TASK_SECONDS:
-            return "Stale", None, None
+            return (
+                "Interrupted",
+                None,
+                f"No result.txt and no task activity for {int(age_seconds)} seconds",
+            )
         return "Running", None, None
 
-    return "Stale", None, None
+    return "Interrupted", None, "Task folder has no result.txt or trajectory activity"
 
 
 def get_task_info(log_root: str, task_name: str, attempt: int = 1) -> dict | None:
@@ -1460,7 +1474,7 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
             evaluating_count += 1
         elif status == "Awaiting Eval":
             awaiting_eval_count += 1
-        elif status == "Stale":
+        elif status in {"Stale", "Interrupted"}:
             stale_count += 1
         else:
             running_count += 1

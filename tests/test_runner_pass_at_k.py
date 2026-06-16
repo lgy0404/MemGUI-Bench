@@ -5,6 +5,8 @@ import json
 from queue import Queue
 from types import SimpleNamespace
 
+import pytest
+
 from mobile_world.core import runner
 
 
@@ -139,3 +141,32 @@ def test_runner_writes_selected_task_set_metadata(tmp_path):
     assert metadata["task_file"] == "data/memgui-tasks-40.csv"
     assert metadata["difficulty"] == "easy"
     assert metadata["pass_at_k"] == 3
+
+
+def test_runner_marks_metadata_failed_when_run_errors(monkeypatch, tmp_path):
+    tasks = ["005-SearchSportsScores"]
+
+    def fail_scan(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(runner, "_scan_finished_memgui_pass_at_k_tasks", fail_scan)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        runner.run_agent_with_evaluation(
+            agent_type="qwen3vl",
+            model_name="model",
+            llm_base_url="http://llm",
+            log_file_root=str(tmp_path),
+            tasks=tasks,
+            max_step=None,
+            aw_urls=[],
+            api_key="key",
+            dry_run=True,
+            suite_family="memgui_bench",
+            pass_at_k=1,
+        )
+
+    metadata = json.loads((tmp_path / "metadata.json").read_text())
+    assert metadata["run_status"] == "failed"
+    assert metadata["run_error_type"] == "RuntimeError"
+    assert metadata["run_error"] == "boom"

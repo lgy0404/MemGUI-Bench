@@ -3,7 +3,7 @@ set -euo pipefail
 
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/root/.android}"
 export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-export AVD_NAME="${AVD_NAME:-MemGUI-AVD-250704}"
+export AVD_NAME="${AVD_NAME:-MemGUI-AVD-260614}"
 export EMULATOR_NAME="${EMULATOR_NAME:-$AVD_NAME}"
 export PATH="/root/.local/bin:${ANDROID_SDK_ROOT}/emulator:${ANDROID_SDK_ROOT}/tools:${ANDROID_SDK_ROOT}/tools/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
 PYTHON_BIN="${PYTHON_BIN:-/app/service/.venv/bin/python}"

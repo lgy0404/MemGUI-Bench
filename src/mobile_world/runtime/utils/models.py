@@ -31,7 +31,7 @@ BASE_IMAGE = (
 )
 DEFAULT_IMAGE = (
     "crpi-6p9eo5da91i2tx5v.cn-hangzhou.personal.cr.aliyuncs.com/"
-    "memgui/memgui-bench:26061101"
+    "memgui/memgui-bench:26061401"
 )
 DEFAULT_NAME_PREFIX = "memgui_bench_env"
 DEFAULT_EMULATOR_TIMEOUT = 1200

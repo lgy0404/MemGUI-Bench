@@ -67,6 +67,7 @@ def register_routes(rt, base_path: str = "/"):
             "Awaiting Eval": "neutral",
             "Running": "running",
             "Stale": "stale",
+            "Interrupted": "stale",
         }
         return Span(status, cls=f"badge {cls_map.get(status, 'neutral')}")
 
@@ -304,7 +305,7 @@ def register_routes(rt, base_path: str = "/"):
                 ),
                 Div(
                     Div(stats["stale"], cls="stat-value danger"),
-                    Div("Stale", cls="stat-label"),
+                    Div("Interrupted", cls="stat-label"),
                     cls="stat-card",
                 ),
                 Div(
@@ -558,7 +559,7 @@ def register_routes(rt, base_path: str = "/"):
                     continue
                 if status_filter == "awaiting_eval" and status != "Awaiting Eval":
                     continue
-                if status_filter == "stale" and status != "Stale":
+                if status_filter == "stale" and status not in {"Stale", "Interrupted"}:
                     continue
                 if status_filter == "finished" and status != "Finished":
                     continue
@@ -2060,7 +2061,7 @@ def register_routes(rt, base_path: str = "/"):
                                         selected=status_filter == "awaiting_eval",
                                     ),
                                     Option(
-                                        "Stale",
+                                        "Interrupted",
                                         value="stale",
                                         selected=status_filter == "stale",
                                     ),

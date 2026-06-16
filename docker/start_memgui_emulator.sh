@@ -10,7 +10,7 @@ fi
 
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/root/.android}"
 export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-export AVD_NAME="${AVD_NAME:-MemGUI-AVD-250704}"
+export AVD_NAME="${AVD_NAME:-MemGUI-AVD-260614}"
 export EMULATOR_NAME="${EMULATOR_NAME:-$AVD_NAME}"
 export PATH="/root/.local/bin:${ANDROID_SDK_ROOT}/emulator:${ANDROID_SDK_ROOT}/tools:${ANDROID_SDK_ROOT}/tools/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
 export ADB_VENDOR_KEYS="${ADB_VENDOR_KEYS:-/root/.android/adbkey}"
@@ -18,8 +18,10 @@ export ADB_VENDOR_KEYS="${ADB_VENDOR_KEYS:-/root/.android/adbkey}"
 CONSOLE_PORT="${EMULATOR_CONSOLE_PORT:-5554}"
 ADB_PORT="${EMULATOR_ADB_PORT:-5555}"
 GRPC_PORT="${EMULATOR_GRPC_PORT:-8554}"
-MEMORY="${EMULATOR_MEMORY:-2048}"
+MEMORY="${EMULATOR_MEMORY:-8192}"
 TIMEOUT="${EMULATOR_TIMEOUT:-1200}"
+MAX_START_ATTEMPTS="${MEMGUI_EMULATOR_START_ATTEMPTS:-4}"
+UNAUTHORIZED_RESTART_SECONDS="${MEMGUI_UNAUTHORIZED_RESTART_SECONDS:-90}"
 BOOT_SNAPSHOT="${MEMGUI_BOOT_SNAPSHOT:-}"
 INIT_SNAPSHOT="${MEMGUI_INIT_SNAPSHOT:-}"
 DEVICE_ID="emulator-${CONSOLE_PORT}"
@@ -32,6 +34,7 @@ cleanup_existing_emulator() {
 
   local pattern="@${EMULATOR_NAME}|-ports ${CONSOLE_PORT},${ADB_PORT}|-grpc ${GRPC_PORT}"
   local pids
+  pkill -f "authorize_adb_grpc.py .*--device ${DEVICE_ID}" 2>/dev/null || true
   pids="$(pgrep -f "${pattern}" || true)"
   if [ -n "${pids}" ]; then
     echo "Stopping stale emulator/qemu process(es): ${pids}"
@@ -49,18 +52,26 @@ cleanup_existing_emulator() {
   rm -f /tmp/android-*/emu-crash-*.db.lock 2>/dev/null || true
 }
 
-disable_avd_modem() {
+set_avd_modem() {
+  local modem_enabled="${MEMGUI_ENABLE_GSM_MODEM:-true}"
+  local modem_value="true"
   local avd_file
+
+  if [ "${modem_enabled}" = "false" ] || [ "${modem_enabled}" = "0" ]; then
+    modem_value="false"
+  fi
+
   for avd_file in "${AVD_DIR}/config.ini" "${AVD_DIR}/hardware-qemu.ini"; do
     if [ ! -f "${avd_file}" ]; then
       continue
     fi
     if grep -q '^hw\.gsmModem' "${avd_file}"; then
-      sed -i 's/^hw\.gsmModem.*/hw.gsmModem = false/' "${avd_file}"
+      sed -i "s/^hw\\.gsmModem.*/hw.gsmModem = ${modem_value}/" "${avd_file}"
     else
-      printf '\nhw.gsmModem = false\n' >> "${avd_file}"
+      printf '\nhw.gsmModem = %s\n' "${modem_value}" >> "${avd_file}"
     fi
   done
+  echo "AVD GSM modem enabled: ${modem_value}"
 }
 
 preauthorize_adb_key() {
@@ -95,10 +106,30 @@ activate_adb_keyboard() {
   fi
 }
 
+start_emulator_process() {
+  echo "Starting MemGUI emulator: emulator ${options[*]}"
+  nohup emulator "${options[@]}" >/tmp/memgui-emulator.nohup 2>&1 &
+}
+
+start_adb_authorizer() {
+  if [ "${AUTO_AUTHORIZE_ADB:-true}" = "false" ] || [ "${AUTO_AUTHORIZE_ADB:-true}" = "0" ]; then
+    return
+  fi
+
+  (
+    cd /app/service
+    .venv/bin/python /app/docker/authorize_adb_grpc.py \
+      --device "${DEVICE_ID}" \
+      --grpc-port "${GRPC_PORT}" \
+      --timeout "${TIMEOUT}" \
+      --tap-always-allow
+  ) >> /var/log/adb-auth.log 2>&1 &
+}
+
 cleanup_existing_emulator
 adb kill-server >/dev/null 2>&1 || true
 adb start-server >/dev/null
-disable_avd_modem
+set_avd_modem
 preauthorize_adb_key
 
 options=(
@@ -126,21 +157,12 @@ else
   options+=(-accel off)
 fi
 
-echo "Starting MemGUI emulator: emulator ${options[*]}"
-nohup emulator "${options[@]}" >/tmp/memgui-emulator.nohup 2>&1 &
-
-if [ "${AUTO_AUTHORIZE_ADB:-true}" != "false" ] && [ "${AUTO_AUTHORIZE_ADB:-true}" != "0" ]; then
-  (
-    cd /app/service
-    .venv/bin/python /app/docker/authorize_adb_grpc.py \
-      --device "${DEVICE_ID}" \
-      --grpc-port "${GRPC_PORT}" \
-      --timeout "${TIMEOUT}" \
-      --tap-always-allow
-  ) >> /var/log/adb-auth.log 2>&1 &
-fi
+start_emulator_process
+start_adb_authorizer
 
 start_time="$(date +%s)"
+start_attempt=1
+unauthorized_since=0
 spinner=( "..." "...." "....." )
 i=0
 while true; do
@@ -163,6 +185,32 @@ while true; do
     fi
     adb devices -l
     exit 0
+  fi
+
+  if [[ "${state}" == *"unauthorized"* ]]; then
+    now="$(date +%s)"
+    if [ "${unauthorized_since}" -eq 0 ]; then
+      unauthorized_since="${now}"
+    fi
+    unauthorized_elapsed="$((now - unauthorized_since))"
+    if [ "${unauthorized_elapsed}" -ge "${UNAUTHORIZED_RESTART_SECONDS}" ]; then
+      if [ "${start_attempt}" -lt "${MAX_START_ATTEMPTS}" ]; then
+        start_attempt="$((start_attempt + 1))"
+        echo "ADB stayed unauthorized for ${unauthorized_elapsed}s; restarting emulator (attempt ${start_attempt}/${MAX_START_ATTEMPTS})"
+        cleanup_existing_emulator
+        adb kill-server >/dev/null 2>&1 || true
+        adb start-server >/dev/null
+        set_avd_modem
+        preauthorize_adb_key
+        start_emulator_process
+        start_adb_authorizer
+        unauthorized_since=0
+        continue
+      fi
+      echo "ADB stayed unauthorized for ${unauthorized_elapsed}s, but max emulator start attempts (${MAX_START_ATTEMPTS}) is exhausted"
+    fi
+  else
+    unauthorized_since=0
   fi
 
   elapsed="$(( $(date +%s) - start_time ))"

@@ -387,7 +387,7 @@ def test_memgui_filter_tags_include_difficulty_and_categories_last():
     assert "Difficulty: Easy" in task_tags
 
 
-def test_unfinished_task_without_result_becomes_stale(tmp_path):
+def test_unfinished_task_without_result_becomes_interrupted_after_stale_window(tmp_path):
     task_name = "001-FindProductAndFilter"
     task_dir = tmp_path / task_name
     screenshots_dir = task_dir / "screenshots"
@@ -401,6 +401,24 @@ def test_unfinished_task_without_result_becomes_stale(tmp_path):
 
     status, score, reason = get_task_status(str(task_dir))
 
-    assert status == "Stale"
+    assert status == "Interrupted"
     assert score is None
-    assert reason is None
+    assert "No result.txt" in reason
+
+
+def test_unfinished_task_without_result_is_interrupted_when_run_completed(tmp_path):
+    task_name = "001-FindProductAndFilter"
+    task_dir = tmp_path / task_name
+    screenshots_dir = task_dir / "screenshots"
+    screenshots_dir.mkdir(parents=True)
+    (tmp_path / "metadata.json").write_text(
+        json.dumps({"suite_family": "memgui_bench", "run_status": "completed"})
+    )
+    (task_dir / "traj.json").write_text(json.dumps({"0": {"traj": [{"step": 1}]}}))
+    (screenshots_dir / f"{task_name}-0-1.png").write_bytes(b"fake")
+
+    status, score, reason = get_task_status(str(task_dir))
+
+    assert status == "Interrupted"
+    assert score is None
+    assert "eval run ended" in reason

@@ -9,8 +9,8 @@ ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ENV PYTHONUNBUFFERED=1 \
     ANDROID_SDK_ROOT=/root/.android \
     ANDROID_HOME=/root/.android \
-    AVD_NAME=MemGUI-AVD-250704 \
-    EMULATOR_NAME=MemGUI-AVD-250704 \
+    AVD_NAME=MemGUI-AVD-260614 \
+    EMULATOR_NAME=MemGUI-AVD-260614 \
     UV_LINK_MODE=copy \
     PATH="/root/.local/bin:/root/.android/emulator:/root/.android/tools:/root/.android/tools/bin:/root/.android/platform-tools:${PATH}"
 

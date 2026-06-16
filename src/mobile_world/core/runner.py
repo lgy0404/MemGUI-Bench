@@ -777,85 +777,124 @@ def run_agent_with_evaluation(
             "task_list": task_list,
             "task_count": len(task_list),
             "task_selection": "selected" if tasks else "all",
+            "run_status": "running",
+            "run_started_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
         },
     )
 
-    if suite_family == "memgui_bench":
-        finished_task_list, finished_scores = _scan_finished_memgui_pass_at_k_tasks(
-            log_file_root, task_list, pass_at_k
-        )
+    try:
+        if suite_family == "memgui_bench":
+            finished_task_list, finished_scores = _scan_finished_memgui_pass_at_k_tasks(
+                log_file_root, task_list, pass_at_k
+            )
+            logger.info(
+                "MemGUI resume enabled; skipping existing successful or completed pass@{} tasks",
+                pass_at_k,
+            )
+        else:
+            finished_task_list, finished_scores = scan_finished_tasks(
+                log_file_root, task_list
+            )
         logger.info(
-            "MemGUI resume enabled; skipping existing successful or completed pass@{} tasks",
-            pass_at_k,
+            "Finished task list: {} ({} tasks)", finished_task_list, len(finished_task_list)
         )
-    else:
-        finished_task_list, finished_scores = scan_finished_tasks(log_file_root, task_list)
-    logger.info("Finished task list: {} ({} tasks)", finished_task_list, len(finished_task_list))
 
-    task_list = [task for task in task_list if task not in finished_task_list]
-    logger.info("Remaining tasks to execute: {} ({} tasks)", task_list, len(task_list))
+        task_list = [task for task in task_list if task not in finished_task_list]
+        logger.info("Remaining tasks to execute: {} ({} tasks)", task_list, len(task_list))
 
-    if shuffle_tasks:
-        random.shuffle(task_list)
+        if shuffle_tasks:
+            random.shuffle(task_list)
 
-    if dry_run:
-        logger.info("Dry run mode, skipping environment initialization and task execution")
-        task_results = []
-    else:
-        assert aw_urls is not None
-        if envs is None:
-            envs = Parallel(
-                n_jobs=min(max_concurrency if max_concurrency is not None else len(aw_urls), len(aw_urls)),
+        if dry_run:
+            logger.info("Dry run mode, skipping environment initialization and task execution")
+            task_results = []
+        else:
+            assert aw_urls is not None
+            if envs is None:
+                envs = Parallel(
+                    n_jobs=min(
+                        max_concurrency if max_concurrency is not None else len(aw_urls),
+                        len(aw_urls),
+                    ),
+                    backend="threading",
+                )(
+                    delayed(_init_env)(
+                        env_url, device, step_wait_time, suite_family, enable_mcp, seed=seed
+                    )
+                    for env_url in aw_urls
+                )
+
+            num_envs = len(envs)
+            logger.info("Distributing {} tasks across {} environment(s)", len(task_list), num_envs)
+
+            env_queue = Queue[tuple[AndroidEnvClient, str | None]](maxsize=num_envs)
+            for i, env in enumerate(envs):
+                env_queue.put((env, container_names[i] if container_names else None))
+
+            logger.info("Starting parallel task execution with threading backend...")
+
+            task_results = Parallel(
+                n_jobs=min(
+                    max_concurrency if max_concurrency is not None else num_envs, num_envs
+                ),
                 backend="threading",
             )(
-                delayed(_init_env)(env_url, device, step_wait_time, suite_family, enable_mcp, seed=seed)
-                for env_url in aw_urls
+                delayed(_process_task_on_env)(
+                    task_name=task_name,
+                    env_queue=env_queue,
+                    agent_type=agent_type,
+                    model_name=model_name,
+                    llm_base_url=llm_base_url,
+                    api_key=api_key,
+                    log_file_root=log_file_root,
+                    max_step=max_step,
+                    enable_mcp=enable_mcp,
+                    suite_family=suite_family,
+                    pass_at_k=pass_at_k,
+                    task_timeout=task_timeout,
+                    **kwargs,
+                )
+                for task_name in task_list
             )
 
-        num_envs = len(envs)
-        logger.info("Distributing {} tasks across {} environment(s)", len(task_list), num_envs)
+        task_list_with_no_results = [
+            task_name
+            for task_name, task_result in zip(task_list, task_results)
+            if task_result is None
+        ]
+        logger.info(f"Task with no results count: {len(task_list_with_no_results)}")
+        success_task_results = [task_result for task_result in task_results if task_result is not None]
 
-        env_queue = Queue[tuple[AndroidEnvClient, str | None]](maxsize=num_envs)
-        for i, env in enumerate(envs):
-            env_queue.put((env, container_names[i] if container_names else None))
-
-        logger.info("Starting parallel task execution with threading backend...")
-
-        task_results = Parallel(
-            n_jobs=min(max_concurrency if max_concurrency is not None else num_envs, num_envs),
-            backend="threading",
-        )(
-            delayed(_process_task_on_env)(
-                task_name=task_name,
-                env_queue=env_queue,
-                agent_type=agent_type,
-                model_name=model_name,
-                llm_base_url=llm_base_url,
-                api_key=api_key,
-                log_file_root=log_file_root,
-                max_step=max_step,
-                enable_mcp=enable_mcp,
-                suite_family=suite_family,
-                pass_at_k=pass_at_k,
-                task_timeout=task_timeout,
-                **kwargs,
+        for finished_task_name, finished_score in zip(finished_task_list, finished_scores):
+            success_task_results.append(
+                {
+                    "task_name": finished_task_name,
+                    "score": finished_score,
+                }
             )
-            for task_name in task_list
-        )
 
-    task_list_with_no_results = [
-        task_name for task_name, task_result in zip(task_list, task_results) if task_result is None
-    ]
-    logger.info(f"Task with no results count: {len(task_list_with_no_results)}")
-    success_task_results = [task_result for task_result in task_results if task_result is not None]
-
-    for finished_task_name, finished_score in zip(finished_task_list, finished_scores):
-        success_task_results.append(
+        _update_log_metadata(
+            metadata_path,
             {
-                "task_name": finished_task_name,
-                "score": finished_score,
-            }
+                "run_status": "completed",
+                "run_completed_at": datetime.now().isoformat(),
+                "task_with_no_results": task_list_with_no_results,
+                "updated_at": datetime.now().isoformat(),
+            },
         )
 
-    return (success_task_results, task_list_with_no_results)
+        return (success_task_results, task_list_with_no_results)
+    except BaseException as e:
+        run_status = "interrupted" if isinstance(e, (KeyboardInterrupt, SystemExit)) else "failed"
+        _update_log_metadata(
+            metadata_path,
+            {
+                "run_status": run_status,
+                "run_completed_at": datetime.now().isoformat(),
+                "run_error_type": type(e).__name__,
+                "run_error": str(e),
+                "updated_at": datetime.now().isoformat(),
+            },
+        )
+        raise

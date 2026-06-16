@@ -51,7 +51,7 @@ DEFAULT_DEVICE_ID = os.getenv("ANDROID_DEVICE", "emulator-5554")
 AVD_MAPPING: dict[str, str] = {
     "mobile_world": "Pixel_8_API_34_x86_64",
     "android_world": "Pixel_8_API_34_x86_64",
-    "memgui_bench": os.getenv("MEMGUI_AVD_NAME", os.getenv("AVD_NAME", "MemGUI-AVD-250704")),
+    "memgui_bench": os.getenv("MEMGUI_AVD_NAME", os.getenv("AVD_NAME", "MemGUI-AVD-260614")),
 }
 SNAPSHOT_MAPPING: dict[str, str | None] = {
     "mobile_world": "init_state",
