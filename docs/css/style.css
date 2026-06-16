@@ -231,33 +231,6 @@
   flex-wrap: wrap;
 }
 
-.home-share-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 1px solid #d7dde8;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #334155;
-  font: inherit;
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.home-share-button:hover {
-  color: #0f172a;
-  border-color: #93c5fd;
-  background: #eff6ff;
-}
-
-.home-share-button:disabled {
-  cursor: wait;
-  opacity: 0.72;
-}
-
 .home-view-tabs {
   display: inline-flex;
   align-items: center;
