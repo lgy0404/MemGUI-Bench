@@ -3,10 +3,12 @@ import json
 import os
 import random
 import re
+import subprocess
 import threading
 import time
 from datetime import datetime
 from functools import lru_cache
+from pathlib import Path
 from queue import Queue
 
 from dotenv import load_dotenv
@@ -46,6 +48,18 @@ MEMGUI_EVAL_ERROR_MARKER = "MemGUI-Eval error"
 MEMGUI_ATTEMPT_EVAL_RE = re.compile(r"^.+_attempt_(?P<attempt>\d+)_evaluation$")
 DEVICE_RECOVERY_WAIT_SECONDS = 240
 DEVICE_RECOVERY_POLL_SECONDS = 10
+BACKEND_EMULATOR_RESTART_ATTEMPTS = int(
+    os.getenv("MEMGUI_BACKEND_EMULATOR_RESTART_ATTEMPTS", "2")
+)
+BACKEND_EMULATOR_RESTART_TIMEOUT_SECONDS = int(
+    os.getenv("MEMGUI_BACKEND_EMULATOR_RESTART_TIMEOUT_SECONDS", "900")
+)
+BACKEND_REBUILD_TIMEOUT_SECONDS = int(
+    os.getenv("MEMGUI_BACKEND_REBUILD_TIMEOUT_SECONDS", "1200")
+)
+AUTO_REBUILD_UNHEALTHY_BACKEND = os.getenv(
+    "MEMGUI_AUTO_REBUILD_UNHEALTHY_BACKEND", "true"
+).lower() not in {"0", "false", "no", "off"}
 
 
 @lru_cache(maxsize=1)
@@ -297,6 +311,252 @@ def _wait_for_env_recovery(
     return False
 
 
+def _is_device_unhealthy_error(error: BaseException) -> bool:
+    return "Device is not healthy" in str(error)
+
+
+def _env_map_from_container(container_info: dict) -> dict[str, str]:
+    env_map: dict[str, str] = {}
+    for item in container_info.get("Config", {}).get("Env", []) or []:
+        if "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        env_map[key] = value
+    return env_map
+
+
+def _host_port_from_container(container_info: dict, container_port: int) -> int | None:
+    bindings = (
+        container_info.get("NetworkSettings", {})
+        .get("Ports", {})
+        .get(f"{container_port}/tcp")
+    )
+    if not bindings:
+        return None
+    try:
+        return int(bindings[0].get("HostPort"))
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _mounted_source(container_info: dict, destination: str) -> Path | None:
+    for mount in container_info.get("Mounts", []) or []:
+        if mount.get("Destination") != destination:
+            continue
+        source = mount.get("Source")
+        if source:
+            return Path(source)
+    return None
+
+
+def _restart_emulator_in_container(
+    container_name: str,
+    timeout: int = BACKEND_EMULATOR_RESTART_TIMEOUT_SECONDS,
+) -> bool:
+    """Force restart the emulator inside an existing runtime container."""
+    if not container_name:
+        return False
+
+    command = f"""
+set -euo pipefail
+pkill -f '[s]tart_memgui_emulator.sh' 2>/dev/null || true
+pkill -f '[s]tart_emulator.sh' 2>/dev/null || true
+pkill -f '[a]uthorize_adb_grpc.py' 2>/dev/null || true
+adb devices | awk '/emulator/ {{print $1}}' | xargs -r -I {{}} adb -s "{{}}" emu kill || true
+adb kill-server >/dev/null 2>&1 || true
+sleep 2
+if [ -x /app/docker/start_memgui_emulator.sh ]; then
+  script=/app/docker/start_memgui_emulator.sh
+elif [ -x /app/docker/start_emulator.sh ]; then
+  script=/app/docker/start_emulator.sh
+else
+  echo "No emulator startup script found in /app/docker" >&2
+  exit 127
+fi
+echo "Manual backend recovery: restarting emulator via $script" >> /var/log/emulator.log
+EMULATOR_TIMEOUT={timeout} MEMGUI_EMULATOR_START_ATTEMPTS=2 bash "$script" >> /var/log/emulator.log 2>&1
+"""
+    try:
+        result = subprocess.run(
+            ["docker", "exec", container_name, "/bin/bash", "-lc", command],
+            capture_output=True,
+            text=True,
+            timeout=timeout + 60,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning(
+            "Timed out while restarting emulator inside container {} after {}s",
+            container_name,
+            timeout,
+        )
+        return False
+
+    if result.returncode != 0:
+        logger.warning(
+            "Failed to restart emulator inside container {}: {}{}",
+            container_name,
+            result.stderr,
+            result.stdout,
+        )
+        return False
+
+    return True
+
+
+def _rebuild_backend_container(
+    container_name: str,
+    env_image: str = DEFAULT_IMAGE,
+) -> bool:
+    """Remove and recreate a backend container with the same name and ports."""
+    if not container_name:
+        return False
+
+    from mobile_world.core.api.env import launch_container, remove_container
+    from mobile_world.runtime.utils.docker import docker_inspect
+    from mobile_world.runtime.utils.models import (
+        DEFAULT_CONTAINER_ENTRYPOINT,
+        DEFAULT_EMULATOR_TIMEOUT,
+        ContainerConfig,
+    )
+
+    container_info = docker_inspect(container_name)
+    if not container_info:
+        logger.warning("Cannot rebuild container {}; docker inspect returned nothing", container_name)
+        return False
+
+    backend_port = _host_port_from_container(container_info, 6800)
+    viewer_port = _host_port_from_container(container_info, 7860)
+    adb_port = _host_port_from_container(container_info, 5556)
+    if backend_port is None or viewer_port is None or adb_port is None:
+        logger.warning(
+            "Cannot rebuild container {}; failed to recover host ports from inspect data",
+            container_name,
+        )
+        return False
+
+    env_map = _env_map_from_container(container_info)
+    try:
+        emulator_timeout = int(env_map.get("EMULATOR_TIMEOUT", DEFAULT_EMULATOR_TIMEOUT))
+    except ValueError:
+        emulator_timeout = DEFAULT_EMULATOR_TIMEOUT
+    env_file_path = _mounted_source(container_info, "/app/service/.env")
+    dev_src_path = _mounted_source(container_info, "/app/service/src")
+    entrypoint = container_info.get("Config", {}).get("Entrypoint")
+    if isinstance(entrypoint, list):
+        entrypoint = entrypoint[0] if len(entrypoint) == 1 else DEFAULT_CONTAINER_ENTRYPOINT
+    elif not isinstance(entrypoint, str):
+        entrypoint = DEFAULT_CONTAINER_ENTRYPOINT
+
+    config = ContainerConfig(
+        name=container_name,
+        backend_port=backend_port,
+        viewer_port=viewer_port,
+        adb_port=adb_port,
+        image=env_image or container_info.get("Config", {}).get("Image") or DEFAULT_IMAGE,
+        dev_mode=env_map.get("DEV_MODE", "").lower() in {"1", "true", "yes"},
+        enable_viewer=env_map.get("ENABLE_VIEWER", "").lower() in {"1", "true", "yes"},
+        env_file_path=env_file_path if env_file_path and env_file_path.exists() else None,
+        dev_src_path=dev_src_path if dev_src_path and dev_src_path.exists() else None,
+        emulator_timeout=emulator_timeout,
+        http_proxy=env_map.get("http_proxy") or env_map.get("HTTP_PROXY"),
+        https_proxy=env_map.get("https_proxy") or env_map.get("HTTPS_PROXY"),
+        no_proxy=env_map.get("no_proxy") or env_map.get("NO_PROXY"),
+        entrypoint=entrypoint,
+    )
+
+    logger.warning(
+        "Rebuilding unhealthy backend container {} with image {} on ports backend={}, viewer={}, adb={}",
+        container_name,
+        config.image,
+        backend_port,
+        viewer_port,
+        adb_port,
+    )
+    if not remove_container(container_name, force=True):
+        logger.warning("Failed to remove unhealthy container {}", container_name)
+        return False
+
+    result = launch_container(
+        config,
+        wait_ready=True,
+        ready_timeout=BACKEND_REBUILD_TIMEOUT_SECONDS,
+    )
+    if not result.success or not result.ready:
+        logger.warning(
+            "Rebuilt container {} did not become ready: {}",
+            container_name,
+            result.error_message,
+        )
+        return False
+
+    return True
+
+
+def _recover_backend_env(
+    env_url: str,
+    container_name: str | None,
+    device: str,
+    step_wait_time: float,
+    suite_family: str,
+    enable_mcp: bool,
+    seed: int | None,
+    env_image: str,
+) -> AndroidEnvClient | None:
+    """Recover an unhealthy backend by restarting emulator, then rebuilding container."""
+    if not container_name:
+        logger.warning("Cannot recover unhealthy backend {}; container name is unknown", env_url)
+        return None
+
+    for attempt in range(1, BACKEND_EMULATOR_RESTART_ATTEMPTS + 1):
+        logger.warning(
+            "Restarting emulator inside unhealthy container {} (attempt {}/{})",
+            container_name,
+            attempt,
+            BACKEND_EMULATOR_RESTART_ATTEMPTS,
+        )
+        if not _restart_emulator_in_container(container_name):
+            continue
+        try:
+            return _init_env_once(
+                env_url,
+                device,
+                step_wait_time,
+                suite_family,
+                enable_mcp,
+                seed=seed,
+            )
+        except Exception as e:
+            logger.warning(
+                "Backend {} is still unhealthy after emulator restart attempt {}: {}",
+                env_url,
+                attempt,
+                e,
+            )
+
+    if not AUTO_REBUILD_UNHEALTHY_BACKEND:
+        return None
+
+    logger.warning(
+        "Rebuilding backend container {} after emulator restart attempts failed",
+        container_name,
+    )
+    if not _rebuild_backend_container(container_name, env_image=env_image):
+        return None
+
+    try:
+        return _init_env_once(
+            env_url,
+            device,
+            step_wait_time,
+            suite_family,
+            enable_mcp,
+            seed=seed,
+        )
+    except Exception as e:
+        logger.warning("Backend {} is still unhealthy after container rebuild: {}", env_url, e)
+        return None
+
+
 def _execute_single_task(
     env: AndroidEnvClient,
     agent: BaseAgent,
@@ -420,6 +680,10 @@ def _process_task_on_env(
     log_file_root: str,
     max_step: int | None,
     retry_on_device_unhealthy: int = 2,
+    device: str = "emulator-5554",
+    step_wait_time: float = 1.0,
+    seed: int = None,
+    env_image: str = DEFAULT_IMAGE,
     enable_mcp: bool = False,
     suite_family: str = "memgui_bench",
     pass_at_k: int = 1,
@@ -519,22 +783,30 @@ def _process_task_on_env(
                         break
                     except Exception as e:
                         if (
-                            "Device is not healthy" in str(e)
+                            _is_device_unhealthy_error(e)
                             and remaining_health_retries > 0
                         ):
                             remaining_health_retries -= 1
                             logger.warning(
-                                "Device is not healthy; waiting for environment recovery "
+                                "Device is not healthy; recovering environment "
                                 "before retrying task '{}' (remaining retries: {})",
                                 task_name,
                                 remaining_health_retries,
                             )
-                            if not _wait_for_env_recovery(env):
-                                logger.warning(
-                                    "Environment {} did not recover within {}s",
-                                    env.base_url,
-                                    DEVICE_RECOVERY_WAIT_SECONDS,
-                                )
+                            recovered_env = _recover_backend_env(
+                                env.base_url,
+                                container_name,
+                                device,
+                                step_wait_time,
+                                suite_family,
+                                enable_mcp,
+                                seed,
+                                env_image,
+                            )
+                            if recovered_env is not None:
+                                env = recovered_env
+                            elif not _wait_for_env_recovery(env):
+                                logger.warning("Environment {} did not recover", env.base_url)
                             traj_logger.reset_traj()
                             continue
                         logger.exception(
@@ -618,15 +890,30 @@ def _process_task_on_env(
         env_queue.put((env, container_name))
 
 
+def _make_env_client(
+    env_url: str, device: str, step_wait_time: float, suite_family: str, enable_mcp: bool,
+) -> AndroidEnvClient:
+    if enable_mcp:
+        return AndroidMCPEnvClient(env_url, device, step_wait_time=step_wait_time)
+    return AndroidEnvClient(env_url, device, step_wait_time=step_wait_time)
+
+
+def _init_env_once(
+    env_url: str, device: str, step_wait_time: float, suite_family: str, enable_mcp: bool,
+    seed: int = None,
+) -> AndroidEnvClient:
+    """Initialize one environment once without waiting for server-side recovery loops."""
+    env = _make_env_client(env_url, device, step_wait_time, suite_family, enable_mcp)
+    env.switch_suite_family(suite_family, seed=seed)
+    return env
+
+
 def _init_env(
     env_url: str, device: str, step_wait_time: float, suite_family: str, enable_mcp: bool,
     seed: int = None,
 ) -> AndroidEnvClient:
     """Initialize the environment."""
-    if enable_mcp:
-        env = AndroidMCPEnvClient(env_url, device, step_wait_time=step_wait_time)
-    else:
-        env = AndroidEnvClient(env_url, device, step_wait_time=step_wait_time)
+    env = _make_env_client(env_url, device, step_wait_time, suite_family, enable_mcp)
 
     for attempt in range(3):
         try:
@@ -643,6 +930,107 @@ def _init_env(
             )
             _wait_for_env_recovery(env)
     return env
+
+
+def _init_env_result(
+    index: int,
+    env_url: str,
+    device: str,
+    step_wait_time: float,
+    suite_family: str,
+    enable_mcp: bool,
+    seed: int = None,
+    container_name: str | None = None,
+    env_image: str = DEFAULT_IMAGE,
+) -> tuple[int, AndroidEnvClient | None, str | None]:
+    """Initialize one backend and capture unhealthy failures for pool filtering."""
+    try:
+        return (
+            index,
+            _init_env_once(env_url, device, step_wait_time, suite_family, enable_mcp, seed=seed),
+            None,
+        )
+    except Exception as e:
+        if _is_device_unhealthy_error(e):
+            recovered_env = _recover_backend_env(
+                env_url,
+                container_name,
+                device,
+                step_wait_time,
+                suite_family,
+                enable_mcp,
+                seed,
+                env_image,
+            )
+            if recovered_env is not None:
+                return index, recovered_env, None
+        logger.warning("Skipping unhealthy environment {} during initialization: {}", env_url, e)
+        return index, None, f"{env_url}: {type(e).__name__}: {e}"
+
+
+def _initialize_env_pool(
+    aw_urls: list[str],
+    container_names: list[str] | None,
+    device: str,
+    step_wait_time: float,
+    suite_family: str,
+    enable_mcp: bool,
+    seed: int | None = None,
+    max_concurrency: int | None = None,
+    env_image: str = DEFAULT_IMAGE,
+) -> tuple[list[AndroidEnvClient], list[str | None]]:
+    """Initialize all candidate backends and keep only healthy environments."""
+    if not aw_urls:
+        return [], []
+
+    init_jobs = min(max_concurrency if max_concurrency is not None else len(aw_urls), len(aw_urls))
+    init_results = Parallel(n_jobs=init_jobs, backend="threading")(
+        delayed(_init_env_result)(
+            index,
+            env_url,
+            device,
+            step_wait_time,
+            suite_family,
+            enable_mcp,
+            seed=seed,
+            container_name=container_names[index]
+            if container_names and index < len(container_names)
+            else None,
+            env_image=env_image,
+        )
+        for index, env_url in enumerate(aw_urls)
+    )
+
+    envs: list[AndroidEnvClient] = []
+    healthy_container_names: list[str | None] = []
+    failed_envs: list[str] = []
+
+    for index, env, error in sorted(init_results, key=lambda item: item[0]):
+        if env is None:
+            if error:
+                failed_envs.append(error)
+            continue
+
+        envs.append(env)
+        healthy_container_names.append(
+            container_names[index] if container_names and index < len(container_names) else None
+        )
+
+    if failed_envs:
+        logger.warning(
+            "Ignoring {} unhealthy backend environment(s): {}",
+            len(failed_envs),
+            failed_envs,
+        )
+
+    if not envs:
+        details = "; ".join(failed_envs) if failed_envs else "no backend URLs were available"
+        raise RuntimeError(
+            "No healthy backend environments available after initialization. "
+            f"Please restart containers with `mg env rm && mg env run`. Details: {details}"
+        )
+
+    return envs, healthy_container_names
 
 
 def _get_local_suite_task_list(suite_family: str) -> list[str] | None:
@@ -750,12 +1138,16 @@ def run_agent_with_evaluation(
 
     if task_list is None:
         assert aw_urls is not None
-        envs = Parallel(
-            n_jobs=min(max_concurrency if max_concurrency is not None else len(aw_urls), len(aw_urls)),
-            backend="threading",
-        )(
-            delayed(_init_env)(env_url, device, step_wait_time, suite_family, enable_mcp, seed=seed)
-            for env_url in aw_urls
+        envs, container_names = _initialize_env_pool(
+            aw_urls,
+            container_names,
+            device,
+            step_wait_time,
+            suite_family,
+            enable_mcp,
+            seed=seed,
+            max_concurrency=max_concurrency,
+            env_image=env_image,
         )
         task_list = envs[0].get_suite_task_list(
             enable_mcp=enable_mcp,
@@ -812,17 +1204,16 @@ def run_agent_with_evaluation(
         else:
             assert aw_urls is not None
             if envs is None:
-                envs = Parallel(
-                    n_jobs=min(
-                        max_concurrency if max_concurrency is not None else len(aw_urls),
-                        len(aw_urls),
-                    ),
-                    backend="threading",
-                )(
-                    delayed(_init_env)(
-                        env_url, device, step_wait_time, suite_family, enable_mcp, seed=seed
-                    )
-                    for env_url in aw_urls
+                envs, container_names = _initialize_env_pool(
+                    aw_urls,
+                    container_names,
+                    device,
+                    step_wait_time,
+                    suite_family,
+                    enable_mcp,
+                    seed=seed,
+                    max_concurrency=max_concurrency,
+                    env_image=env_image,
                 )
 
             num_envs = len(envs)
@@ -853,6 +1244,10 @@ def run_agent_with_evaluation(
                     suite_family=suite_family,
                     pass_at_k=pass_at_k,
                     task_timeout=task_timeout,
+                    device=device,
+                    step_wait_time=step_wait_time,
+                    seed=seed,
+                    env_image=env_image,
                     **kwargs,
                 )
                 for task_name in task_list
