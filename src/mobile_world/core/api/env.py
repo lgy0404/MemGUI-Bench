@@ -21,7 +21,7 @@ from mobile_world.runtime.utils.docker import (
     docker_inspect,
     docker_ps,
     docker_rm,
-    list_containers_by_image_substring,
+    list_containers_by_image_or_prefix,
     run_command,
 )
 from mobile_world.runtime.utils.models import (
@@ -459,7 +459,11 @@ def list_containers(
     Returns:
         List of ContainerInfo objects
     """
-    containers = list_containers_by_image_substring(image_filter, include_all=include_all)
+    containers = list_containers_by_image_or_prefix(
+        image_filter,
+        name_prefix=name_prefix,
+        include_all=include_all,
+    )
 
     result = []
     for container in containers:
@@ -494,6 +498,7 @@ def list_containers(
                 name=name,
                 status=container.get("Status"),
                 running="Up" in container.get("Status", ""),
+                image=container.get("Image"),
                 backend_port=backend_port,
                 viewer_port=viewer_port,
                 adb_port=adb_port,
@@ -586,7 +591,11 @@ def remove_containers(
         Tuple of (destroyed, failed) container names
     """
     if container_names is None:
-        containers = list_containers_by_image_substring(image_filter, include_all=True)
+        containers = list_containers_by_image_or_prefix(
+            image_filter,
+            name_prefix=name_prefix,
+            include_all=True,
+        )
         container_names = [
             c.get("Names", "")
             for c in containers

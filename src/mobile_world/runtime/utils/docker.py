@@ -111,6 +111,34 @@ def list_containers_by_image_substring(
     ]
 
 
+def list_containers_by_image_or_prefix(
+    image_substring: str,
+    name_prefix: str | None = DEFAULT_NAME_PREFIX,
+    *,
+    include_all: bool = False,
+) -> list[dict[str, Any]]:
+    """Filter containers by image substring or MemGUI container name prefix.
+
+    Mutable runtime tags can leave running containers displaying a raw image ID
+    after the tag is updated. The name prefix keeps env commands able to find
+    and clean up those older containers.
+    """
+    substring = (image_substring or "").lower()
+    containers = docker_ps(include_all=include_all)
+    matched: list[dict[str, Any]] = []
+
+    for container in containers:
+        image = container.get("Image", "").lower()
+        name = container.get("Names", "")
+        image_matches = bool(substring and substring in image)
+        prefix_matches = bool(name_prefix and name.startswith(name_prefix))
+
+        if image_matches or prefix_matches:
+            matched.append(container)
+
+    return matched
+
+
 def docker_inspect(container_name: str) -> dict[str, Any] | None:
     """Return `docker inspect` result for a container or None if missing."""
     result = run_command(["docker", "inspect", container_name])
@@ -226,10 +254,18 @@ def discover_backends(
     Returns:
         list[str]: List of backend URLs in format http://localhost:PORT
     """
-    containers = list_containers_by_image_substring(image_filter, include_all=False)
+    containers = list_containers_by_image_or_prefix(
+        image_filter,
+        name_prefix=prefix,
+        include_all=False,
+    )
 
     if not containers:
-        logger.warning("No running containers found with image filter: {}", image_filter)
+        logger.warning(
+            "No running containers found with image filter '{}' or prefix '{}'",
+            image_filter,
+            prefix,
+        )
         return [], []
 
     backend_urls = []
@@ -336,6 +372,7 @@ __all__ = [
     "run_command",
     "docker_ps",
     "list_containers_by_image_substring",
+    "list_containers_by_image_or_prefix",
     "docker_inspect",
     "docker_rm",
     "build_run_command",
