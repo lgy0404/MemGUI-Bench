@@ -532,6 +532,9 @@ class ContainerConfig(BaseModel):
     env_file_path: Any | None = None  # Path
     dev_src_path: Any | None = None  # Path
     emulator_timeout: int = DEFAULT_EMULATOR_TIMEOUT
+    http_proxy: str | None = None
+    https_proxy: str | None = None
+    no_proxy: str | None = None
     entrypoint: str | None = DEFAULT_CONTAINER_ENTRYPOINT
     command: list[str] = Field(default_factory=lambda: list(DEFAULT_CONTAINER_COMMAND))
 

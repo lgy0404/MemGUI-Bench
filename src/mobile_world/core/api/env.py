@@ -141,6 +141,29 @@ def find_next_container_index(prefix: str = DEFAULT_NAME_PREFIX, dev_mode: bool 
     return max(existing_indices) + 1
 
 
+def _first_env_value(*names: str) -> str | None:
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return None
+
+
+def _resolve_proxy_values(
+    http_proxy: str | None,
+    https_proxy: str | None,
+    no_proxy: str | None,
+) -> tuple[str | None, str | None, str | None]:
+    http_proxy = http_proxy or _first_env_value("http_proxy", "HTTP_PROXY")
+    https_proxy = https_proxy or _first_env_value("https_proxy", "HTTPS_PROXY")
+    no_proxy = no_proxy or _first_env_value("no_proxy", "NO_PROXY")
+
+    if http_proxy and not https_proxy:
+        https_proxy = http_proxy
+
+    return http_proxy, https_proxy, no_proxy
+
+
 def wait_for_container_ready(
     backend_port: int,
     timeout: int = 120,
@@ -186,6 +209,9 @@ def build_container_config(
     dev_src_path: Path | None = None,
     emulator_timeout: int = DEFAULT_EMULATOR_TIMEOUT,
     index: int | None = None,
+    http_proxy: str | None = None,
+    https_proxy: str | None = None,
+    no_proxy: str | None = None,
 ) -> ContainerConfig:
     """Build a container configuration.
 
@@ -200,6 +226,9 @@ def build_container_config(
         env_file_path: Path to .env file
         dev_src_path: Path to src directory for dev mode
         index: Container index (auto-determined if None)
+        http_proxy: Outbound HTTP proxy URL exposed to container and emulator
+        https_proxy: Outbound HTTPS proxy URL exposed to container
+        no_proxy: Comma-separated proxy bypass list exposed to container
 
     Returns:
         ContainerConfig object
@@ -208,6 +237,9 @@ def build_container_config(
         index = find_next_container_index(name_prefix, dev_mode)
 
     container_name = f"{name_prefix}_{index}{'_dev' if dev_mode else ''}"
+    http_proxy, https_proxy, no_proxy = _resolve_proxy_values(
+        http_proxy, https_proxy, no_proxy
+    )
 
     return ContainerConfig(
         name=container_name,
@@ -220,6 +252,9 @@ def build_container_config(
         env_file_path=env_file_path,
         dev_src_path=dev_src_path,
         emulator_timeout=emulator_timeout,
+        http_proxy=http_proxy,
+        https_proxy=https_proxy,
+        no_proxy=no_proxy,
     )
 
 
@@ -254,6 +289,18 @@ def launch_container(
     if config.enable_viewer:
         envs["ENABLE_VIEWER"] = "true"
     envs["EMULATOR_TIMEOUT"] = str(config.emulator_timeout)
+    if config.http_proxy:
+        envs["http_proxy"] = config.http_proxy
+        envs["HTTP_PROXY"] = config.http_proxy
+    if config.https_proxy:
+        envs["https_proxy"] = config.https_proxy
+        envs["HTTPS_PROXY"] = config.https_proxy
+    elif config.http_proxy:
+        envs["https_proxy"] = config.http_proxy
+        envs["HTTPS_PROXY"] = config.http_proxy
+    if config.no_proxy:
+        envs["no_proxy"] = config.no_proxy
+        envs["NO_PROXY"] = config.no_proxy
 
     volumes: list[tuple[str, str]] = []
     entrypoint = config.entrypoint
@@ -323,6 +370,9 @@ def launch_containers(
     wait_ready: bool = True,
     ready_timeout: int = DEFAULT_CONTAINER_READY_TIMEOUT,
     emulator_timeout: int = DEFAULT_EMULATOR_TIMEOUT,
+    http_proxy: str | None = None,
+    https_proxy: str | None = None,
+    no_proxy: str | None = None,
 ) -> list[LaunchResult]:
     """Launch multiple Docker containers.
 
@@ -340,6 +390,9 @@ def launch_containers(
         launch_interval: Seconds between launching containers
         wait_ready: Wait for containers to become ready
         ready_timeout: Timeout for readiness check
+        http_proxy: Outbound HTTP proxy URL exposed to container and emulator
+        https_proxy: Outbound HTTPS proxy URL exposed to container
+        no_proxy: Comma-separated proxy bypass list exposed to container
 
     Returns:
         List of LaunchResult objects
@@ -350,6 +403,9 @@ def launch_containers(
     if dev_mode and count > 1:
         raise ValueError("Dev mode only supports launching a single container")
 
+    http_proxy, https_proxy, no_proxy = _resolve_proxy_values(
+        http_proxy, https_proxy, no_proxy
+    )
     port_sets = find_available_ports(backend_start_port, viewer_start_port, adb_start_port, count)
 
     if len(port_sets) < count:
@@ -370,6 +426,9 @@ def launch_containers(
             env_file_path=env_file_path,
             dev_src_path=dev_src_path,
             emulator_timeout=emulator_timeout,
+            http_proxy=http_proxy,
+            https_proxy=https_proxy,
+            no_proxy=no_proxy,
         )
 
         result = launch_container(

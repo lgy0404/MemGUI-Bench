@@ -165,6 +165,21 @@ process into local `traj_logs/`.
 For a larger run, launch more containers and match `mg eval --max-concurrency`
 to the number of healthy backends, for example `--count 4 --max-concurrency 4`.
 
+Optional: if your network requires an outbound proxy, export it before launching
+containers. `mg env run` forwards these variables to both the container runtime
+and the Android emulator:
+
+```bash
+export http_proxy=http://proxy.example.com:8080
+export https_proxy=http://proxy.example.com:8080
+export no_proxy='localhost,127.0.0.1,localaddress,localdomain.com,internal,.corp.example.com,.staging.example.com,0,1,2,3,4,5,6,7,8,9'
+sudo -E uv run mg env run --count 2
+```
+
+You can also pass `--http-proxy`, `--https-proxy`, and `--no-proxy` directly to
+`mg env run` if your `sudo` configuration does not preserve environment
+variables.
+
 ### 3. Run Evaluation
 
 ```bash

@@ -106,6 +106,30 @@ activate_adb_keyboard() {
   fi
 }
 
+configure_android_proxy() {
+  local upstream="${HTTP_PROXY:-${http_proxy:-${HTTPS_PROXY:-${https_proxy:-}}}}"
+  local local_proxy_port="${LOCAL_PROXY_PORT:-38888}"
+
+  if [ -z "${upstream}" ]; then
+    adb -s "${DEVICE_ID}" shell settings put global http_proxy :0 || true
+    adb -s "${DEVICE_ID}" shell settings delete global global_http_proxy_host >/dev/null 2>&1 || true
+    adb -s "${DEVICE_ID}" shell settings delete global global_http_proxy_port >/dev/null 2>&1 || true
+    echo "Android proxy disabled"
+    return
+  fi
+
+  pkill -f "/app/docker/proxy_chain.py" 2>/dev/null || true
+  UPSTREAM_PROXY="${upstream}" LOCAL_PORT="${local_proxy_port}" \
+    nohup /usr/bin/python3 /app/docker/proxy_chain.py \
+    > /var/log/proxy_chain.log 2>&1 &
+  sleep 1
+
+  adb -s "${DEVICE_ID}" shell settings put global http_proxy "10.0.2.2:${local_proxy_port}"
+  adb -s "${DEVICE_ID}" shell settings put global global_http_proxy_host "10.0.2.2"
+  adb -s "${DEVICE_ID}" shell settings put global global_http_proxy_port "${local_proxy_port}"
+  echo "Android proxy enabled: 10.0.2.2:${local_proxy_port} (chain -> ${upstream})"
+}
+
 start_emulator_process() {
   echo "Starting MemGUI emulator: emulator ${options[*]}"
   nohup emulator "${options[@]}" >/tmp/memgui-emulator.nohup 2>&1 &
@@ -176,6 +200,7 @@ while true; do
     adb -s "${DEVICE_ID}" shell "settings put global transition_animation_scale 0.0" || true
     adb -s "${DEVICE_ID}" shell "settings put global animator_duration_scale 0.0" || true
     adb -s "${DEVICE_ID}" shell "settings put global hidden_api_policy_pre_p_apps 1; settings put global hidden_api_policy_p_apps 1; settings put global hidden_api_policy 1" || true
+    configure_android_proxy
     adb -s "${DEVICE_ID}" root || true
     activate_adb_keyboard
     if [ -n "${INIT_SNAPSHOT}" ] && [ "${INIT_SNAPSHOT}" != "none" ] && [ "${INIT_SNAPSHOT}" != "false" ]; then

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import time
@@ -47,6 +48,42 @@ from mobile_world.runtime.utils.docker import (
 console = Console()
 
 DEFAULT_PYTHON_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+
+def _first_env_value(*names: str) -> str | None:
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return None
+
+
+def _resolve_proxy_config(args: argparse.Namespace) -> tuple[str | None, str | None, str | None]:
+    http_proxy = args.http_proxy or _first_env_value("http_proxy", "HTTP_PROXY")
+    https_proxy = args.https_proxy or _first_env_value("https_proxy", "HTTPS_PROXY")
+    no_proxy = args.no_proxy or _first_env_value("no_proxy", "NO_PROXY")
+
+    if http_proxy and not https_proxy:
+        https_proxy = http_proxy
+
+    return http_proxy, https_proxy, no_proxy
+
+
+def _add_proxy_envs(
+    envs: dict[str, str],
+    http_proxy: str | None,
+    https_proxy: str | None,
+    no_proxy: str | None,
+) -> None:
+    if http_proxy:
+        envs["http_proxy"] = http_proxy
+        envs["HTTP_PROXY"] = http_proxy
+    if https_proxy:
+        envs["https_proxy"] = https_proxy
+        envs["HTTPS_PROXY"] = https_proxy
+    if no_proxy:
+        envs["no_proxy"] = no_proxy
+        envs["NO_PROXY"] = no_proxy
 
 
 def _add_common_options(
@@ -218,6 +255,39 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
         help=(
             "Seconds to wait for container backend readiness "
             f"(default: {DEFAULT_CONTAINER_READY_TIMEOUT})"
+        ),
+    )
+    launch_parser.add_argument(
+        "--http-proxy",
+        "--http_proxy",
+        dest="http_proxy",
+        type=str,
+        default=None,
+        help=(
+            "HTTP proxy URL forwarded to the container and Android emulator. "
+            "If omitted, reads http_proxy/HTTP_PROXY from the host environment."
+        ),
+    )
+    launch_parser.add_argument(
+        "--https-proxy",
+        "--https_proxy",
+        dest="https_proxy",
+        type=str,
+        default=None,
+        help=(
+            "HTTPS proxy URL forwarded to the container. "
+            "If omitted, reads https_proxy/HTTPS_PROXY from the host environment."
+        ),
+    )
+    launch_parser.add_argument(
+        "--no-proxy",
+        "--no_proxy",
+        dest="no_proxy",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated proxy bypass list forwarded to the container. "
+            "If omitted, reads no_proxy/NO_PROXY from the host environment."
         ),
     )
 
@@ -407,6 +477,7 @@ def _wait_for_container_ready_with_progress(
 def _launch_containers(args: argparse.Namespace) -> None:
     """Launch Docker containers."""
     count = args.count
+    http_proxy, https_proxy, no_proxy = _resolve_proxy_config(args)
 
     # Dev mode only allows single container
     if args.dev and count > 1:
@@ -538,6 +609,22 @@ def _launch_containers(args: argparse.Namespace) -> None:
         )
     )
 
+    if http_proxy or https_proxy or no_proxy:
+        proxy_lines = []
+        if http_proxy:
+            proxy_lines.append(f"http_proxy={http_proxy}")
+        if https_proxy:
+            proxy_lines.append(f"https_proxy={https_proxy}")
+        if no_proxy:
+            proxy_lines.append(f"no_proxy={no_proxy}")
+        console.print(
+            Panel(
+                "\n".join(proxy_lines),
+                title="[bold cyan]🌐 Proxy[/bold cyan]",
+                border_style="cyan",
+            )
+        )
+
     start_index = find_next_container_index(args.name_prefix, args.dev)
 
     # Pre-compute container configurations
@@ -554,6 +641,9 @@ def _launch_containers(args: argparse.Namespace) -> None:
             env_file_path=env_file_path,
             dev_src_path=dev_src_path,
             emulator_timeout=args.emulator_timeout,
+            http_proxy=http_proxy,
+            https_proxy=https_proxy,
+            no_proxy=no_proxy,
         )
         container_configs.append(config)
 
@@ -595,6 +685,7 @@ def _launch_containers(args: argparse.Namespace) -> None:
             if config.enable_viewer:
                 envs["ENABLE_VIEWER"] = "true"
             envs["EMULATOR_TIMEOUT"] = str(config.emulator_timeout)
+            _add_proxy_envs(envs, config.http_proxy, config.https_proxy, config.no_proxy)
 
             volumes: list[tuple[str, str]] = []
             entrypoint = config.entrypoint

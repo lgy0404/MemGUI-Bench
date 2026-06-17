@@ -49,6 +49,7 @@ COPY docker/compat_entrypoint.sh /usr/local/bin/memgui-runtime-entrypoint.sh
 COPY docker/start_memgui_emulator.sh /app/docker/start_memgui_emulator.sh
 COPY docker/adb_tcp_relay.py /app/docker/adb_tcp_relay.py
 COPY docker/authorize_adb_grpc.py /app/docker/authorize_adb_grpc.py
+COPY docker/proxy_chain.py /app/docker/proxy_chain.py
 COPY docker/ws_adb_proxy.py /app/docker/ws_adb_proxy.py
 COPY docker/web-scrcpy /app/web-scrcpy
 
@@ -57,7 +58,8 @@ RUN chmod 600 /root/.android/adbkey && \
     chmod +x \
     /usr/local/bin/memgui-runtime-entrypoint.sh \
     /app/docker/start_memgui_emulator.sh \
-    /app/docker/authorize_adb_grpc.py
+    /app/docker/authorize_adb_grpc.py \
+    /app/docker/proxy_chain.py
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python3 -c "import json, sys, urllib.request; data=json.load(urllib.request.urlopen('http://localhost:6800/health', timeout=8)); sys.exit(0 if data.get('ok') else 1)"

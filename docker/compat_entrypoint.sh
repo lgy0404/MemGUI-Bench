@@ -9,6 +9,25 @@ export PATH="/root/.local/bin:${ANDROID_SDK_ROOT}/emulator:${ANDROID_SDK_ROOT}/t
 PYTHON_BIN="${PYTHON_BIN:-/app/service/.venv/bin/python}"
 MG_BIN="${MG_BIN:-/app/service/.venv/bin/mg}"
 
+PROXY="${http_proxy:-${HTTP_PROXY:-}}"
+HTTPS_PROXY_VALUE="${https_proxy:-${HTTPS_PROXY:-${PROXY}}}"
+USER_NO_PROXY="${no_proxy:-${NO_PROXY:-}}"
+DEFAULT_NO_PROXY="10.0.2.2,127.0.0.1,localhost,::1"
+
+if [ -n "${PROXY}" ]; then
+    export http_proxy="${PROXY}"
+    export HTTP_PROXY="${PROXY}"
+fi
+if [ -n "${HTTPS_PROXY_VALUE}" ]; then
+    export https_proxy="${HTTPS_PROXY_VALUE}"
+    export HTTPS_PROXY="${HTTPS_PROXY_VALUE}"
+fi
+if [ -n "${PROXY}${HTTPS_PROXY_VALUE}${USER_NO_PROXY}" ]; then
+    export no_proxy="${DEFAULT_NO_PROXY}${USER_NO_PROXY:+,${USER_NO_PROXY}}"
+    export NO_PROXY="${no_proxy}"
+    echo "INFO: outbound HTTP proxy = ${PROXY:-<none>} (HTTPS=${HTTPS_PROXY_VALUE:-<none>}, NO_PROXY=${NO_PROXY})"
+fi
+
 if [ ! -x "${PYTHON_BIN}" ]; then
     PYTHON_BIN="$(command -v python3 || true)"
 fi
