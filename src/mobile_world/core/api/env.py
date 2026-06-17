@@ -955,6 +955,11 @@ def check_image_status(image: str = DEFAULT_IMAGE) -> ImageStatus:
 
     if not status.exists_locally:
         status.needs_update = True
+    elif not status.local_digest or not status.remote_digest:
+        # Mutable tags can point to a newer image even when the local tag exists.
+        # If either digest cannot be determined, let `docker pull` reconcile the
+        # local tag instead of silently treating it as fresh.
+        status.needs_update = True
     elif status.local_digest and status.remote_digest:
         status.needs_update = status.local_digest != status.remote_digest
 

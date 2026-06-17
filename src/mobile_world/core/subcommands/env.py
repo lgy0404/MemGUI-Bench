@@ -1384,13 +1384,21 @@ def _check_prerequisites(args: argparse.Namespace) -> None:
             )
             _pull_runtime_image_or_exit(DEFAULT_IMAGE)
         elif runtime_status.needs_update:
+            if runtime_status.local_digest and runtime_status.remote_digest:
+                update_title = "[yellow]⚠ Runtime Image Update Available[/yellow]"
+                update_message = "[yellow]A newer MemGUI runtime image is available[/yellow]"
+                update_action = "MemGUI-Bench will pull the latest runtime image automatically."
+            else:
+                update_title = "[yellow]⚠ Runtime Image Verification Needed[/yellow]"
+                update_message = "[yellow]MemGUI runtime image freshness could not be verified[/yellow]"
+                update_action = "MemGUI-Bench will pull the runtime image to reconcile the local tag."
             console.print(
                 Panel(
-                    "[yellow]A newer MemGUI runtime image is available[/yellow]\n"
+                    f"{update_message}\n"
                     f"[dim]Local:  {runtime_status.local_digest[:12] if runtime_status.local_digest else 'unknown'}...[/dim]\n"
                     f"[dim]Remote: {runtime_status.remote_digest[:12] if runtime_status.remote_digest else 'unknown'}...[/dim]\n"
-                    "[dim]MemGUI-Bench will pull the latest runtime image automatically.[/dim]",
-                    title="[yellow]⚠ Runtime Image Update Available[/yellow]",
+                    f"[dim]{update_action}[/dim]",
+                    title=update_title,
                     border_style="yellow",
                 )
             )
