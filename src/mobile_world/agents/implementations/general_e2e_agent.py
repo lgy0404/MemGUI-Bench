@@ -399,7 +399,13 @@ class GeneralE2EAgentMCP(MCPAgent):
         if response is None:
             raise ValueError("Agent LLM failed")
         if action_str is None:
-            return "Agent LLM failed", JSONAction(action_type="unknown", text="Agent LLM failed")
+            return (
+                f"{response}\n\nModel output format error: missing valid Action block",
+                JSONAction(
+                    action_type="unknown",
+                    text="Model output format error: missing valid Action block",
+                ),
+            )
 
         logger.debug(f"Image size: {orig_width}x{orig_height}")
 

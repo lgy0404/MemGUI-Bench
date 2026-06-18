@@ -29,3 +29,31 @@ def test_invalid_action_json_is_model_format_error(monkeypatch):
     assert "Model output format error" in prediction
     assert action.action_type == "unknown"
     assert "Model output format error" in action.text
+
+
+def test_missing_action_block_is_model_format_error(monkeypatch):
+    agent = GeneralE2EAgentMCP(
+        model_name="model",
+        llm_base_url="http://llm",
+        api_key="key",
+        runtime_conf={"history_n_images": 1, "temperature": 0.0, "max_tokens": 64},
+        tools=[],
+    )
+    agent.initialize("Find the requested item")
+    monkeypatch.setattr(
+        agent,
+        "openai_chat_completions_create",
+        lambda **_kwargs: "Thought: I should inspect the screen",
+    )
+
+    prediction, action = agent.predict(
+        {
+            "screenshot": Image.new("RGB", (1080, 1920), "white"),
+            "tool_call": None,
+            "ask_user_response": None,
+        }
+    )
+
+    assert "Model output format error" in prediction
+    assert action.action_type == "unknown"
+    assert action.text == "Model output format error: missing valid Action block"

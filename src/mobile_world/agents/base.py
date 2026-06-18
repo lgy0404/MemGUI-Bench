@@ -112,6 +112,8 @@ def _is_transient_llm_exception(exc: Exception) -> bool:
         "service unavailable",
         "bad gateway",
         "gateway timeout",
+        "empty message content",
+        "empty response",
     ]
     return any(marker in text for marker in transient_markers)
 

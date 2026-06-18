@@ -326,8 +326,9 @@ class PlannerExecutorAgentMCP(MCPAgent):
         if plan is None:
             raise ValueError("Planner LLM failed")
         if action_str is None:
-            return "Planner LLM failed", JSONAction(
-                action_type="unknown", text="Planner LLM failed"
+            return plan, JSONAction(
+                action_type="unknown",
+                text="Model output format error: missing valid Action block",
             )
 
         try:

@@ -81,6 +81,34 @@ def test_429_then_success_returns_content(monkeypatch):
     assert calls["count"] == 2
 
 
+def test_empty_content_raises_transient_error(monkeypatch):
+    monkeypatch.setattr(base.time, "sleep", lambda _seconds: None)
+    configure_llm_rate_limits(
+        max_concurrency=1,
+        rate_limit_retries=1,
+        rate_limit_max_wait=1,
+        reset_stats=True,
+    )
+    agent = DummyAgent()
+
+    def fake_create(**_kwargs):
+        return _response("")
+
+    agent.openai_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))
+    )
+
+    with pytest.raises(TransientLLMError):
+        agent.openai_chat_completions_create(
+            model="model",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+
+    stats = base.get_llm_rate_limit_stats()
+    assert stats["transient_error_count"] == 2
+    assert stats["rate_limit_count"] == 0
+
+
 def test_streaming_429_raises_transient_error(monkeypatch):
     monkeypatch.setattr(base.time, "sleep", lambda _seconds: None)
     configure_llm_rate_limits(
