@@ -258,8 +258,16 @@ uv run mg eval \
 | `--step-wait-time`                     | `3.0`                | Seconds to wait after each action before the next screenshot for MemGUI-Bench                                                                 |
 | `--timeout`                            | none                   | Optional per-task timeout in seconds; timed-out tasks are recorded as failed and the run continues                                            |
 | `--max-concurrency`                    | number of containers   | Maximum concurrent tasks                                                                                                                      |
+| `--llm-max-concurrency`                | `MEMGUI_LLM_MAX_CONCURRENCY` or `2` | Maximum concurrent LLM API calls across running tasks                                                                            |
+| `--llm-rate-limit-retries`             | `MEMGUI_LLM_RATE_LIMIT_RETRIES` or `20` | Retries for transient LLM API failures such as 429, 5xx, timeout, or connection errors                                                |
+| `--llm-rate-limit-max-wait`            | `MEMGUI_LLM_RATE_LIMIT_MAX_WAIT` or `120` | Maximum backoff wait in seconds for transient LLM API failures                                                                       |
+| `--llm-infra-retries`                  | `MEMGUI_LLM_INFRA_RETRIES` or `3` | Infra-only reruns for the same pass@k attempt before marking the task as no-result; these reruns do not consume pass@k attempts               |
 | `--shuffle-tasks`                      | false                  | Shuffle task order before scheduling                                                                                                          |
 | `--dry-run`                            | false                  | Resolve tasks/backends without execution                                                                                                      |
+
+Transient API failures and device recovery failures are treated as infrastructure
+failures, not model failures. If they exceed the retry budget, MemGUI-Bench writes
+an `_infra_failures/` record and leaves the task as no-result for resume.
 
 ### Examples
 

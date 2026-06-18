@@ -5,7 +5,7 @@ from typing import Any
 
 from loguru import logger
 
-from mobile_world.agents.base import MCPAgent
+from mobile_world.agents.base import MCPAgent, TransientLLMError
 from mobile_world.agents.utils.helpers import pil_to_base64
 from mobile_world.agents.utils.prompts import GENERAL_E2E_PROMPT_TEMPLATE
 from mobile_world.runtime.utils.helpers import pretty_print_messages
@@ -381,6 +381,8 @@ class GeneralE2EAgentMCP(MCPAgent):
 
                 break
 
+            except TransientLLMError:
+                raise
             except Exception as e:
                 logger.warning(
                     f"Error fetching response from agent: {self.model_name}, {self.llm_base_url}, {self.api_key}"
@@ -408,7 +410,10 @@ class GeneralE2EAgentMCP(MCPAgent):
 
         except Exception as e:
             logger.error(f"Error parsing agent response: {e}")
-            return "Agent LLM failed", JSONAction(action_type="unknown", text="Agent LLM failed")
+            return (
+                f"{response}\n\nModel output format error: {e}",
+                JSONAction(action_type="unknown", text=f"Model output format error: {e}"),
+            )
 
         logger.info(f"Parsed thought: {thought}")
         logger.info(f"Parsed action: {json_action_dict}")

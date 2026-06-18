@@ -11,7 +11,7 @@ from typing import Any
 from loguru import logger
 from PIL import Image
 
-from mobile_world.agents.base import MCPAgent
+from mobile_world.agents.base import MCPAgent, TransientLLMError
 from mobile_world.agents.utils.helpers import pil_to_base64
 from mobile_world.agents.utils.prompts import SEED_PROMPT
 from mobile_world.runtime.utils.helpers import pretty_print_messages
@@ -418,6 +418,8 @@ class SeedAgent(MCPAgent):
             try:
                 prediction = self._inference_with_thinking(messages)
                 break
+            except TransientLLMError:
+                raise
             except Exception as e:
                 logger.warning(f"Error calling LLM: {e}")
                 retry_times -= 1

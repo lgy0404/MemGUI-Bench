@@ -422,3 +422,45 @@ def test_unfinished_task_without_result_is_interrupted_when_run_completed(tmp_pa
     assert status == "Interrupted"
     assert score is None
     assert "eval run ended" in reason
+
+
+def test_log_viewer_counts_infra_failure_separately(tmp_path):
+    task_name = "003-RecordAndNameAudio"
+    (tmp_path / "metadata.json").write_text(
+        json.dumps(
+            {
+                "suite_family": "memgui_bench",
+                "pass_at_k": 3,
+                "task_list": [task_name],
+                "task_count": 1,
+                "run_status": "completed",
+            }
+        )
+    )
+
+    task_dir = tmp_path / task_name
+    task_dir.mkdir()
+    (task_dir / "traj.json").write_text(json.dumps({}))
+
+    failure_dir = tmp_path / "_infra_failures" / task_name
+    failure_dir.mkdir(parents=True)
+    (failure_dir / "attempt_1.json").write_text(
+        json.dumps(
+            {
+                "task_name": task_name,
+                "attempt": 1,
+                "failure_type": "llm_transient",
+                "reason": "Transient LLM error after retries: 429",
+            }
+        )
+    )
+
+    status, score, reason = get_task_status(str(task_dir))
+    stats = calculate_task_stats(str(tmp_path), suite_family="memgui_bench")
+
+    assert status == "Rate Limited"
+    assert score is None
+    assert "429" in reason
+    assert stats["infra_failed"] == 1
+    assert stats["running"] == 0
+    assert stats["failed"] == 0

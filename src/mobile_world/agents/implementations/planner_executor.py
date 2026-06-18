@@ -4,7 +4,7 @@ from typing import Any
 
 from loguru import logger
 
-from mobile_world.agents.base import MCPAgent
+from mobile_world.agents.base import MCPAgent, TransientLLMError
 from mobile_world.agents.grounding import GROUNDING_MODELS
 from mobile_world.agents.utils.helpers import pil_to_base64
 from mobile_world.agents.utils.prompts import PLANNER_EXECUTOR_PROMPT_TEMPLATE
@@ -291,6 +291,8 @@ class PlannerExecutorAgentMCP(MCPAgent):
         logger.debug("*" * 100)
 
         try_times = 3
+        plan = None
+        action_str = None
 
         while try_times > 0:
             try:
@@ -306,6 +308,8 @@ class PlannerExecutorAgentMCP(MCPAgent):
                 logger.info(f"\nRaw LLM response received:\n{plan}")
                 break
 
+            except TransientLLMError:
+                raise
             except Exception as e:
                 logger.warning(
                     f"Error fetching response from planner: {self.model_name}, {self.llm_base_url}, {self.api_key}"
@@ -330,8 +334,8 @@ class PlannerExecutorAgentMCP(MCPAgent):
             json_action_dict = parsing_planner_response_to_android_world_env_action(action_str)
         except Exception as e:
             logger.error(f"Error parsing planner response: {e}")
-            return "Planner LLM failed", JSONAction(
-                action_type="unknown", text="Planner LLM failed"
+            return plan, JSONAction(
+                action_type="unknown", text=f"Model output format error: {e}"
             )
 
         logger.info(f"Parsed planner thought: {plan_thought}")

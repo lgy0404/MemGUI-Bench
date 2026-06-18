@@ -315,6 +315,38 @@ def configure_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Maximum number of concurrent tasks to run, Note: min(max_concurrency, number of tasks, number of docker envs)",
     )
     eval_parser.add_argument(
+        "--llm-max-concurrency",
+        "--llm_max_concurrency",
+        dest="llm_max_concurrency",
+        type=int,
+        default=None,
+        help="Maximum number of concurrent LLM API calls (default: MEMGUI_LLM_MAX_CONCURRENCY or 2 for MemGUI-Bench).",
+    )
+    eval_parser.add_argument(
+        "--llm-rate-limit-retries",
+        "--llm_rate_limit_retries",
+        dest="llm_rate_limit_retries",
+        type=int,
+        default=None,
+        help="Maximum retries for retryable LLM API failures such as 429/5xx.",
+    )
+    eval_parser.add_argument(
+        "--llm-rate-limit-max-wait",
+        "--llm_rate_limit_max_wait",
+        dest="llm_rate_limit_max_wait",
+        type=float,
+        default=None,
+        help="Maximum backoff wait in seconds for retryable LLM API failures.",
+    )
+    eval_parser.add_argument(
+        "--llm-infra-retries",
+        "--llm_infra_retries",
+        dest="llm_infra_retries",
+        type=int,
+        default=None,
+        help="Number of infra-only reruns for the same pass@k attempt before marking a task as no-result.",
+    )
+    eval_parser.add_argument(
         "--shuffle-tasks",
         "--shuffle_tasks",
         dest="shuffle_tasks",
@@ -391,6 +423,10 @@ async def execute(args: argparse.Namespace) -> None:
         enable_mcp=args.enable_mcp,
         enable_user_interaction=args.enable_user_interaction,
         max_concurrency=args.max_concurrency,
+        llm_max_concurrency=args.llm_max_concurrency,
+        llm_rate_limit_retries=args.llm_rate_limit_retries,
+        llm_rate_limit_max_wait=args.llm_rate_limit_max_wait,
+        llm_infra_retries=args.llm_infra_retries,
         shuffle_tasks=args.shuffle_tasks,
         pass_at_k=args.pass_at_k,
         task_file=args.task_file,

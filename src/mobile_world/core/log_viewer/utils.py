@@ -40,6 +40,7 @@ _MEMGUI_DIFFICULTY_ALIASES = {
 }
 STALE_TASK_SECONDS = 600
 TERMINAL_RUN_STATUSES = {"completed", "failed", "interrupted", "cancelled", "stopped"}
+INFRA_FAILURE_STATUSES = {"Rate Limited", "Device Recovery Failed", "Infra Failed"}
 
 
 def parse_result_file(result_file: str) -> tuple[float | None, str | None]:
@@ -116,6 +117,48 @@ def _read_latest_eval_report_metadata(log_root: str) -> dict:
         return {}
     metadata = report.get("metadata")
     return metadata if isinstance(metadata, dict) else {}
+
+
+def _read_latest_infra_failure(
+    log_root: str,
+    task_name: str,
+    attempt_num: int | None = None,
+) -> dict:
+    failure_dir = os.path.join(log_root, "_infra_failures", task_name)
+    if not os.path.isdir(failure_dir):
+        return {}
+    try:
+        filenames = [
+            item
+            for item in os.listdir(failure_dir)
+            if item.startswith("attempt_") and item.endswith(".json")
+        ]
+    except OSError:
+        return {}
+    if attempt_num is not None:
+        filenames = [f"attempt_{attempt_num}.json"] if f"attempt_{attempt_num}.json" in filenames else []
+    if not filenames:
+        return {}
+    paths = [os.path.join(failure_dir, item) for item in filenames]
+    latest_path = max(paths, key=lambda path: os.path.getmtime(path))
+    try:
+        with open(latest_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Error reading infra failure in {latest_path}: {e}")
+        return {}
+    data["_path"] = latest_path
+    return data
+
+
+def _infra_failure_status(failure: dict) -> tuple[str, str]:
+    failure_type = str(failure.get("failure_type") or "").lower()
+    reason = str(failure.get("reason") or "Infrastructure failure")
+    if "device" in failure_type:
+        return "Device Recovery Failed", reason
+    if "rate" in failure_type or "llm" in failure_type:
+        return "Rate Limited", reason
+    return "Infra Failed", reason
 
 
 def _get_attempt_prefixes(fieldnames: list[str]) -> list[tuple[int, str]]:
@@ -1168,6 +1211,11 @@ def get_task_status(task_folder: str) -> tuple[str, float | None, str | None]:
     - "Interrupted": no result.txt and the run has ended or task activity is stale
     """
     log_root, task_name, attempt_num = _task_folder_eval_lookup(task_folder)
+    infra_failure = _read_latest_infra_failure(log_root, task_name, attempt_num)
+    if infra_failure:
+        status, reason = _infra_failure_status(infra_failure)
+        return status, None, reason
+
     pending_eval_attempts = get_memgui_pending_eval_attempts(
         log_root, task_name=task_name, attempt_num=attempt_num
     )
@@ -1323,6 +1371,7 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
             "total": 0,
             "finished": 0,
             "running": 0,
+            "infra_failed": 0,
             "evaluating": 0,
             "awaiting_eval": 0,
             "stale": 0,
@@ -1356,6 +1405,7 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
 
     finished_count = 0
     running_count = 0
+    infra_failed_count = 0
     evaluating_count = 0
     awaiting_eval_count = 0
     stale_count = 0
@@ -1395,6 +1445,11 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
         status, score, _ = get_task_status(task_folder)
         trajectory_steps = get_all_trajectory_steps(task_folder)
         step_count = len(trajectory_steps)
+
+        if status in INFRA_FAILURE_STATUSES:
+            infra_failed_count += 1
+            total_steps += step_count
+            continue
 
         # Skip tasks with empty steps for stats too
         if not trajectory_steps:
@@ -1484,6 +1539,7 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
     total = (
         finished_count
         + running_count
+        + infra_failed_count
         + evaluating_count
         + awaiting_eval_count
         + stale_count
@@ -1542,6 +1598,7 @@ def calculate_task_stats(log_root: str, suite_family: str = "memgui_bench") -> d
         "total": total,
         "finished": finished_count,
         "running": running_count,
+        "infra_failed": infra_failed_count,
         "evaluating": evaluating_count,
         "awaiting_eval": awaiting_eval_count,
         "stale": stale_count,

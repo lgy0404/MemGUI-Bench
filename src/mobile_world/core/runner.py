@@ -15,7 +15,13 @@ from dotenv import load_dotenv
 from joblib import Parallel, delayed
 from loguru import logger
 
-from mobile_world.agents.base import BaseAgent, MCPAgent
+from mobile_world.agents.base import (
+    BaseAgent,
+    MCPAgent,
+    TransientLLMError,
+    configure_llm_rate_limits,
+    get_llm_rate_limit_stats,
+)
 from mobile_world.agents.registry import create_agent
 from mobile_world.runtime.client import (
     AndroidEnvClient,
@@ -60,6 +66,8 @@ BACKEND_REBUILD_TIMEOUT_SECONDS = int(
 AUTO_REBUILD_UNHEALTHY_BACKEND = os.getenv(
     "MEMGUI_AUTO_REBUILD_UNHEALTHY_BACKEND", "true"
 ).lower() not in {"0", "false", "no", "off"}
+MEMGUI_LLM_INFRA_RETRIES = int(os.getenv("MEMGUI_LLM_INFRA_RETRIES", "3"))
+_METADATA_UPDATE_LOCK = threading.Lock()
 
 
 @lru_cache(maxsize=1)
@@ -222,17 +230,107 @@ def _scan_finished_memgui_pass_at_k_tasks(
 
 def _update_log_metadata(metadata_path: str, updates: dict) -> None:
     """Merge run metadata without changing the existing suite-family guard."""
-    metadata = {}
-    if os.path.exists(metadata_path):
-        try:
-            with open(metadata_path) as f:
-                metadata = json.load(f)
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Could not read existing metadata at {metadata_path}: {e}")
+    with _METADATA_UPDATE_LOCK:
+        metadata = {}
+        if os.path.exists(metadata_path):
+            try:
+                with open(metadata_path) as f:
+                    metadata = json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Could not read existing metadata at {metadata_path}: {e}")
 
-    metadata.update(updates)
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=2, ensure_ascii=False)
+        metadata.update(updates)
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+
+def _infra_failure_dir(log_file_root: str, task_name: str) -> str:
+    return os.path.join(log_file_root, "_infra_failures", task_name)
+
+
+def _write_infra_failure(
+    *,
+    log_file_root: str,
+    task_name: str,
+    attempt_num: int,
+    failure_type: str,
+    reason: str,
+    infra_retries: int,
+    env_url: str | None = None,
+    container_name: str | None = None,
+) -> str:
+    """Record a terminal infra failure without converting it into score=0."""
+    task_dir = os.path.join(log_file_root, task_name)
+    os.makedirs(task_dir, exist_ok=True)
+    traj_path = os.path.join(task_dir, "traj.json")
+    if not os.path.exists(traj_path):
+        with open(traj_path, "w") as f:
+            json.dump({}, f)
+
+    failure_dir = _infra_failure_dir(log_file_root, task_name)
+    os.makedirs(failure_dir, exist_ok=True)
+    failure_path = os.path.join(failure_dir, f"attempt_{attempt_num}.json")
+    payload = {
+        "task_name": task_name,
+        "attempt": attempt_num,
+        "failure_type": failure_type,
+        "reason": reason,
+        "infra_retries": infra_retries,
+        "env_url": env_url,
+        "container_name": container_name,
+        "timestamp": datetime.now().isoformat(),
+    }
+    with open(failure_path, "w") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+    return failure_path
+
+
+def _append_infra_failure_metadata(metadata_path: str, task_name: str, failure_type: str) -> None:
+    with _METADATA_UPDATE_LOCK:
+        metadata = {}
+        if os.path.exists(metadata_path):
+            try:
+                with open(metadata_path) as f:
+                    metadata = json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Could not read existing metadata at {metadata_path}: {e}")
+        tasks = metadata.get("infra_failed_tasks")
+        if not isinstance(tasks, list):
+            tasks = []
+        if task_name not in tasks:
+            tasks.append(task_name)
+        counts = metadata.get("infra_failure_counts")
+        if not isinstance(counts, dict):
+            counts = {}
+        counts[failure_type] = int(counts.get(failure_type, 0)) + 1
+        metadata.update(
+            {
+                "infra_failed_tasks": tasks,
+                "infra_failure_counts": counts,
+                "updated_at": datetime.now().isoformat(),
+            }
+        )
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+
+def _increment_metadata_counter(metadata_path: str, key: str, amount: int = 1) -> None:
+    with _METADATA_UPDATE_LOCK:
+        metadata = {}
+        if os.path.exists(metadata_path):
+            try:
+                with open(metadata_path) as f:
+                    metadata = json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Could not read existing metadata at {metadata_path}: {e}")
+        metadata[key] = int(metadata.get(key, 0) or 0) + amount
+        metadata["updated_at"] = datetime.now().isoformat()
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+
+def _is_transient_infra_error(exc: Exception) -> bool:
+    return isinstance(exc, TransientLLMError) or _is_device_unhealthy_error(exc)
 
 
 def _write_pass_at_k_result(
@@ -688,6 +786,7 @@ def _process_task_on_env(
     suite_family: str = "memgui_bench",
     pass_at_k: int = 1,
     task_timeout: int | None = None,
+    llm_infra_retries: int = MEMGUI_LLM_INFRA_RETRIES,
     **kwargs,
 ) -> dict:
     """Process a single task on a specific environment.
@@ -758,57 +857,149 @@ def _process_task_on_env(
                         )
                         raise
 
-                agent: BaseAgent | None = create_agent(
-                    agent_type, model_name, llm_base_url, api_key, env=env, **kwargs
-                )
-                traj_logger = _create_attempt_traj_logger(
-                    log_file_root, task_name, attempt_num, pass_at_k
-                )
-                remaining_health_retries = retry_on_device_unhealthy
+                agent: BaseAgent | None = None
+                traj_logger = None
+                infra_retries = 0
+                task_steps = 0
+                task_score = 0.0
+                task_reason = ""
                 while True:
+                    agent = create_agent(
+                        agent_type, model_name, llm_base_url, api_key, env=env, **kwargs
+                    )
+                    traj_logger = _create_attempt_traj_logger(
+                        log_file_root, task_name, attempt_num, pass_at_k
+                    )
+                    remaining_health_retries = retry_on_device_unhealthy
                     try:
-                        task_steps, task_score, task_reason = _execute_single_task(
-                            env,
-                            agent,
-                            task_name,
-                            task_max_step,
-                            traj_logger=traj_logger,
-                            enable_mcp=enable_mcp,
-                            suite_family=suite_family,
-                            log_file_root=log_file_root,
-                            agent_name=agent_type,
-                            attempt_num=attempt_num,
-                            timeout_deadline=timeout_deadline,
-                        )
+                        while True:
+                            try:
+                                task_steps, task_score, task_reason = _execute_single_task(
+                                    env,
+                                    agent,
+                                    task_name,
+                                    task_max_step,
+                                    traj_logger=traj_logger,
+                                    enable_mcp=enable_mcp,
+                                    suite_family=suite_family,
+                                    log_file_root=log_file_root,
+                                    agent_name=agent_type,
+                                    attempt_num=attempt_num,
+                                    timeout_deadline=timeout_deadline,
+                                )
+                                break
+                            except Exception as e:
+                                if (
+                                    _is_device_unhealthy_error(e)
+                                    and remaining_health_retries > 0
+                                ):
+                                    remaining_health_retries -= 1
+                                    logger.warning(
+                                        "Device is not healthy; recovering environment "
+                                        "before retrying task '{}' (remaining retries: {})",
+                                        task_name,
+                                        remaining_health_retries,
+                                    )
+                                    _increment_metadata_counter(
+                                        os.path.join(log_file_root, "metadata.json"),
+                                        "device_recovery_count",
+                                    )
+                                    recovered_env = _recover_backend_env(
+                                        env.base_url,
+                                        container_name,
+                                        device,
+                                        step_wait_time,
+                                        suite_family,
+                                        enable_mcp,
+                                        seed,
+                                        env_image,
+                                    )
+                                    if recovered_env is not None:
+                                        env = recovered_env
+                                    elif not _wait_for_env_recovery(env):
+                                        logger.warning(
+                                            "Environment {} did not recover", env.base_url
+                                        )
+                                    traj_logger.reset_traj()
+                                    continue
+                                raise
                         break
                     except Exception as e:
-                        if (
-                            _is_device_unhealthy_error(e)
-                            and remaining_health_retries > 0
-                        ):
-                            remaining_health_retries -= 1
+                        if _is_transient_infra_error(e):
+                            infra_retries += 1
+                            failure_type = (
+                                "device_unhealthy"
+                                if _is_device_unhealthy_error(e)
+                                else "llm_transient"
+                            )
                             logger.warning(
-                                "Device is not healthy; recovering environment "
-                                "before retrying task '{}' (remaining retries: {})",
+                                "Transient infra failure for task '{}' attempt {}/{} "
+                                "({}/{}) due to {}: {}",
                                 task_name,
-                                remaining_health_retries,
+                                attempt_num,
+                                pass_at_k,
+                                infra_retries,
+                                llm_infra_retries,
+                                failure_type,
+                                e,
                             )
-                            recovered_env = _recover_backend_env(
-                                env.base_url,
-                                container_name,
-                                device,
-                                step_wait_time,
-                                suite_family,
-                                enable_mcp,
-                                seed,
-                                env_image,
-                            )
-                            if recovered_env is not None:
-                                env = recovered_env
-                            elif not _wait_for_env_recovery(env):
-                                logger.warning("Environment {} did not recover", env.base_url)
-                            traj_logger.reset_traj()
+                            _safe_tear_down_task(env, agent, task_name)
+                            try:
+                                traj_logger.reset_traj()
+                            except Exception as reset_error:
+                                logger.warning(
+                                    "Could not reset transient failed trajectory for {}: {}",
+                                    task_name,
+                                    reset_error,
+                                )
+                            if infra_retries > llm_infra_retries:
+                                failure_path = _write_infra_failure(
+                                    log_file_root=log_file_root,
+                                    task_name=task_name,
+                                    attempt_num=attempt_num,
+                                    failure_type=failure_type,
+                                    reason=f"{type(e).__name__}: {e}",
+                                    infra_retries=infra_retries,
+                                    env_url=env.base_url,
+                                    container_name=container_name,
+                                )
+                                _append_infra_failure_metadata(
+                                    os.path.join(log_file_root, "metadata.json"),
+                                    task_name,
+                                    failure_type,
+                                )
+                                logger.error(
+                                    "Task '{}' marked as infra failure at {}",
+                                    task_name,
+                                    failure_path,
+                                )
+                                return None
+
+                            if _is_device_unhealthy_error(e):
+                                _increment_metadata_counter(
+                                    os.path.join(log_file_root, "metadata.json"),
+                                    "device_recovery_count",
+                                )
+                                recovered_env = _recover_backend_env(
+                                    env.base_url,
+                                    container_name,
+                                    device,
+                                    step_wait_time,
+                                    suite_family,
+                                    enable_mcp,
+                                    seed,
+                                    env_image,
+                                )
+                                if recovered_env is not None:
+                                    env = recovered_env
+                                elif not _wait_for_env_recovery(env):
+                                    logger.warning(
+                                        "Environment {} did not recover", env.base_url
+                                    )
+                            elif isinstance(e, TransientLLMError) and e.retry_after:
+                                time.sleep(min(float(e.retry_after), 30.0))
                             continue
+
                         logger.exception(
                             f"Error executing task {task_name} attempt {attempt_num}"
                         )
@@ -1061,6 +1252,10 @@ def run_agent_with_evaluation(
     enable_mcp: bool = False,
     enable_user_interaction: bool = False,
     max_concurrency: int | None = None,
+    llm_max_concurrency: int | None = None,
+    llm_rate_limit_retries: int | None = None,
+    llm_rate_limit_max_wait: float | None = None,
+    llm_infra_retries: int | None = None,
     shuffle_tasks: bool = False,
     pass_at_k: int = 1,
     task_file: str | None = None,
@@ -1090,6 +1285,32 @@ def run_agent_with_evaluation(
 
     # Write or validate metadata.json at log root for suite family identification.
     ensure_log_root_writable(log_file_root)
+    effective_llm_max_concurrency = (
+        llm_max_concurrency
+        if llm_max_concurrency is not None
+        else int(os.getenv("MEMGUI_LLM_MAX_CONCURRENCY", "2"))
+    )
+    effective_llm_rate_limit_retries = (
+        llm_rate_limit_retries
+        if llm_rate_limit_retries is not None
+        else int(os.getenv("MEMGUI_LLM_RATE_LIMIT_RETRIES", "20"))
+    )
+    effective_llm_rate_limit_max_wait = (
+        llm_rate_limit_max_wait
+        if llm_rate_limit_max_wait is not None
+        else float(os.getenv("MEMGUI_LLM_RATE_LIMIT_MAX_WAIT", "120"))
+    )
+    effective_llm_infra_retries = (
+        llm_infra_retries
+        if llm_infra_retries is not None
+        else int(os.getenv("MEMGUI_LLM_INFRA_RETRIES", str(MEMGUI_LLM_INFRA_RETRIES)))
+    )
+    configure_llm_rate_limits(
+        max_concurrency=effective_llm_max_concurrency,
+        rate_limit_retries=effective_llm_rate_limit_retries,
+        rate_limit_max_wait=effective_llm_rate_limit_max_wait,
+        reset_stats=True,
+    )
     metadata_path = os.path.join(log_file_root, "metadata.json")
     if os.path.exists(metadata_path):
         with open(metadata_path) as f:
@@ -1110,6 +1331,14 @@ def run_agent_with_evaluation(
             "task_file": task_file,
             "difficulty": difficulty,
             "step_wait_time": step_wait_time,
+            "llm_max_concurrency": effective_llm_max_concurrency,
+            "llm_rate_limit_retries": effective_llm_rate_limit_retries,
+            "llm_rate_limit_max_wait": effective_llm_rate_limit_max_wait,
+            "llm_infra_retries": effective_llm_infra_retries,
+            "llm_runtime_stats": get_llm_rate_limit_stats(),
+            "infra_failed_tasks": [],
+            "infra_failure_counts": {},
+            "device_recovery_count": 0,
             "timestamp": datetime.now().isoformat(),
         }
         with open(metadata_path, "w") as f:
@@ -1166,6 +1395,11 @@ def run_agent_with_evaluation(
             "task_file": task_file,
             "difficulty": difficulty,
             "step_wait_time": step_wait_time,
+            "llm_max_concurrency": effective_llm_max_concurrency,
+            "llm_rate_limit_retries": effective_llm_rate_limit_retries,
+            "llm_rate_limit_max_wait": effective_llm_rate_limit_max_wait,
+            "llm_infra_retries": effective_llm_infra_retries,
+            "llm_runtime_stats": get_llm_rate_limit_stats(),
             "task_list": task_list,
             "task_count": len(task_list),
             "task_selection": "selected" if tasks else "all",
@@ -1244,6 +1478,7 @@ def run_agent_with_evaluation(
                     suite_family=suite_family,
                     pass_at_k=pass_at_k,
                     task_timeout=task_timeout,
+                    llm_infra_retries=effective_llm_infra_retries,
                     device=device,
                     step_wait_time=step_wait_time,
                     seed=seed,
@@ -1275,6 +1510,7 @@ def run_agent_with_evaluation(
                 "run_status": "completed",
                 "run_completed_at": datetime.now().isoformat(),
                 "task_with_no_results": task_list_with_no_results,
+                "llm_runtime_stats": get_llm_rate_limit_stats(),
                 "updated_at": datetime.now().isoformat(),
             },
         )
@@ -1289,6 +1525,7 @@ def run_agent_with_evaluation(
                 "run_completed_at": datetime.now().isoformat(),
                 "run_error_type": type(e).__name__,
                 "run_error": str(e),
+                "llm_runtime_stats": get_llm_rate_limit_stats(),
                 "updated_at": datetime.now().isoformat(),
             },
         )

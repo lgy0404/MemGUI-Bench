@@ -148,6 +148,7 @@ def print_results_table(log_roots: list[str]) -> None:
         memgui_table.add_column("Evaluating", justify="right")
         memgui_table.add_column("Awaiting Eval", justify="right")
         memgui_table.add_column("Running", justify="right")
+        memgui_table.add_column("Infra", justify="right")
         memgui_table.add_column("Success", justify="right")
         memgui_table.add_column("Failed", justify="right")
         memgui_table.add_column("Avg Steps", justify="right")
@@ -174,6 +175,7 @@ def print_results_table(log_roots: list[str]) -> None:
                 str(stats.get("evaluating", 0)),
                 str(stats.get("awaiting_eval", 0)),
                 str(stats["running"]),
+                str(stats.get("infra_failed", 0)),
                 str(stats["success"]),
                 str(stats["failed"]),
                 f"{stats['avg_steps']:.1f}",

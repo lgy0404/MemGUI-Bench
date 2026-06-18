@@ -68,6 +68,9 @@ def register_routes(rt, base_path: str = "/"):
             "Running": "running",
             "Stale": "stale",
             "Interrupted": "stale",
+            "Rate Limited": "stale",
+            "Device Recovery Failed": "stale",
+            "Infra Failed": "stale",
         }
         return Span(status, cls=f"badge {cls_map.get(status, 'neutral')}")
 
@@ -226,6 +229,11 @@ def register_routes(rt, base_path: str = "/"):
                         cls="stat-card",
                     ),
                     Div(
+                        Div(stats.get("infra_failed", 0), cls="stat-value danger"),
+                        Div("Infra Failed", cls="stat-label"),
+                        cls="stat-card",
+                    ),
+                    Div(
                         Div(stats["success"], cls="stat-value success"),
                         Div("Success", cls="stat-label"),
                         cls="stat-card",
@@ -291,6 +299,11 @@ def register_routes(rt, base_path: str = "/"):
                 Div(
                     Div(stats["running"], cls="stat-value warning"),
                     Div("Running", cls="stat-label"),
+                    cls="stat-card",
+                ),
+                Div(
+                    Div(stats.get("infra_failed", 0), cls="stat-value danger"),
+                    Div("Infra Failed", cls="stat-label"),
                     cls="stat-card",
                 ),
                 Div(
@@ -560,6 +573,12 @@ def register_routes(rt, base_path: str = "/"):
                 if status_filter == "awaiting_eval" and status != "Awaiting Eval":
                     continue
                 if status_filter == "stale" and status not in {"Stale", "Interrupted"}:
+                    continue
+                if status_filter == "infra_failed" and status not in {
+                    "Rate Limited",
+                    "Device Recovery Failed",
+                    "Infra Failed",
+                }:
                     continue
                 if status_filter == "finished" and status != "Finished":
                     continue
@@ -2064,6 +2083,11 @@ def register_routes(rt, base_path: str = "/"):
                                         "Interrupted",
                                         value="stale",
                                         selected=status_filter == "stale",
+                                    ),
+                                    Option(
+                                        "Infra Failed",
+                                        value="infra_failed",
+                                        selected=status_filter == "infra_failed",
                                     ),
                                     Option(
                                         "Finished",
