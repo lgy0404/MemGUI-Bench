@@ -122,6 +122,40 @@ def _resolve_memgui_task_selection(
     return selected_tasks, explicit_all or bool(task_file or difficulties)
 
 
+def _maybe_save_memgui_leaderboard_outputs(args: argparse.Namespace, log_file_root: str) -> None:
+    """Best-effort export of v1-compatible leaderboard JSON for MemGUI runs."""
+    if (args.suite_family or "memgui_bench") != "memgui_bench":
+        return
+    if getattr(args, "dry_run", False):
+        return
+
+    results_csv = Path(log_file_root) / "_memgui_eval" / "results.csv"
+    if not results_csv.exists():
+        logger.warning(
+            "Skipping leaderboard JSON export because MemGUI-Eval results are missing: {}",
+            results_csv,
+        )
+        return
+
+    try:
+        from mobile_world.core.leaderboard_export import save_leaderboard_outputs
+
+        exported = save_leaderboard_outputs(
+            log_root=log_file_root,
+            max_attempts=args.pass_at_k,
+            agent_name=os.getenv("AGENT_NAME") or None,
+            trigger="Final Summary",
+        )
+    except Exception as e:
+        logger.warning("Failed to export MemGUI leaderboard JSON: {}", e)
+        return
+
+    if exported is None:
+        return
+    _, leaderboard_path = exported
+    logger.info("MemGUI leaderboard JSON exported: {}", leaderboard_path)
+
+
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     """Add common arguments shared between eval and test commands."""
     parser.add_argument(
@@ -434,6 +468,7 @@ async def execute(args: argparse.Namespace) -> None:
         task_timeout=args.timeout,
         scale_factor=getattr(args, "scale_factor", 1000),
     )
+    _maybe_save_memgui_leaderboard_outputs(args, log_file_root)
     if run_task_set and task_results:
         total_duration = time.time() - start_time
 
