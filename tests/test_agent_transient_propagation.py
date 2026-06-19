@@ -74,3 +74,34 @@ def test_seed_agent_propagates_transient_llm_error(monkeypatch):
 
     with pytest.raises(TransientLLMError):
         agent.predict(_observation())
+
+
+def test_seed_agent_builds_openai_compatible_image_messages():
+    agent = SeedAgent(
+        model_name="seed",
+        llm_base_url="http://llm",
+        api_key="key",
+        runtime_conf={"use_thinking": True},
+        tools=[],
+    )
+    agent.initialize("Find the requested item")
+
+    image = Image.new("RGB", (1080, 1920), "white")
+    messages = agent._build_messages(image, tool_call=None, ask_user_response=None)
+
+    image_messages = [
+        message
+        for message in messages
+        if isinstance(message.get("content"), list)
+        and any(part.get("type") == "image_url" for part in message["content"])
+    ]
+    assert image_messages
+    assert all(message["role"] == "user" for message in image_messages)
+    assert all("tool_call_id" not in message for message in image_messages)
+
+    agent.history_responses.append("<think>reasoning</think><tool_call></tool_call>")
+    messages = agent._build_messages(image, tool_call=None, ask_user_response=None)
+    assistant_messages = [message for message in messages if message["role"] == "assistant"]
+    assert assistant_messages
+    assert all("reasoning_content" not in message for message in assistant_messages)
+    assert assistant_messages[-1]["content"].startswith("<think>reasoning</think>")
