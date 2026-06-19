@@ -1,0 +1,70 @@
+{
+  "name": "Kimi-K2.6",
+  "backbone": "-",
+  "type": "Agent-as-a-Model",
+  "institution": "Alibaba",
+  "date": "2026-04-21",
+  "paperLink": "https://kimi-k2.org/zh/blog/24-kimi-k2-6-release",
+  "codeLink": "https://huggingface.co/moonshotai/Kimi-K2.6",
+  "trajFile": "trajs/kimi-k2-6.json.gz",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {
+      "p1": 39.3,
+      "p3": 60.7,
+      "irr": 22.9
+    },
+    "app2": {
+      "p1": 41.1,
+      "p3": 71.4,
+      "irr": 49.9
+    },
+    "app3": {
+      "p1": 38.2,
+      "p3": 70.6,
+      "irr": 50.0
+    },
+    "app4": {
+      "p1": 30.0,
+      "p3": 70.0,
+      "irr": 39.3
+    }
+  },
+  "difficulty": {
+    "easy": {
+      "p1": 39.6,
+      "p3": 66.7,
+      "irr": 34.97
+    },
+    "medium": {
+      "p1": 47.6,
+      "p3": 76.2,
+      "irr": 60.66
+    },
+    "hard": {
+      "p1": 28.9,
+      "p3": 63.2,
+      "irr": 38.86
+    }
+  },
+  "avg": {
+    "p1": 39.1,
+    "p3": 68.8
+  },
+  "metrics": {
+    "shortTerm": {
+      "irr": 45.5,
+      "mtpr": 0.59,
+      "stepRatio": 1.62,
+      "timePerStep": 41.3,
+      "costPerStep": 0.0176
+    },
+    "longTerm": {
+      "frr": 42.9,
+      "stepRatio": 1.84,
+      "timePerStep": 39.4,
+      "costPerStep": 0.0178
+    }
+  }
+}
