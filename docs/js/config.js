@@ -97,15 +97,23 @@ function manifestFileUrl(manifestPath, filePath) {
   return new URL(relativeName, manifestPath).href;
 }
 
+function remoteTrajFileUrl(filePath) {
+  if (isAbsoluteUrl(filePath)) return filePath;
+  const normalized = normalizeTrajPath(filePath);
+  const relativeName = normalized.replace(/^trajs\//, '').replace(/^site\/trajs\//, '');
+  return `${TRAJ_REMOTE_BASE_URL}${relativeName}`;
+}
+
 async function loadTrajManifest() {
+  TRAJ_FILES = new Set();
+  TRAJ_FILE_URLS = new Map();
+  let loadedAnyManifest = false;
   for (const manifestPath of TRAJ_MANIFEST_PATHS) {
     try {
       const response = await fetch(manifestPath);
       if (!response.ok) continue;
       const data = await response.json();
       const files = Array.isArray(data.files) ? data.files : [];
-      TRAJ_FILES = new Set();
-      TRAJ_FILE_URLS = new Map();
       files.forEach((file) => {
         const path = normalizeTrajPath(file);
         const shortPath = path.replace(/^trajs\//, '').replace(/^site\/trajs\//, '');
@@ -116,26 +124,29 @@ async function loadTrajManifest() {
           TRAJ_FILE_URLS.set(key, url);
         });
       });
-      return TRAJ_FILES;
+      loadedAnyManifest = true;
     } catch (error) {
       // Try the next static path.
     }
   }
-  TRAJ_FILE_URLS = new Map();
-  TRAJ_FILES = new Set();
+  if (!loadedAnyManifest) {
+    TRAJ_FILE_URLS = new Map();
+    TRAJ_FILES = new Set();
+  }
   return TRAJ_FILES;
 }
 
 function hasTrajectoryBundle(agent) {
   if (!agent?.trajFile) return false;
+  if (isAbsoluteUrl(agent.trajFile)) return true;
   if (!TRAJ_FILES) return true;
   const path = normalizeTrajPath(agent.trajFile);
-  return TRAJ_FILES.has(path) || TRAJ_FILES.has(path.replace(/^trajs\//, ''));
+  return TRAJ_FILES.has(path) || TRAJ_FILES.has(path.replace(/^trajs\//, '')) || Boolean(path);
 }
 
 function trajectoryBundleUrl(agent) {
   if (!agent?.trajFile) return '';
   if (isAbsoluteUrl(agent.trajFile)) return agent.trajFile;
   const path = normalizeTrajPath(agent.trajFile);
-  return TRAJ_FILE_URLS.get(path) || TRAJ_FILE_URLS.get(path.replace(/^trajs\//, '')) || agent.trajFile;
+  return TRAJ_FILE_URLS.get(path) || TRAJ_FILE_URLS.get(path.replace(/^trajs\//, '')) || remoteTrajFileUrl(path);
 }
