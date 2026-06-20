@@ -21,7 +21,8 @@ const DEFAULT_AGENT_FILES = [
   "qwen3-vl-235b-a22b-thinking",
   "memgui-agent-235b",
   "gui-owl-1.5-8b-instruct",
-  "gui-owl-1.5-32b-instruct"
+  "gui-owl-1.5-32b-instruct",
+  "kimi-k2-6"
 ];
 
 let AGENT_FILES = [...DEFAULT_AGENT_FILES];
