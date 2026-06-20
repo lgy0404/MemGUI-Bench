@@ -1,0 +1,70 @@
+{
+  "name": "Seed-2.0-Pro",
+  "backbone": "-",
+  "type": "Agent-as-a-Model",
+  "institution": "ByteDance Seed",
+  "date": "2026-02-14",
+  "paperLink": "https://seed.bytedance.com/en/seed2",
+  "codeLink": "https://seed.bytedance.com/en/seed2",
+  "trajFile": "trajs/seed-2.0-pro.json.gz",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {
+      "p1": 50.0,
+      "p3": 67.9,
+      "irr": 26.7
+    },
+    "app2": {
+      "p1": 23.2,
+      "p3": 48.2,
+      "irr": 31.5
+    },
+    "app3": {
+      "p1": 32.4,
+      "p3": 55.9,
+      "irr": 43.2
+    },
+    "app4": {
+      "p1": 20.0,
+      "p3": 30.0,
+      "irr": 33.3
+    }
+  },
+  "difficulty": {
+    "easy": {
+      "p1": 35.4,
+      "p3": 52.1,
+      "irr": 28.64
+    },
+    "medium": {
+      "p1": 28.6,
+      "p3": 57.1,
+      "irr": 41.46
+    },
+    "hard": {
+      "p1": 28.9,
+      "p3": 50.0,
+      "irr": 32.5
+    }
+  },
+  "avg": {
+    "p1": 31.2,
+    "p3": 53.1
+  },
+  "metrics": {
+    "shortTerm": {
+      "irr": 34.5,
+      "mtpr": 0.3,
+      "stepRatio": 1.74,
+      "timePerStep": 15.2,
+      "costPerStep": 0.0101
+    },
+    "longTerm": {
+      "frr": 28.4,
+      "stepRatio": 1.84,
+      "timePerStep": 15.6,
+      "costPerStep": 0.0103
+    }
+  }
+}
