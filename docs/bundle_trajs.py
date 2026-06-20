@@ -31,6 +31,8 @@ from typing import Any
 SCREENSHOT_RESIZE_WIDTH = 270
 VIDEO_FPS = 2
 VIDEO_CRF = 30
+PROGRESS_EVERY = 10
+FRAME_PROGRESS_EVERY = 250
 
 
 @dataclass
@@ -63,6 +65,10 @@ def _safe_json_load(path: Path) -> Any:
 
 def _ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
+
+
+def _progress(message: str) -> None:
+    print(f"[bundle_trajs] {message}", flush=True)
 
 
 def _hardlink_or_copy(src: Path, dst: Path) -> None:
@@ -292,6 +298,7 @@ def convert_legacy_run(source_dir: Path, output_dir: Path, attempt_num: int | No
     if output_dir.exists():
         shutil.rmtree(output_dir)
     _ensure_dir(output_dir)
+    _progress(f"Converting {len(attempts)} legacy attempts -> {output_dir}")
 
     metadata = {
         "suite_family": "memgui_bench",
@@ -301,7 +308,12 @@ def convert_legacy_run(source_dir: Path, output_dir: Path, attempt_num: int | No
     }
     (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
-    for attempt in attempts:
+    for index, attempt in enumerate(attempts, start=1):
+        if index == 1 or index % PROGRESS_EVERY == 0 or index == len(attempts):
+            _progress(
+                f"Converting attempt {index}/{len(attempts)}: "
+                f"{attempt.task_name} attempt_{attempt.attempt_num}"
+            )
         log_data = _load_json(attempt.attempt_dir / "log.json")
         if not isinstance(log_data, list):
             continue
@@ -355,7 +367,7 @@ def convert_legacy_run(source_dir: Path, output_dir: Path, attempt_num: int | No
             (task_dir / "result.txt").write_text(result_text, encoding="utf-8")
 
     task_count = len({attempt.task_name for attempt in attempts})
-    print(f"Converted {len(attempts)} legacy attempts across {task_count} tasks -> {output_dir}")
+    _progress(f"Converted {len(attempts)} legacy attempts across {task_count} tasks -> {output_dir}")
     return output_dir
 
 
@@ -393,12 +405,12 @@ def extract_zip_if_needed(input_path: Path, extract_root: Path | None = None) ->
     target = (extract_root or input_path.parent) / input_path.stem
     marker = target / ".extract_complete"
     if marker.exists() and any(target.iterdir()) and _zip_marker_matches(marker, input_path):
-        print(f"Using existing extraction: {target}")
+        _progress(f"Using existing extraction: {target}")
         return target
     if target.exists():
         shutil.rmtree(target)
     _ensure_dir(target)
-    print(f"Extracting {input_path} -> {target}")
+    _progress(f"Extracting {input_path} -> {target}")
     with zipfile.ZipFile(input_path) as archive:
         _safe_extract_zip(archive, target)
     marker.write_text(
@@ -505,12 +517,22 @@ def bundle_mobileworld_run(
     original_size: tuple[int, int] | None = None
     display_size: tuple[int, int] | None = None
     task_catalog = _load_legacy_task_catalog(traj_dir)
+    attempt_dirs = _iter_task_attempt_dirs(traj_dir)
+    _progress(
+        f"Bundling {len(attempt_dirs)} task attempts from {traj_dir} "
+        f"({'with' if with_screenshots else 'without'} screenshots)"
+    )
 
-    for attempt_info in _iter_task_attempt_dirs(traj_dir):
+    for attempt_index, attempt_info in enumerate(attempt_dirs, start=1):
         task_path = attempt_info.path
         task_name = attempt_info.task_name
         if "_backup_" in task_path.parts:
             continue
+        if attempt_index == 1 or attempt_index % PROGRESS_EVERY == 0 or attempt_index == len(attempt_dirs):
+            _progress(
+                f"Reading attempt {attempt_index}/{len(attempt_dirs)}: "
+                f"{task_name} {attempt_info.label}"
+            )
         traj_file = task_path / "traj.json"
         traj_data = _load_json(traj_file)
         entry = traj_data.get("0", traj_data) if isinstance(traj_data, dict) else {}
@@ -543,6 +565,8 @@ def bundle_mobileworld_run(
                             display_size = (target_w, target_h)
                     step["frame_index"] = len(frames)
                     frames.append(img_path)
+                    if len(frames) % FRAME_PROGRESS_EVERY == 0:
+                        _progress(f"Collected {len(frames)} screenshot frames")
 
         result = None
         result_file = task_path / "result.txt"
@@ -573,6 +597,7 @@ def bundle_mobileworld_run(
     video_revision = None
     if with_screenshots and frames:
         video_output = output.with_suffix("").with_suffix(".mp4")
+        _progress(f"Encoding video from {len(frames)} frames -> {video_output}")
         _encode_video(frames, video_output, original_size)
         video_stat = video_output.stat()
         video_revision = f"{video_stat.st_size}-{video_stat.st_mtime_ns}"
@@ -596,16 +621,17 @@ def bundle_mobileworld_run(
 
     _ensure_dir(output.parent)
     json_bytes = json.dumps(combined, ensure_ascii=False).encode("utf-8")
+    _progress(f"Writing bundled trajectory JSON -> {output}")
     with gzip.open(output, "wb") as file:
         file.write(json_bytes)
 
-    print(
+    _progress(
         f"{len(combined) - (1 if '_meta' in combined else 0)} tasks | "
         f"{len(json_bytes) / 1024:.0f} KB raw | {output.stat().st_size / 1024:.0f} KB gzipped -> {output}"
     )
     if video_ref:
         video_path = output.with_suffix("").with_suffix(".mp4")
-        print(f"{len(frames)} frames -> {video_path.stat().st_size / 1024 / 1024:.1f} MB video -> {video_path}")
+        _progress(f"{len(frames)} frames -> {video_path.stat().st_size / 1024 / 1024:.1f} MB video -> {video_path}")
     _update_traj_manifest(output)
 
 
@@ -625,6 +651,7 @@ def _encode_video(frame_paths: list[Path], video_output: Path, original_size: tu
 
     tmpdir = Path(tempfile.mkdtemp(prefix="memgui_frames_"))
     try:
+        _progress(f"Preparing {len(frame_paths)} frames for ffmpeg")
         target_w = SCREENSHOT_RESIZE_WIDTH
         if target_w % 2:
             target_w += 1
@@ -642,6 +669,9 @@ def _encode_video(frame_paths: list[Path], video_output: Path, original_size: tu
                         target_h += 1
                 resized = img.convert("RGB").resize((target_w, target_h), Image.LANCZOS)
                 resized.save(tmpdir / f"{index:06d}.png", optimize=True)
+            frame_count = index + 1
+            if frame_count == 1 or frame_count % FRAME_PROGRESS_EVERY == 0 or frame_count == len(frame_paths):
+                _progress(f"Prepared frame {frame_count}/{len(frame_paths)}")
 
         _ensure_dir(video_output.parent)
         cmd = [
@@ -669,7 +699,9 @@ def _encode_video(frame_paths: list[Path], video_output: Path, original_size: tu
             "+faststart",
             str(video_output),
         ]
+        _progress("Running ffmpeg")
         subprocess.run(cmd, check=True, capture_output=True)
+        _progress("ffmpeg finished")
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
