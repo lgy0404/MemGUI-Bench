@@ -251,14 +251,14 @@ class SeedAgent(MCPAgent):
             }
         else:
             return {
-                "role": "tool",
+                "role": "user",
                 "content": [
+                    {"type": "text", "text": "Current screenshot:"},
                     {
                         "type": "image_url",
                         "image_url": {"url": f"data:image/png;base64,{img_b64}"},
                     }
                 ],
-                "tool_call_id": "1",
             }
 
     def _build_messages(
@@ -288,9 +288,9 @@ class SeedAgent(MCPAgent):
                 content_parts[0].replace(f"<{THINK_TOKEN}>", "") if len(content_parts) > 1 else ""
             )
 
-            messages.append(
-                {"role": "assistant", "content": content, "reasoning_content": reasoning}
-            )
+            if reasoning:
+                content = f"<{THINK_TOKEN}>{reasoning}</{THINK_TOKEN}>{content}"
+            messages.append({"role": "assistant", "content": content})
 
             # Add the next observation if available
             if i + 1 < len(self.history_images):
@@ -299,7 +299,10 @@ class SeedAgent(MCPAgent):
         messages_with_limited_images = []
         image_count = 0
         for msg in messages[::-1]:
-            if msg["role"] == "tool" and msg["content"][0]["type"] == "image_url":
+            if any(
+                isinstance(content_part, dict) and content_part.get("type") == "image_url"
+                for content_part in msg.get("content", [])
+            ):
                 image_count += 1
                 if image_count > self.history_n:
                     continue
