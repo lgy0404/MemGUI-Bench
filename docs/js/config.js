@@ -22,7 +22,8 @@ const DEFAULT_AGENT_FILES = [
   "memgui-agent-235b",
   "gui-owl-1.5-8b-instruct",
   "gui-owl-1.5-32b-instruct",
-  "kimi-k2-6"
+  "kimi-k2-6",
+  "seed-2.0-pro"
 ];
 
 let AGENT_FILES = [...DEFAULT_AGENT_FILES];
