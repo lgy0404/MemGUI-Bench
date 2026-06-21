@@ -161,6 +161,26 @@ def _sanitize_text_value(value: Any, placeholder: str) -> str:
     return text if text.strip() else placeholder
 
 
+def _is_image_detail_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "invalid image detail" in text
+
+
+def _with_image_detail(messages: list[dict], detail: str) -> list[dict]:
+    patched = copy.deepcopy(messages)
+    for message in patched:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "image_url":
+                continue
+            image_url = part.get("image_url")
+            if isinstance(image_url, dict):
+                image_url["detail"] = detail
+    return patched
+
+
 def sanitize_openai_messages(messages: list[dict]) -> list[dict]:
     """Return OpenAI messages without empty text content or malformed image parts."""
     sanitized: list[dict] = []
@@ -296,6 +316,7 @@ class BaseAgent(ABC):
         transient_retries = int(kwargs.pop("rate_limit_retries", _LLM_RATE_LIMIT_DEFAULT_RETRIES))
         max_wait = float(kwargs.pop("rate_limit_max_wait", _LLM_RATE_LIMIT_DEFAULT_MAX_WAIT))
         messages = sanitize_openai_messages(messages)
+        image_detail_fallbacks = ["high", "low"]
 
         last_error: Exception | None = None
         non_transient_attempts_left = retry_times
@@ -355,6 +376,15 @@ class BaseAgent(ABC):
                         logger.info("Retrying with max_completion_tokens instead of max_tokens")
                         kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
                         continue  # Retry immediately without decrementing retry_times
+
+                if _is_image_detail_error(e) and image_detail_fallbacks:
+                    detail = image_detail_fallbacks.pop(0)
+                    logger.info(
+                        "Retrying OpenAI API call with image_url.detail={!r} for compatibility",
+                        detail,
+                    )
+                    messages = _with_image_detail(messages, detail)
+                    continue
 
                 if _is_transient_llm_exception(e):
                     transient_attempt += 1
