@@ -48,6 +48,8 @@
 
 ## 📢 Updates
 
+- **2026-06-21**: 🏆 Updated MemGUI-Bench results for recently released frontier models, including **Kimi-K2.6**, **Gemini-3.1-Pro-Preview**, and **Seed-2.0-Pro**. **Kimi-K2.6** sets a new SOTA on the leaderboard.
+- **2026-06-19**: 🚀 [MemGUI-Agent](https://memgui-agent.github.io/) is released, bringing memory-augmented mobile GUI agents to long-horizon phone tasks.
 - **2026-06-16**: 📣 Preview: MemGUI-Agent shows promising results on long-horizon GUI agent tasks. The [leaderboard](https://lgy0404.github.io/MemGUI-Bench/) has been updated with evaluation results and trajectory previews. Paper is coming!
 - **2026-06-11**: 🚀 Refactoring MemGUI-Bench to a [MobileWorld](https://github.com/Tongyi-MAI/MobileWorld)-style runtime and trajectory viewer. We will release more frontier model evaluation results on MemGUI-Bench soon!
 - **2026-02-15**: 🎉 MemGUI-Bench adopted by [Mobile-Agent-v3.5](https://github.com/X-PLUG/MobileAgent)! Congrats to the Tongyi Lab team for achieving **27.1%** on Easy tasks with GUI-Owl-1.5-32B. We welcome more agents to challenge the full benchmark! 🚀
