@@ -23,7 +23,8 @@ const DEFAULT_AGENT_FILES = [
   "gui-owl-1.5-8b-instruct",
   "gui-owl-1.5-32b-instruct",
   "kimi-k2-6",
-  "seed-2.0-pro"
+  "seed-2.0-pro",
+  "gemini-3.1-pro-preview"
 ];
 
 let AGENT_FILES = [...DEFAULT_AGENT_FILES];

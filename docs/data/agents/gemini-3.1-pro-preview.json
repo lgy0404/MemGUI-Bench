@@ -1,0 +1,70 @@
+{
+  "name": "Gemini-3.1-Pro-Preview",
+  "backbone": "-",
+  "type": "Agent-as-a-Model",
+  "institution": "Google",
+  "date": "2026-02-19",
+  "paperLink": "https://deepmind.google/models/gemini/pro/",
+  "codeLink": "https://deepmind.google/models/gemini/pro/",
+  "trajFile": "trajs/gemini-3.1-pro-preview.json.gz",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {
+      "p1": 71.4,
+      "p3": 82.1,
+      "irr": 50.0
+    },
+    "app2": {
+      "p1": 32.1,
+      "p3": 60.7,
+      "irr": 45.9
+    },
+    "app3": {
+      "p1": 50.0,
+      "p3": 64.7,
+      "irr": 63.6
+    },
+    "app4": {
+      "p1": 10.0,
+      "p3": 60.0,
+      "irr": 38.2
+    }
+  },
+  "difficulty": {
+    "easy": {
+      "p1": 47.9,
+      "p3": 70.8,
+      "irr": 42.0
+    },
+    "medium": {
+      "p1": 47.6,
+      "p3": 73.8,
+      "irr": 66.22
+    },
+    "hard": {
+      "p1": 34.2,
+      "p3": 52.6,
+      "irr": 43.08
+    }
+  },
+  "avg": {
+    "p1": 43.8,
+    "p3": 66.4
+  },
+  "metrics": {
+    "shortTerm": {
+      "irr": 51.0,
+      "mtpr": 0.37,
+      "stepRatio": 1.61,
+      "timePerStep": 39.5,
+      "costPerStep": 0.0092
+    },
+    "longTerm": {
+      "frr": 34.7,
+      "stepRatio": 1.68,
+      "timePerStep": 39.3,
+      "costPerStep": 0.0092
+    }
+  }
+}
