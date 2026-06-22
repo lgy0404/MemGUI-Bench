@@ -3,11 +3,13 @@ Base agent interface for mobile automation.
 """
 
 import copy
+import json
 import os
 import random
 import threading
 import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -38,6 +40,13 @@ _LLM_STATS = {
     "non_transient_error_count": 0,
     "retry_sleep_seconds": 0.0,
 }
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() not in {"0", "false", "no", "off"}
 
 
 def configure_llm_rate_limits(
@@ -244,6 +253,10 @@ class BaseAgent(ABC):
         self._total_completion_tokens: int = 0
         self._total_prompt_tokens: int = 0
         self._total_cached_tokens: int = 0
+        self._save_llm_requests: bool = _env_flag("MEMGUI_SAVE_LLM_REQUESTS", False)
+        self._llm_request_log_dir: Path | None = None
+        self._llm_request_log_counter: int = 0
+        self._llm_request_log_lock = threading.Lock()
 
     def initialize(self, instruction: str) -> bool:
         """Initialize the agent with the given instruction."""
@@ -283,6 +296,54 @@ class BaseAgent(ABC):
         )
         logger.debug(f"built the OpenAI client with base_url={base_url}")
 
+    def enable_llm_request_logging(self, enabled: bool = True) -> None:
+        """Enable or disable raw OpenAI request payload logging for this agent."""
+        self._save_llm_requests = enabled
+
+    def set_llm_request_log_dir(self, log_dir: str | os.PathLike[str] | None) -> None:
+        """Set where raw OpenAI request payloads should be written."""
+        self._llm_request_log_dir = Path(log_dir) if log_dir else None
+
+    def _save_openai_request_payload(
+        self,
+        *,
+        model: str,
+        messages: list[dict],
+        stream: bool,
+        kwargs: dict[str, Any],
+        request_attempt: int,
+    ) -> None:
+        if not self._save_llm_requests or self._llm_request_log_dir is None:
+            return
+
+        try:
+            with self._llm_request_log_lock:
+                self._llm_request_log_counter += 1
+                request_index = self._llm_request_log_counter
+                self._llm_request_log_dir.mkdir(parents=True, exist_ok=True)
+                output_path = self._llm_request_log_dir / (
+                    f"request_{request_index:06d}_attempt_{request_attempt:02d}.json"
+                )
+
+            payload = {
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "source": "action_agent",
+                "agent_class": self.__class__.__name__,
+                "request_index": request_index,
+                "request_attempt": request_attempt,
+                "base_url": str(getattr(getattr(self, "openai_client", None), "base_url", "")),
+                "request": {
+                    "model": model,
+                    "messages": copy.deepcopy(messages),
+                    "stream": stream,
+                    "kwargs": copy.deepcopy(kwargs),
+                },
+            }
+            with output_path.open("w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+        except Exception as e:
+            logger.warning("Failed to save OpenAI request payload: {}", e)
+
     def _wrap_stream_with_usage_logging(self, stream: Any) -> Any:
         """Wrap a streaming response to log usage when stream completes."""
         final_usage = None
@@ -321,6 +382,7 @@ class BaseAgent(ABC):
         last_error: Exception | None = None
         non_transient_attempts_left = retry_times
         transient_attempt = 0
+        request_attempt = 0
         while non_transient_attempts_left > 0:
             try:
                 if "claude" in model:
@@ -335,6 +397,18 @@ class BaseAgent(ABC):
 
                 _wait_for_global_llm_cooldown()
                 with _LLM_SEMAPHORE:
+                    request_attempt += 1
+                    request_kwargs = dict(kwargs)
+                    if stream:
+                        request_kwargs.setdefault("stream_options", {})
+                        request_kwargs["stream_options"]["include_usage"] = True
+                    self._save_openai_request_payload(
+                        model=model,
+                        messages=messages,
+                        stream=stream,
+                        kwargs=request_kwargs,
+                        request_attempt=request_attempt,
+                    )
                     if stream:
                         kwargs.setdefault("stream_options", {})
                         kwargs["stream_options"]["include_usage"] = True

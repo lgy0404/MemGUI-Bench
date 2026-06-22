@@ -115,6 +115,14 @@ DEFAULT_MODEL = MEMGUI_FINAL_DECISION_MODEL
 DEFAULT_TEMPERATURE = 0.01
 
 
+def _raw_request_payload(api_client, api_params):
+    """Return a JSON-serializable OpenAI-compatible request payload."""
+    return {
+        "base_url": str(getattr(api_client, "base_url", "")),
+        "request": json.loads(json.dumps(api_params, ensure_ascii=False, default=str)),
+    }
+
+
 def _is_non_retryable_api_error(error):
     status_code = getattr(error, "status_code", None)
     if status_code is None:
@@ -262,6 +270,7 @@ def inference_chat_gemini_2_image(
                     "model": model,
                     "provider": "openai_compatible",
                     "api_cost": api_cost,
+                    "raw_request": _raw_request_payload(client, api_params),
                 }
 
                 return result
@@ -353,6 +362,7 @@ def inference_chat_gemini_1_image(
                     "model": model,
                     "provider": "openai_compatible",
                     "api_cost": api_cost,
+                    "raw_request": _raw_request_payload(api_client, api_params),
                 }
 
                 return result
@@ -419,6 +429,7 @@ def inference_chat_gemini_wo_image(
                     "model": model,
                     "provider": "openai_compatible",
                     "api_cost": api_cost,
+                    "raw_request": _raw_request_payload(client, api_params),
                 }
 
                 return result

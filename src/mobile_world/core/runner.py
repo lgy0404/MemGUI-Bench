@@ -870,6 +870,9 @@ def _process_task_on_env(
                     traj_logger = _create_attempt_traj_logger(
                         log_file_root, task_name, attempt_num, pass_at_k
                     )
+                    agent.set_llm_request_log_dir(
+                        os.path.join(traj_logger.log_file_dir, "agent_llm_requests")
+                    )
                     remaining_health_retries = retry_on_device_unhealthy
                     try:
                         while True:

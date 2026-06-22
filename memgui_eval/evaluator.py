@@ -124,6 +124,7 @@ def _generate_description_for_step(
         if isinstance(response, dict):
             desc_str = response["content"]
             usage_info = response.get("usage", {})
+            raw_request = response.get("raw_request")
             model_info = {
                 "model": response.get("model", DEFAULT_DESC_MODEL),
                 "provider": response.get("provider", DEFAULT_DESC_PROVIDER),
@@ -132,6 +133,7 @@ def _generate_description_for_step(
         else:
             desc_str = response
             usage_info = {}
+            raw_request = None
             model_info = {
                 "model": DEFAULT_DESC_MODEL,
                 "provider": DEFAULT_DESC_PROVIDER,
@@ -144,6 +146,7 @@ def _generate_description_for_step(
             system_prompt_desc,
             user_prompt_desc,
             desc_str,
+            raw_request=raw_request,
         )
         desc = parse_json_from_response(desc_str)
 
@@ -816,6 +819,7 @@ def memgui_evaluator(
         if isinstance(response, dict):
             response_str = response["content"]
             final_decision_usage = response.get("usage", {})
+            final_decision_raw_request = response.get("raw_request")
             final_decision_model_info = {
                 "model": response.get("model"),
                 "provider": response.get("provider"),
@@ -824,6 +828,7 @@ def memgui_evaluator(
         else:
             response_str = response
             final_decision_usage = {}
+            final_decision_raw_request = None
             final_decision_model_info = {
                 "model": "unknown",
                 "provider": "unknown",
@@ -835,6 +840,7 @@ def memgui_evaluator(
             system_prompt_decision,
             user_prompt_decision,
             response_str,
+            raw_request=final_decision_raw_request,
         )
         decision_data = parse_json_from_response(response_str)
         uncertainty_reason = decision_data.get("reason", "")
@@ -888,6 +894,7 @@ def memgui_evaluator(
                 # Handle response format and extract usage info
                 if isinstance(final_response, dict):
                     final_response_str = final_response["content"]
+                    final_response_raw_request = final_response.get("raw_request")
                     # Accumulate usage info from both phases
                     supplemental_usage = final_response.get("usage", {})
                     final_decision_usage = {
@@ -905,6 +912,7 @@ def memgui_evaluator(
                     )
                 else:
                     final_response_str = final_response
+                    final_response_raw_request = None
 
                 log_and_save_interaction(
                     target_dir,
@@ -912,6 +920,7 @@ def memgui_evaluator(
                     system_prompt_final,
                     user_prompt_final,
                     final_response_str,
+                    raw_request=final_response_raw_request,
                 )
                 decision_data = parse_json_from_response(final_response_str)
                 evaluation_detail["evaluation_method"] = (

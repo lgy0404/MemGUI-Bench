@@ -20,6 +20,7 @@ This approach prevents context saturation while maintaining important informatio
 """
 
 import json
+import os
 import re
 import traceback
 from typing import Any
@@ -254,6 +255,10 @@ class MemGUIAgent(MCPAgent):
         self.llm_base_url = llm_base_url
         self.runtime_conf = runtime_conf or {"temperature": 0.0}
         self.build_openai_client(self.llm_base_url, api_key)
+        self.enable_llm_request_logging(
+            os.getenv("MEMGUI_SAVE_LLM_REQUESTS", "1").lower()
+            not in {"0", "false", "no", "off"}
+        )
 
         # Folding state
         self.current_step: int = 0
