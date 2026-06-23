@@ -70,6 +70,94 @@ def test_pass_at_k_finished_scan_allows_old_pass1_failure(tmp_path):
     assert scores == [1.0, 0.0]
 
 
+def _write_request_logs(root, task_name, attempt_nums, agent_type="memgui"):
+    for attempt_num in attempt_nums:
+        if attempt_num == 1:
+            traj_dir = root / task_name
+        else:
+            traj_dir = root / "_attempt_trajs" / task_name / f"attempt_{attempt_num}"
+        request_dir = traj_dir / "agent_llm_requests"
+        request_dir.mkdir(parents=True, exist_ok=True)
+        (request_dir / "request_000001_attempt_01.json").write_text("{}")
+
+        eval_dir = (
+            root
+            / "_memgui_eval"
+            / task_name
+            / agent_type
+            / f"attempt_{attempt_num}"
+            / "eval_llm_requests"
+        )
+        eval_dir.mkdir(parents=True, exist_ok=True)
+        (eval_dir / "0001_final_decision_phase1.json").write_text("{}")
+
+
+def test_memgui_finished_scan_reruns_old_results_without_request_logs(tmp_path):
+    task_name = "074-TranslateAndSendMessage"
+    task_dir = tmp_path / task_name
+    task_dir.mkdir()
+    (task_dir / "traj.json").write_text("{}")
+    (task_dir / "result.txt").write_text(
+        "score: 0.0\n"
+        "reason: pass@3: all 3 attempts failed; latest_reason=Task execution failed "
+        "at attempt 3: RuntimeError: Failed to initialize task "
+        "074-TranslateAndSendMessage: 503 Server Error: Service Unavailable"
+    )
+
+    finished, scores = runner._scan_finished_memgui_pass_at_k_tasks(
+        str(tmp_path),
+        [task_name],
+        pass_at_k=3,
+        agent_type="memgui",
+        require_request_logs=True,
+    )
+
+    assert finished == []
+    assert scores == []
+
+
+def test_memgui_finished_scan_keeps_completed_tasks_with_request_logs(tmp_path):
+    task_name = "task-pass3-failed"
+    task_dir = tmp_path / task_name
+    task_dir.mkdir()
+    (task_dir / "result.txt").write_text(
+        "score: 0.0\nreason: pass@3: all 3 attempts failed"
+    )
+    _write_request_logs(tmp_path, task_name, [1, 2, 3])
+
+    finished, scores = runner._scan_finished_memgui_pass_at_k_tasks(
+        str(tmp_path),
+        [task_name],
+        pass_at_k=3,
+        agent_type="memgui",
+        require_request_logs=True,
+    )
+
+    assert finished == [task_name]
+    assert scores == [0.0]
+
+
+def test_memgui_finished_scan_reruns_when_any_attempt_request_log_missing(tmp_path):
+    task_name = "task-pass3-failed"
+    task_dir = tmp_path / task_name
+    task_dir.mkdir()
+    (task_dir / "result.txt").write_text(
+        "score: 0.0\nreason: pass@3: all 3 attempts failed"
+    )
+    _write_request_logs(tmp_path, task_name, [1, 2])
+
+    finished, scores = runner._scan_finished_memgui_pass_at_k_tasks(
+        str(tmp_path),
+        [task_name],
+        pass_at_k=3,
+        agent_type="memgui",
+        require_request_logs=True,
+    )
+
+    assert finished == []
+    assert scores == []
+
+
 def test_memgui_finished_scan_retries_eval_error_without_csv_decision(tmp_path):
     result_text_by_task = {
         "task-normal-failed": "score: 0.0\nreason: task failed",

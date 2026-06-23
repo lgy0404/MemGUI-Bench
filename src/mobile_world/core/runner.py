@@ -52,6 +52,7 @@ MEMGUI_DEFAULT_MAX_STEP_FALLBACK = 15
 MEMGUI_SUCCESS_THRESHOLD = 0.99
 MEMGUI_EVAL_ERROR_MARKER = "MemGUI-Eval error"
 MEMGUI_ATTEMPT_EVAL_RE = re.compile(r"^.+_attempt_(?P<attempt>\d+)_evaluation$")
+MEMGUI_PASS_SUCCESS_RE = re.compile(r"pass@\d+:\s*success at attempt\s*(?P<attempt>\d+)")
 DEVICE_RECOVERY_WAIT_SECONDS = 240
 DEVICE_RECOVERY_POLL_SECONDS = 10
 BACKEND_EMULATOR_RESTART_ATTEMPTS = int(
@@ -181,10 +182,117 @@ def _has_memgui_csv_evaluation(
     return False
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() not in {"0", "false", "no", "off"}
+
+
+def _should_require_memgui_request_logs(agent_type: str | None) -> bool:
+    """Return whether resume should require raw request logs for finished tasks."""
+    if "MEMGUI_SAVE_LLM_REQUESTS" in os.environ:
+        return _env_flag("MEMGUI_SAVE_LLM_REQUESTS", False)
+    return agent_type == "memgui"
+
+
+def _attempts_expected_from_memgui_result(
+    score: float,
+    reason: str,
+    pass_at_k: int,
+) -> list[int]:
+    if pass_at_k <= 1:
+        return [1]
+
+    success_match = MEMGUI_PASS_SUCCESS_RE.search(reason)
+    if success_match:
+        success_attempt = max(1, min(pass_at_k, int(success_match.group("attempt"))))
+        return list(range(1, success_attempt + 1))
+
+    if f"pass@{pass_at_k}:" in reason:
+        return list(range(1, pass_at_k + 1))
+
+    if _is_successful_score(score):
+        return [1]
+    return [1]
+
+
+def _attempt_traj_dir(log_file_root: str, task_name: str, attempt_num: int) -> str:
+    if attempt_num <= 1:
+        return os.path.join(log_file_root, task_name)
+    return os.path.join(log_file_root, "_attempt_trajs", task_name, f"attempt_{attempt_num}")
+
+
+def _dir_has_json_files(path: str) -> bool:
+    if not os.path.isdir(path):
+        return False
+    try:
+        return any(name.endswith(".json") for name in os.listdir(path))
+    except OSError:
+        return False
+
+
+def _memgui_request_logs_complete(
+    log_file_root: str,
+    task_name: str,
+    agent_type: str,
+    pass_at_k: int,
+    score: float,
+    reason: str,
+) -> bool:
+    """Check whether a finished MemGUI task has raw request logs for resume."""
+    for attempt_num in _attempts_expected_from_memgui_result(score, reason, pass_at_k):
+        agent_request_dir = os.path.join(
+            _attempt_traj_dir(log_file_root, task_name, attempt_num),
+            "agent_llm_requests",
+        )
+        if not _dir_has_json_files(agent_request_dir):
+            logger.info(
+                "MemGUI task '{}' attempt {} is missing action-agent request logs; rerunning",
+                task_name,
+                attempt_num,
+            )
+            return False
+
+        eval_request_dir = os.path.join(
+            log_file_root,
+            "_memgui_eval",
+            task_name,
+            agent_type,
+            f"attempt_{attempt_num}",
+            "eval_llm_requests",
+        )
+        if not _dir_has_json_files(eval_request_dir):
+            logger.info(
+                "MemGUI task '{}' attempt {} is missing eval-agent request logs; rerunning",
+                task_name,
+                attempt_num,
+            )
+            return False
+    return True
+
+
+def _is_legacy_infra_failure_reason(reason: str) -> bool:
+    text = reason.lower()
+    markers = [
+        "503 server error",
+        "service unavailable",
+        "failed to initialize task",
+        "device is not healthy",
+        "emulator",
+        "connection error",
+        "timeout",
+        "readtimeout",
+    ]
+    return any(marker in text for marker in markers)
+
+
 def _scan_finished_memgui_pass_at_k_tasks(
     log_file_root: str,
     task_list: list[str],
     pass_at_k: int,
+    agent_type: str | None = None,
+    require_request_logs: bool = False,
 ) -> tuple[list[str], list[float]]:
     """Find MemGUI tasks that should be skipped in the current log root.
 
@@ -217,6 +325,23 @@ def _scan_finished_memgui_pass_at_k_tasks(
             and not _has_memgui_csv_evaluation(log_file_root, task_name, pass_at_k)
         ):
             continue
+        if require_request_logs and _is_legacy_infra_failure_reason(reason):
+            logger.info(
+                "MemGUI task '{}' has a legacy infra failure result; rerunning: {}",
+                task_name,
+                reason,
+            )
+            continue
+        if require_request_logs and agent_type:
+            if not _memgui_request_logs_complete(
+                log_file_root,
+                task_name,
+                agent_type,
+                pass_at_k,
+                score,
+                reason,
+            ):
+                continue
         if pass_at_k <= 1:
             finished_tasks.append(task_name)
             finished_scores.append(score)
@@ -870,9 +995,10 @@ def _process_task_on_env(
                     traj_logger = _create_attempt_traj_logger(
                         log_file_root, task_name, attempt_num, pass_at_k
                     )
-                    agent.set_llm_request_log_dir(
-                        os.path.join(traj_logger.log_file_dir, "agent_llm_requests")
-                    )
+                    if hasattr(agent, "set_llm_request_log_dir"):
+                        agent.set_llm_request_log_dir(
+                            os.path.join(traj_logger.log_file_dir, "agent_llm_requests")
+                        )
                     remaining_health_retries = retry_on_device_unhealthy
                     try:
                         while True:
@@ -1415,7 +1541,11 @@ def run_agent_with_evaluation(
     try:
         if suite_family == "memgui_bench":
             finished_task_list, finished_scores = _scan_finished_memgui_pass_at_k_tasks(
-                log_file_root, task_list, pass_at_k
+                log_file_root,
+                task_list,
+                pass_at_k,
+                agent_type=agent_type,
+                require_request_logs=_should_require_memgui_request_logs(agent_type),
             )
             logger.info(
                 "MemGUI resume enabled; skipping existing successful or completed pass@{} tasks",
