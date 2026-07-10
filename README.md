@@ -48,6 +48,7 @@
 
 ## 📢 Updates
 
+- **2026-07-10**: 🎉 MemGUI-Bench has been accepted to **ACM MM 2026**!
 - **2026-06-21**: 🏆 Updated MemGUI-Bench results for recently released frontier models, including **Kimi-K2.6**, **Gemini-3.1-Pro-Preview**, and **Seed-2.0-Pro**. **Kimi-K2.6** sets a new SOTA on the leaderboard.
 - **2026-06-19**: 🚀 [MemGUI-Agent](https://memgui-agent.github.io/) is released, bringing memory-augmented mobile GUI agents to long-horizon phone tasks.
 - **2026-06-16**: 📣 Preview: MemGUI-Agent shows promising results on long-horizon GUI agent tasks. The [leaderboard](https://lgy0404.github.io/MemGUI-Bench/) has been updated with evaluation results and trajectory previews. Paper is coming!
