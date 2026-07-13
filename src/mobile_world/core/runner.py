@@ -151,9 +151,21 @@ def _has_memgui_csv_evaluation(
     task_name: str,
     max_attempt: int | None = None,
 ) -> bool:
+    evaluations = _get_memgui_csv_attempt_evaluations(log_file_root, task_name)
+    return any(
+        evaluation in {"S", "F", "E"} and (max_attempt is None or attempt_num <= max_attempt)
+        for attempt_num, evaluation in evaluations.items()
+    )
+
+
+def _get_memgui_csv_attempt_evaluations(
+    log_file_root: str,
+    task_name: str,
+) -> dict[int, str]:
+    """Return the recorded MemGUI-Eval decision for each task attempt."""
     csv_path = os.path.join(log_file_root, "_memgui_eval", "results.csv")
     if not os.path.exists(csv_path):
-        return False
+        return {}
 
     try:
         with open(csv_path, newline="", encoding="utf-8") as f:
@@ -165,21 +177,20 @@ def _has_memgui_csv_evaluation(
             )
     except (OSError, csv.Error) as e:
         logger.warning(f"Error reading MemGUI results.csv in {log_file_root}: {e}")
-        return False
+        return {}
 
     if not row:
-        return False
+        return {}
 
+    evaluations: dict[int, str] = {}
     for field in fieldnames:
         match = MEMGUI_ATTEMPT_EVAL_RE.match(field)
         if not match:
             continue
-        if max_attempt is not None and int(match.group("attempt")) > max_attempt:
-            continue
         value = str(row.get(field, "")).strip().upper()
         if value in {"S", "F", "E"}:
-            return True
-    return False
+            evaluations[int(match.group("attempt"))] = value
+    return evaluations
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -230,6 +241,65 @@ def _dir_has_json_files(path: str) -> bool:
         return any(name.endswith(".json") for name in os.listdir(path))
     except OSError:
         return False
+
+
+def _has_valid_attempt_trajectory(
+    log_file_root: str,
+    task_name: str,
+    attempt_num: int,
+) -> bool:
+    traj_path = os.path.join(
+        _attempt_traj_dir(log_file_root, task_name, attempt_num),
+        "traj.json",
+    )
+    try:
+        with open(traj_path, encoding="utf-8") as f:
+            payload = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return False
+
+    task_log = payload.get("0") if isinstance(payload, dict) else None
+    return isinstance(task_log, dict) and isinstance(task_log.get("traj"), list)
+
+
+def _memgui_attempt_artifacts_complete(
+    log_file_root: str,
+    task_name: str,
+    pass_at_k: int,
+    score: float,
+    reason: str,
+) -> bool:
+    """Require every aggregate attempt to have a trajectory and final decision."""
+    expected_attempts = _attempts_expected_from_memgui_result(score, reason, pass_at_k)
+    evaluations = _get_memgui_csv_attempt_evaluations(log_file_root, task_name)
+    success_match = MEMGUI_PASS_SUCCESS_RE.search(reason)
+    success_attempt = int(success_match.group("attempt")) if success_match else None
+    if success_attempt is None and _is_successful_score(score):
+        success_attempt = expected_attempts[-1]
+
+    for attempt_num in expected_attempts:
+        if not _has_valid_attempt_trajectory(log_file_root, task_name, attempt_num):
+            logger.info(
+                "MemGUI task '{}' attempt {} has no valid trajectory; rerunning",
+                task_name,
+                attempt_num,
+            )
+            return False
+
+        expected_evaluation = "S" if attempt_num == success_attempt else "F"
+        evaluation = evaluations.get(attempt_num)
+        if evaluation != expected_evaluation:
+            logger.info(
+                "MemGUI task '{}' attempt {} has inconsistent evaluation: "
+                "expected {!r}, found {!r}; rerunning",
+                task_name,
+                attempt_num,
+                expected_evaluation,
+                evaluation,
+            )
+            return False
+
+    return True
 
 
 def _memgui_request_logs_complete(
@@ -320,9 +390,16 @@ def _scan_finished_memgui_pass_at_k_tasks(
 
         if score is None:
             continue
-        if (
-            MEMGUI_EVAL_ERROR_MARKER in reason
-            and not _has_memgui_csv_evaluation(log_file_root, task_name, pass_at_k)
+        if MEMGUI_EVAL_ERROR_MARKER in reason and not _has_memgui_csv_evaluation(
+            log_file_root, task_name, pass_at_k
+        ):
+            continue
+        if agent_type and not _memgui_attempt_artifacts_complete(
+            log_file_root,
+            task_name,
+            pass_at_k,
+            score,
+            reason,
         ):
             continue
         if require_request_logs and _is_legacy_infra_failure_reason(reason):
