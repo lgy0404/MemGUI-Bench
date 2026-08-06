@@ -76,6 +76,8 @@ def _write_request_logs(root, task_name, attempt_nums, agent_type="memgui"):
             traj_dir = root / task_name
         else:
             traj_dir = root / "_attempt_trajs" / task_name / f"attempt_{attempt_num}"
+        traj_dir.mkdir(parents=True, exist_ok=True)
+        (traj_dir / "traj.json").write_text('{"0": {"traj": []}}')
         request_dir = traj_dir / "agent_llm_requests"
         request_dir.mkdir(parents=True, exist_ok=True)
         (request_dir / "request_000001_attempt_01.json").write_text("{}")
@@ -90,6 +92,27 @@ def _write_request_logs(root, task_name, attempt_nums, agent_type="memgui"):
         )
         eval_dir.mkdir(parents=True, exist_ok=True)
         (eval_dir / "0001_final_decision_phase1.json").write_text("{}")
+
+
+def _write_attempt_evaluations(root, task_name, evaluations):
+    eval_root = root / "_memgui_eval"
+    eval_root.mkdir(exist_ok=True)
+    fieldnames = ["task_identifier"] + [
+        f"memgui_attempt_{attempt_num}_evaluation"
+        for attempt_num in sorted(evaluations)
+    ]
+    with (eval_root / "results.csv").open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "task_identifier": task_name,
+                **{
+                    f"memgui_attempt_{attempt_num}_evaluation": evaluation
+                    for attempt_num, evaluation in evaluations.items()
+                },
+            }
+        )
 
 
 def test_memgui_finished_scan_reruns_old_results_without_request_logs(tmp_path):
@@ -124,6 +147,7 @@ def test_memgui_finished_scan_keeps_completed_tasks_with_request_logs(tmp_path):
         "score: 0.0\nreason: pass@3: all 3 attempts failed"
     )
     _write_request_logs(tmp_path, task_name, [1, 2, 3])
+    _write_attempt_evaluations(tmp_path, task_name, {1: "F", 2: "F", 3: "F"})
 
     finished, scores = runner._scan_finished_memgui_pass_at_k_tasks(
         str(tmp_path),
@@ -145,6 +169,92 @@ def test_memgui_finished_scan_reruns_when_any_attempt_request_log_missing(tmp_pa
         "score: 0.0\nreason: pass@3: all 3 attempts failed"
     )
     _write_request_logs(tmp_path, task_name, [1, 2])
+    _write_attempt_evaluations(tmp_path, task_name, {1: "F", 2: "F", 3: "F"})
+
+    finished, scores = runner._scan_finished_memgui_pass_at_k_tasks(
+        str(tmp_path),
+        [task_name],
+        pass_at_k=3,
+        agent_type="memgui",
+        require_request_logs=True,
+    )
+
+    assert finished == []
+    assert scores == []
+
+
+def test_memgui_finished_scan_reruns_incomplete_pass_at_k_artifacts(tmp_path):
+    task_name = "task-incomplete-pass3"
+    task_dir = tmp_path / task_name
+    task_dir.mkdir()
+    (task_dir / "result.txt").write_text(
+        "score: 0.0\nreason: pass@3: all 3 attempts failed"
+    )
+    _write_request_logs(tmp_path, task_name, [1, 2, 3])
+    _write_attempt_evaluations(tmp_path, task_name, {1: "F"})
+
+    finished, scores = runner._scan_finished_memgui_pass_at_k_tasks(
+        str(tmp_path),
+        [task_name],
+        pass_at_k=3,
+        agent_type="memgui",
+        require_request_logs=True,
+    )
+
+    assert finished == []
+    assert scores == []
+
+
+def test_memgui_finished_scan_keeps_success_with_complete_attempts(tmp_path):
+    task_name = "task-success-attempt2"
+    task_dir = tmp_path / task_name
+    task_dir.mkdir()
+    (task_dir / "result.txt").write_text(
+        "score: 1.0\nreason: pass@3: success at attempt 2; attempts_run=2/3"
+    )
+    _write_request_logs(tmp_path, task_name, [1, 2])
+    _write_attempt_evaluations(tmp_path, task_name, {1: "F", 2: "S"})
+
+    finished, scores = runner._scan_finished_memgui_pass_at_k_tasks(
+        str(tmp_path),
+        [task_name],
+        pass_at_k=3,
+        agent_type="memgui",
+        require_request_logs=True,
+    )
+
+    assert finished == [task_name]
+    assert scores == [1.0]
+
+
+def test_memgui_finished_scan_reruns_error_or_corrupt_trajectory(tmp_path):
+    task_name = "task-eval-error"
+    task_dir = tmp_path / task_name
+    task_dir.mkdir()
+    (task_dir / "result.txt").write_text("score: 0.0\nreason: pass@1 failure")
+    (task_dir / "traj.json").write_text("not-json")
+    _write_attempt_evaluations(tmp_path, task_name, {1: "E"})
+
+    finished, scores = runner._scan_finished_memgui_pass_at_k_tasks(
+        str(tmp_path),
+        [task_name],
+        pass_at_k=1,
+        agent_type="qwen3vl",
+    )
+
+    assert finished == []
+    assert scores == []
+
+
+def test_memgui_finished_scan_reruns_conflicting_aggregate_and_csv(tmp_path):
+    task_name = "task-conflicting-result"
+    task_dir = tmp_path / task_name
+    task_dir.mkdir()
+    (task_dir / "result.txt").write_text(
+        "score: 1.0\nreason: pass@3: success at attempt 2; attempts_run=2/3"
+    )
+    _write_request_logs(tmp_path, task_name, [1, 2])
+    _write_attempt_evaluations(tmp_path, task_name, {1: "F", 2: "F"})
 
     finished, scores = runner._scan_finished_memgui_pass_at_k_tasks(
         str(tmp_path),
