@@ -22,6 +22,7 @@
     "gui-owl-1.5-32b-instruct",
     "kimi-k2-6",
     "seed-2.0-pro",
-    "gemini-3.1-pro-preview"
+    "gemini-3.1-pro-preview",
+    "gemini-3.6-flash"
   ]
 }

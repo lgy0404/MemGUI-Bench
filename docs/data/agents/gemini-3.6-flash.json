@@ -1,0 +1,70 @@
+{
+  "name": "Gemini-3.6-Flash",
+  "backbone": "-",
+  "type": "Agent-as-a-Model",
+  "institution": "Google",
+  "date": "2026-07-21",
+  "paperLink": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/",
+  "codeLink": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/",
+  "trajFile": "trajs/gemini-3.6-flash.json.gz",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {
+      "p1": 67.9,
+      "p3": 67.9,
+      "irr": 50.5
+    },
+    "app2": {
+      "p1": 78.6,
+      "p3": 89.3,
+      "irr": 81.5
+    },
+    "app3": {
+      "p1": 76.5,
+      "p3": 97.1,
+      "irr": 82.1
+    },
+    "app4": {
+      "p1": 50.0,
+      "p3": 60.0,
+      "irr": 63.0
+    }
+  },
+  "difficulty": {
+    "easy": {
+      "p1": 66.7,
+      "p3": 77.1,
+      "irr": 61.83
+    },
+    "medium": {
+      "p1": 85.7,
+      "p3": 92.9,
+      "irr": 86.59
+    },
+    "hard": {
+      "p1": 68.4,
+      "p3": 84.2,
+      "irr": 78.05
+    }
+  },
+  "avg": {
+    "p1": 73.4,
+    "p3": 84.4
+  },
+  "metrics": {
+    "shortTerm": {
+      "irr": 76.0,
+      "mtpr": 0.7,
+      "stepRatio": 1.41,
+      "timePerStep": 8.6,
+      "costPerStep": 0.0091
+    },
+    "longTerm": {
+      "frr": 36.8,
+      "stepRatio": 1.47,
+      "timePerStep": 8.7,
+      "costPerStep": 0.0091
+    }
+  }
+}
