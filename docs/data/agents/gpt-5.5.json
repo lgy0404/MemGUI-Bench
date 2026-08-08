@@ -1,0 +1,70 @@
+{
+  "name": "GPT-5.5",
+  "backbone": "-",
+  "type": "Agent-as-a-Model",
+  "institution": "OpenAI",
+  "date": "2026-04-23",
+  "paperLink": "https://openai.com/zh-Hans-CN/index/introducing-gpt-5-5/",
+  "codeLink": "https://openai.com/zh-Hans-CN/index/introducing-gpt-5-5/",
+  "trajFile": "trajs/gpt-5.5.json.gz",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {
+      "p1": 71.4,
+      "p3": 89.3,
+      "irr": 59.1
+    },
+    "app2": {
+      "p1": 50.0,
+      "p3": 85.7,
+      "irr": 60.9
+    },
+    "app3": {
+      "p1": 58.8,
+      "p3": 76.5,
+      "irr": 61.6
+    },
+    "app4": {
+      "p1": 50.0,
+      "p3": 70.0,
+      "irr": 52.5
+    }
+  },
+  "difficulty": {
+    "easy": {
+      "p1": 52.1,
+      "p3": 75.0,
+      "irr": 44.39
+    },
+    "medium": {
+      "p1": 64.3,
+      "p3": 95.2,
+      "irr": 74.02
+    },
+    "hard": {
+      "p1": 55.3,
+      "p3": 78.9,
+      "irr": 60.13
+    }
+  },
+  "avg": {
+    "p1": 57.0,
+    "p3": 82.8
+  },
+  "metrics": {
+    "shortTerm": {
+      "irr": 60.2,
+      "mtpr": 0.57,
+      "stepRatio": 1.57,
+      "timePerStep": 14.2,
+      "costPerStep": 0.0122
+    },
+    "longTerm": {
+      "frr": 53.6,
+      "stepRatio": 1.64,
+      "timePerStep": 14.4,
+      "costPerStep": 0.0125
+    }
+  }
+}
