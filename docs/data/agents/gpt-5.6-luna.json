@@ -1,0 +1,70 @@
+{
+  "name": "GPT-5.6-Luna",
+  "backbone": "-",
+  "type": "Agent-as-a-Model",
+  "institution": "OpenAI",
+  "date": "2026-07-09",
+  "paperLink": "https://openai.com/zh-Hans-CN/index/gpt-5-6/",
+  "codeLink": "https://openai.com/zh-Hans-CN/index/gpt-5-6/",
+  "trajFile": "trajs/gpt-5.6-luna.json.gz",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {
+      "p1": 53.6,
+      "p3": 78.6,
+      "irr": 41.7
+    },
+    "app2": {
+      "p1": 42.9,
+      "p3": 62.5,
+      "irr": 52.8
+    },
+    "app3": {
+      "p1": 38.2,
+      "p3": 67.6,
+      "irr": 46.1
+    },
+    "app4": {
+      "p1": 20.0,
+      "p3": 60.0,
+      "irr": 26.5
+    }
+  },
+  "difficulty": {
+    "easy": {
+      "p1": 35.4,
+      "p3": 68.8,
+      "irr": 32.19
+    },
+    "medium": {
+      "p1": 54.8,
+      "p3": 73.8,
+      "irr": 65.78
+    },
+    "hard": {
+      "p1": 36.8,
+      "p3": 57.9,
+      "irr": 41.08
+    }
+  },
+  "avg": {
+    "p1": 42.2,
+    "p3": 67.2
+  },
+  "metrics": {
+    "shortTerm": {
+      "irr": 47.1,
+      "mtpr": 0.57,
+      "stepRatio": 1.74,
+      "timePerStep": 11.5,
+      "costPerStep": 0.0115
+    },
+    "longTerm": {
+      "frr": 35.1,
+      "stepRatio": 1.77,
+      "timePerStep": 11.6,
+      "costPerStep": 0.0114
+    }
+  }
+}
