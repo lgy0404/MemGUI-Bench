@@ -1,0 +1,70 @@
+{
+  "name": "Qwen3.8-Max",
+  "backbone": "-",
+  "type": "Agent-as-a-Model",
+  "institution": "Alibaba",
+  "date": "2026-08-03",
+  "paperLink": "https://qwen.ai/blog?id=qwen3.8/",
+  "codeLink": "https://qwen.ai/blog?id=qwen3.8",
+  "trajFile": "trajs/qwen3.8-max.json.gz",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {
+      "p1": 85.7,
+      "p3": 96.4,
+      "irr": 80.0
+    },
+    "app2": {
+      "p1": 73.2,
+      "p3": 82.1,
+      "irr": 75.0
+    },
+    "app3": {
+      "p1": 61.8,
+      "p3": 82.4,
+      "irr": 66.9
+    },
+    "app4": {
+      "p1": 60.0,
+      "p3": 70.0,
+      "irr": 75.9
+    }
+  },
+  "difficulty": {
+    "easy": {
+      "p1": 68.8,
+      "p3": 83.3,
+      "irr": 67.14
+    },
+    "medium": {
+      "p1": 83.3,
+      "p3": 85.7,
+      "irr": 84.0
+    },
+    "hard": {
+      "p1": 63.2,
+      "p3": 84.2,
+      "irr": 67.71
+    }
+  },
+  "avg": {
+    "p1": 71.9,
+    "p3": 84.4
+  },
+  "metrics": {
+    "shortTerm": {
+      "irr": 73.3,
+      "mtpr": 0.75,
+      "stepRatio": 1.4,
+      "timePerStep": 14.0,
+      "costPerStep": 0.0176
+    },
+    "longTerm": {
+      "frr": 40.3,
+      "stepRatio": 1.47,
+      "timePerStep": 14.6,
+      "costPerStep": 0.0182
+    }
+  }
+}

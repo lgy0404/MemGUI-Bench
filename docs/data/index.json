@@ -24,6 +24,7 @@
     "seed-2.0-pro",
     "gemini-3.1-pro-preview",
     "gemini-3.6-flash",
-    "gpt-5.5"
+    "gpt-5.5",
+    "qwen3.8-max"
   ]
 }
