@@ -1,0 +1,39 @@
+{
+  "name": "Qwen-UI-Agent",
+  "backbone": "-",
+  "type": "Agent-as-a-Model",
+  "institution": "Alibaba",
+  "date": "2026-07-30",
+  "paperLink": "https://arxiv.org/abs/2607.28227",
+  "codeLink": "https://github.com/Tongyi-MAI/MAI-UI",
+  "trajFile": "trajs/qwen-ui-agent.json.gz",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {"p1": 96.4, "p3": 0.0, "irr": 98.9},
+    "app2": {"p1": 75.0, "p3": 0.0, "irr": 77.8},
+    "app3": {"p1": 70.6, "p3": 0.0, "irr": 75.9},
+    "app4": {"p1": 60.0, "p3": 0.0, "irr": 72.3}
+  },
+  "difficulty": {
+    "easy": {"p1": 77.1, "p3": 0.0, "irr": 78.69},
+    "medium": {"p1": 85.7, "p3": 0.0, "irr": 89.76},
+    "hard": {"p1": 68.4, "p3": 0.0, "irr": 69.13}
+  },
+  "avg": {"p1": 77.3, "p3": 0.0},
+  "metrics": {
+    "shortTerm": {
+      "irr": 79.5,
+      "mtpr": 0.75,
+      "stepRatio": 1.48,
+      "timePerStep": 36.2,
+      "costPerStep": 0.0184
+    },
+    "longTerm": {
+      "frr": 0.0,
+      "stepRatio": 1.48,
+      "timePerStep": 36.2,
+      "costPerStep": 0.0184
+    }
+  }
+}
