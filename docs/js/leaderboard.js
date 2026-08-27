@@ -6,21 +6,21 @@ let currentFilters = {
   agentType: 'all',  // 'all', 'workflow', 'model'
   uiTree: 'all',     // 'all', 'with', 'without'
   ltm: 'all',        // 'all', 'with', 'without'
-  sortBy: 'avg_p3_desc'
+  sortBy: 'avg_p1_desc'
 };
 
 // Sort options for each tab
 const sortOptions = {
   main: [
-    { value: 'avg_p3_desc', label: 'Avg p@3 ↓' },
     { value: 'avg_p1_desc', label: 'Avg p@1 ↓' },
+    { value: 'avg_p3_desc', label: 'Avg p@3 ↓' },
     { value: 'irr_desc', label: 'IRR ↓' },
     { value: 'mtpr_desc', label: 'MTPR ↓' },
     { value: 'frr_desc', label: 'FRR ↓' }
   ],
   crossapp: [
-    { value: 'avg_p3_desc', label: 'Avg p@3 ↓' },
     { value: 'avg_p1_desc', label: 'Avg p@1 ↓' },
+    { value: 'avg_p3_desc', label: 'Avg p@3 ↓' },
     { value: 'irr_desc', label: 'Avg IRR ↓' },
     { value: 'app1_sr_desc', label: '1App p@1 ↓' },
     { value: 'app1_p3_desc', label: '1App p@3 ↓' },
@@ -36,8 +36,8 @@ const sortOptions = {
     { value: 'app4_irr_desc', label: '4App IRR ↓' }
   ],
   difficulty: [
-    { value: 'avg_p3_desc', label: 'Avg p@3 ↓' },
     { value: 'avg_p1_desc', label: 'Avg p@1 ↓' },
+    { value: 'avg_p3_desc', label: 'Avg p@3 ↓' },
     { value: 'irr_desc', label: 'Avg IRR ↓' },
     { value: 'easy_p1_desc', label: 'Easy p@1 ↓' },
     { value: 'easy_p3_desc', label: 'Easy p@3 ↓' },
@@ -294,7 +294,7 @@ function getFilteredData() {
       if (sortKey.startsWith('p3_time')) return agent.metrics?.longTerm?.timePerStep ?? null;
       if (sortKey.startsWith('p3_cost')) return agent.metrics?.longTerm?.costPerStep ?? null;
       
-      return agent.avg?.p3 ?? null;
+      return agent.avg?.p1 ?? null;
     };
     
     const valA = getValue(a);
@@ -378,7 +378,7 @@ function getSortedColumnKey() {
   if (sortKey.startsWith('p3_step')) return 'p3_step';
   if (sortKey.startsWith('p3_time')) return 'p3_time';
   if (sortKey.startsWith('p3_cost')) return 'p3_cost';
-  return 'avg_p3';
+  return 'avg_p1';
 }
 
 // Format score cell
