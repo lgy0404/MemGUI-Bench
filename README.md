@@ -519,11 +519,3 @@ See [submission guide](https://lgy0404.github.io/MemGUI-Bench/submission.html) f
 ## 📧 Contact
 
 For questions, issues, or collaborations, please contact: **guangyiliu@zju.edu.cn**
-
----
-
-## ⭐ Star History
-
-If you find MemGUI-Bench helpful, please consider giving us a star ⭐!
-
-[![Star History Chart](https://api.star-history.com/svg?repos=lgy0404/MemGUI-Bench&type=Date)](https://star-history.com/#lgy0404/MemGUI-Bench&Date)
