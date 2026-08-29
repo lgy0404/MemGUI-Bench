@@ -48,6 +48,7 @@
 
 ## 📢 Updates
 
+- **2026-08-29**: 🎉 [UI-Venus-2](https://github.com/inclusionAI/UI-Venus/tree/UI-Venus-2) adopts MemGUI-Bench for evaluation, with its 9B/27B models achieving **62.6%/70.3% pass@1**. Congratulations to the **UI-Venus Team**!
 - **2026-08-27**: 🏆 [Qwen-UI-Agent](https://github.com/Tongyi-MAI/MAI-UI) achieves **77.3% pass@1** on MemGUI-Bench. Congratulations to the **MAI-UI Team**!
 - **2026-07-10**: 🎉 MemGUI-Bench has been accepted to **ACM MM 2026**!
 - **2026-06-21**: 🏆 Updated MemGUI-Bench results for recently released frontier models, including **Kimi-K2.6**, **Gemini-3.1-Pro-Preview**, and **Seed-2.0-Pro**. **Kimi-K2.6** sets a new SOTA on the leaderboard.
