@@ -32,20 +32,6 @@
 
 ---
 
-## 📋 Table of Contents
-
-- [💾 Installation](#-installation)
-- [🚀 Quick Start](#-quick-start)
-- [📁 Benchmark Session](#-benchmark-session)
-- [📊 Metrics](#-metrics)
-- [🤖 Adding a New Agent](#-adding-a-new-agent)
-- [📤 Leaderboard Submission](#-leaderboard-submission)
-- [📚 Tasks](#tasks)
-- [📝 Citation](#-citation)
-- [📧 Contact](#-contact)
-
----
-
 ## 📢 Updates
 
 - **2026-08-29**: 🎉 [UI-Venus-2](https://github.com/inclusionAI/UI-Venus/tree/UI-Venus-2) adopts MemGUI-Bench for evaluation, with its 9B/27B models achieving **62.6%/70.3% pass@1**. Congratulations to the **UI-Venus Team**!
@@ -59,6 +45,17 @@
 - **2026-02-09**: 🗂️ Benchmark tasks now available on HuggingFace: [lgy0404/MemGUI-Bench](https://huggingface.co/datasets/lgy0404/MemGUI-Bench)
 - **2026-02-09**: 📄 Paper released on arXiv! Check out our paper: [arXiv:2602.06075](https://arxiv.org/abs/2602.06075)
 - **2026-02-03**: Initial release of MemGUI-Bench benchmark. Check out our [website](https://lgy0404.github.io/MemGUI-Bench/).
+
+## 🌟 Research Using MemGUI-Bench
+
+Research using MemGUI-Bench, ordered by first public release from newest to oldest. Pull requests are welcome.
+
+- `2026-08` UI-Venus-2 [![Paper](https://img.shields.io/badge/-Paper-2b6cb0?logo=googlescholar&logoColor=white)](https://github.com/inclusionAI/UI-Venus/tree/UI-Venus-2) [![GitHub Stars](https://img.shields.io/github/stars/inclusionAI/UI-Venus?style=social)](https://github.com/inclusionAI/UI-Venus/tree/UI-Venus-2)
+- `2026-07` Qwen-UI-Agent Technical Report: Toward Next-Generation Real-World Centric Foundation GUI Agents [![Paper](https://img.shields.io/badge/-Paper-2b6cb0?logo=googlescholar&logoColor=white)](https://arxiv.org/abs/2607.28227) [![GitHub Stars](https://img.shields.io/github/stars/Tongyi-MAI/MAI-UI?style=social)](https://github.com/Tongyi-MAI/MAI-UI)
+- `2026-06` MemGUI-Agent: An End-to-End Long-Horizon Mobile GUI Agent with Proactive Context Management [![Paper](https://img.shields.io/badge/-Paper-2b6cb0?logo=googlescholar&logoColor=white)](https://arxiv.org/abs/2606.19926) [![GitHub Stars](https://img.shields.io/github/stars/kwai/MemGUI-Agent?style=social)](https://github.com/kwai/MemGUI-Agent)
+- `2026-05` STAMP: Training Explicit Memory for Mobile GUI Agents in Controllable and Scalable Virtual Environments [![Paper](https://img.shields.io/badge/-Paper-2b6cb0?logo=googlescholar&logoColor=white)](https://arxiv.org/abs/2605.29324)
+- `2026-04` UI-Copilot: Advancing Long-Horizon GUI Automation via Tool-Integrated Policy Optimization [![Paper](https://img.shields.io/badge/-Paper-2b6cb0?logo=googlescholar&logoColor=white)](https://aclanthology.org/2026.acl-long.904/) [![GitHub Stars](https://img.shields.io/github/stars/ZJU-REAL/UI-Copilot?style=social)](https://github.com/ZJU-REAL/UI-Copilot)
+- `2026-02` Mobile-Agent-v3.5: Multi-platform Fundamental GUI Agents [![Paper](https://img.shields.io/badge/-Paper-2b6cb0?logo=googlescholar&logoColor=white)](https://arxiv.org/abs/2602.16855) [![GitHub Stars](https://img.shields.io/github/stars/X-PLUG/MobileAgent?style=social)](https://github.com/X-PLUG/MobileAgent/tree/main/Mobile-Agent-v3.5)
 
 ## 💾 Installation
 
