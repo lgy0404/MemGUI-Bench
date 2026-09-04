@@ -27,6 +27,8 @@
     "gpt-5.5",
     "qwen3.8-max",
     "gpt-5.6-luna",
-    "qwen-ui-agent"
+    "qwen-ui-agent",
+    "ui-venus-2-9b",
+    "ui-venus-2-27b"
   ]
 }
