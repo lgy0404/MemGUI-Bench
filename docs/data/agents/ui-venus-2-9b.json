@@ -1,0 +1,70 @@
+{
+  "name": "UI-Venus-2-9B",
+  "backbone": "-",
+  "type": "Agent-as-a-Model",
+  "institution": "InclusionAI",
+  "date": "2026-09-03",
+  "paperLink": "https://github.com/inclusionAI/UI-Venus/blob/UI-Venus-2/UI_Venus_2_Technical_Report.pdf",
+  "codeLink": "https://github.com/inclusionAI/UI-Venus/tree/UI-Venus-2",
+  "trajFile": "trajs/ui-venus-2-9b.json.gz",
+  "hasUITree": false,
+  "hasLongTermMemory": false,
+  "crossApp": {
+    "app1": {
+      "p1": 92.9,
+      "p3": 96.4,
+      "irr": 93.3
+    },
+    "app2": {
+      "p1": 57.1,
+      "p3": 73.2,
+      "irr": 61.9
+    },
+    "app3": {
+      "p1": 50.0,
+      "p3": 79.4,
+      "irr": 62.0
+    },
+    "app4": {
+      "p1": 40.0,
+      "p3": 70.0,
+      "irr": 54.2
+    }
+  },
+  "difficulty": {
+    "easy": {
+      "p1": 62.5,
+      "p3": 81.2,
+      "irr": 60.06
+    },
+    "medium": {
+      "p1": 66.7,
+      "p3": 83.3,
+      "irr": 74.98
+    },
+    "hard": {
+      "p1": 55.3,
+      "p3": 73.7,
+      "irr": 60.05
+    }
+  },
+  "avg": {
+    "p1": 61.7,
+    "p3": 79.7
+  },
+  "metrics": {
+    "shortTerm": {
+      "irr": 65.4,
+      "mtpr": 0.63,
+      "stepRatio": 1.26,
+      "timePerStep": 10.9,
+      "costPerStep": 0.6638
+    },
+    "longTerm": {
+      "frr": 37.8,
+      "stepRatio": 1.32,
+      "timePerStep": 15.8,
+      "costPerStep": 0.9662
+    }
+  }
+}
